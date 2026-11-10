@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -196,7 +223,7 @@ export def "content-accounts-authinfo" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts/authinfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -236,7 +263,7 @@ export def "content-accounts-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {account?: record, accountId?: string, batchId?: int, force?: bool, labelIds?: list<string>, linkRequest?: record, merchantId?: string, method?: string, overwrite?: bool}
 ]: any -> oneof<record<entries: table<account: record, batchId: int, errors: record, kind: string, linkStatus: string>, kind: string>, string, nothing> {
   let input = $in
@@ -245,9 +272,9 @@ export def "content-accounts-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -295,9 +322,9 @@ export def "content-accountstatuses-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accountstatuses/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -337,7 +364,7 @@ export def "content-accounttax-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {accountId?: string, accountTax?: record, batchId?: int, merchantId?: string, method?: string}
 ]: any -> oneof<record<entries: table<accountTax: record, batchId: int, errors: record, kind: string>, kind: string>, string, nothing> {
   let input = $in
@@ -346,9 +373,9 @@ export def "content-accounttax-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounttax/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -388,7 +415,7 @@ export def "content-datafeeds-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {batchId?: int, datafeed?: record, datafeedId?: string, merchantId?: string, method?: string}
 ]: any -> oneof<record<entries: table<batchId: int, datafeed: record, errors: record>, kind: string>, string, nothing> {
   let input = $in
@@ -397,9 +424,9 @@ export def "content-datafeeds-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datafeeds/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -447,9 +474,9 @@ export def "content-datafeedstatuses-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datafeedstatuses/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -489,7 +516,7 @@ export def "content-liasettings-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {accountId?: string, batchId?: int, contactEmail?: string, contactName?: string, country?: string, gmbEmail?: string, liaSettings?: record, merchantId?: string, method?: string, posDataProviderId?: string, posExternalAccountId?: string}
 ]: any -> oneof<record<entries: table<batchId: int, errors: record, gmbAccounts: record, kind: string, liaSettings: record, posDataProviders: list>, kind: string>, string, nothing> {
   let input = $in
@@ -498,9 +525,9 @@ export def "content-liasettings-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/liasettings/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -546,7 +573,7 @@ export def "content-liasettings-listposdataproviders" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/liasettings/posdataproviders" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -594,9 +621,9 @@ export def "content-orders-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -636,7 +663,7 @@ export def "content-pos-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {batchId?: int, inventory?: record, merchantId?: string, method?: string, sale?: record, store?: record, storeCode?: string, targetMerchantId?: string}
 ]: any -> oneof<record<entries: table<batchId: int, errors: record, inventory: record, kind: string, sale: record, store: record>, kind: string>, string, nothing> {
   let input = $in
@@ -645,9 +672,9 @@ export def "content-pos-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pos/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -687,7 +714,7 @@ export def "content-products-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {batchId?: int, merchantId?: string, method?: string, product?: record, productId?: string}
 ]: any -> oneof<record<entries: table<batchId: int, errors: record, kind: string, product: record>, kind: string>, string, nothing> {
   let input = $in
@@ -696,9 +723,9 @@ export def "content-products-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -747,9 +774,9 @@ export def "content-productstatuses-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeAttributes" $include_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/productstatuses/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -789,7 +816,7 @@ export def "content-shippingsettings-custombatch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --entries: list # The request entries to be processed in the batch. — item shape: {accountId?: string, batchId?: int, merchantId?: string, method?: string, shippingSettings?: record}
 ]: any -> oneof<record<entries: table<batchId: int, errors: record, kind: string, shippingSettings: record>, kind: string>, string, nothing> {
   let input = $in
@@ -798,9 +825,9 @@ export def "content-shippingsettings-custombatch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shippingsettings/batch" $qp $auth.query)
   let req_body = {"entries": $entries} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -850,7 +877,7 @@ export def "content-accounts-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/accounts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -891,7 +918,7 @@ export def "content-accounts-insert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --adult-content: oneof<nothing, bool> # Indicates whether the merchant sells adult content.
   --adwords-links: list # List of linked AdWords accounts that are active or pending approval. To create a new link request, add a new link with status `active` to the list. It will remain in a `pending` state until approved or rejected either in the AdWords interface or through the AdWords API. To delete an active link, or to cancel a link request, remove it from the list. — item shape: {adwordsId?: string, status?: string}
   --business-information: record # shape: {address?: record, customerService?: record, koreanBusinessRegistrationNumber?: string, phoneNumber?: string}
@@ -912,9 +939,9 @@ export def "content-accounts-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/accounts") $qp $auth.query)
   let req_body = {"adultContent": $adult_content, "adwordsLinks": $adwords_links, "businessInformation": $business_information, "googleMyBusinessLink": $google_my_business_link, "id": $id, "kind": $kind, "name": $name, "reviewsUrl": $reviews_url, "sellerId": $seller_id, "users": $users, "websiteUrl": $website_url, "youtubeChannelLinks": $youtube_channel_links} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -956,7 +983,7 @@ export def "content-accounts-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --force: oneof<nothing, bool> # Flag to delete sub-accounts with products. The default value is false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -966,7 +993,7 @@ export def "content-accounts-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1016,7 +1043,7 @@ export def "content-accounts-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1058,7 +1085,7 @@ export def "content-accounts-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --adult-content: oneof<nothing, bool> # Indicates whether the merchant sells adult content.
   --adwords-links: list # List of linked AdWords accounts that are active or pending approval. To create a new link request, add a new link with status `active` to the list. It will remain in a `pending` state until approved or rejected either in the AdWords interface or through the AdWords API. To delete an active link, or to cancel a link request, remove it from the list. — item shape: {adwordsId?: string, status?: string}
   --business-information: record # shape: {address?: record, customerService?: record, koreanBusinessRegistrationNumber?: string, phoneNumber?: string}
@@ -1080,9 +1107,9 @@ export def "content-accounts-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounts/{account_id}") $qp $auth.query)
   let req_body = {"adultContent": $adult_content, "adwordsLinks": $adwords_links, "businessInformation": $business_information, "googleMyBusinessLink": $google_my_business_link, "id": $id, "kind": $kind, "name": $name, "reviewsUrl": $reviews_url, "sellerId": $seller_id, "users": $users, "websiteUrl": $website_url, "youtubeChannelLinks": $youtube_channel_links} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1133,7 +1160,7 @@ export def "content-accounts-claimwebsite" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "overwrite" $overwrite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounts/{account_id}/claimwebsite") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1187,9 +1214,9 @@ export def "content-accounts-link" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounts/{account_id}/link") $qp $auth.query)
   let req_body = {"action": $action, "linkType": $link_type, "linkedAccountId": $linked_account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1240,7 +1267,7 @@ export def "content-accountstatuses-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinations" $destinations "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/accountstatuses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1291,7 +1318,7 @@ export def "content-accountstatuses-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinations" $destinations "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accountstatuses/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1341,7 +1368,7 @@ export def "content-accounttax-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/accounttax") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1391,7 +1418,7 @@ export def "content-accounttax-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounttax/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1433,8 +1460,8 @@ export def "content-accounttax-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
-  --body-account-id: string # Required. The ID of the account to which these account tax settings belong. (format: uint64)
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
+  --body-account-id: string # Required. The ID of the account to which these account tax settings belong. (format: uint64) (spec name: accountId)
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "content#accountTax".
   --rules: list # Tax rules. Updating the tax rules will enable US taxes (not reversible). Defining no rules is equivalent to not charging tax at all. — item shape: {country?: string, locationId?: string, ratePercent?: string, shippingTaxed?: bool, useGlobalRate?: bool}
 ]: any -> oneof<record<accountId: string, kind: string, rules: table<country: string, locationId: string, ratePercent: string, shippingTaxed: bool, useGlobalRate: bool>>, string, nothing> {
@@ -1446,9 +1473,9 @@ export def "content-accounttax-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/accounttax/{account_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "kind": $kind, "rules": $rules} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1498,7 +1525,7 @@ export def "content-datafeeds-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/datafeeds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1539,7 +1566,7 @@ export def "content-datafeeds-insert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --attribute-language: string # The two-letter ISO 639-1 language in which the attributes are defined in the data feed.
   --content-language: string # [DEPRECATED] Please use targets[].language instead. The two-letter ISO 639-1 language of the items in the feed. Must be a valid language for `targetCountry`.
   --content-type: string # Required. The type of data feed. For product inventory feeds, only feeds for local stores, not online stores, are supported. Acceptable values are: - "`local products`" - "`product inventory`" - "`products`"
@@ -1560,9 +1587,9 @@ export def "content-datafeeds-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/datafeeds") $qp $auth.query)
   let req_body = {"attributeLanguage": $attribute_language, "contentLanguage": $content_language, "contentType": $content_type, "fetchSchedule": $fetch_schedule, "fileName": $file_name, "format": $format, "id": $id, "intendedDestinations": $intended_destinations, "kind": $kind, "name": $name, "targetCountry": $target_country, "targets": $targets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1604,7 +1631,7 @@ export def "content-datafeeds-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1640,7 @@ export def "content-datafeeds-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), datafeed_id: (encode-path-segment $datafeed_id)} | format pattern "/{merchant_id}/datafeeds/{datafeed_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1663,7 +1690,7 @@ export def "content-datafeeds-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), datafeed_id: (encode-path-segment $datafeed_id)} | format pattern "/{merchant_id}/datafeeds/{datafeed_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1705,7 +1732,7 @@ export def "content-datafeeds-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --attribute-language: string # The two-letter ISO 639-1 language in which the attributes are defined in the data feed.
   --content-language: string # [DEPRECATED] Please use targets[].language instead. The two-letter ISO 639-1 language of the items in the feed. Must be a valid language for `targetCountry`.
   --content-type: string # Required. The type of data feed. For product inventory feeds, only feeds for local stores, not online stores, are supported. Acceptable values are: - "`local products`" - "`product inventory`" - "`products`"
@@ -1727,9 +1754,9 @@ export def "content-datafeeds-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), datafeed_id: (encode-path-segment $datafeed_id)} | format pattern "/{merchant_id}/datafeeds/{datafeed_id}") $qp $auth.query)
   let req_body = {"attributeLanguage": $attribute_language, "contentLanguage": $content_language, "contentType": $content_type, "fetchSchedule": $fetch_schedule, "fileName": $file_name, "format": $format, "id": $id, "intendedDestinations": $intended_destinations, "kind": $kind, "name": $name, "targetCountry": $target_country, "targets": $targets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1771,7 +1798,7 @@ export def "content-datafeeds-fetchnow" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
 ]: nothing -> oneof<record<kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1780,7 +1807,7 @@ export def "content-datafeeds-fetchnow" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), datafeed_id: (encode-path-segment $datafeed_id)} | format pattern "/{merchant_id}/datafeeds/{datafeed_id}/fetchNow") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1830,7 +1857,7 @@ export def "content-datafeedstatuses-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/datafeedstatuses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1882,7 +1909,7 @@ export def "content-datafeedstatuses-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), datafeed_id: (encode-path-segment $datafeed_id)} | format pattern "/{merchant_id}/datafeedstatuses/{datafeed_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1932,7 +1959,7 @@ export def "content-liasettings-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/liasettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1982,7 +2009,7 @@ export def "content-liasettings-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2024,8 +2051,8 @@ export def "content-liasettings-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
-  --body-account-id: string # The ID of the account to which these LIA settings belong. Ignored upon update, always present in get request responses. (format: uint64)
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
+  --body-account-id: string # The ID of the account to which these LIA settings belong. Ignored upon update, always present in get request responses. (format: uint64) (spec name: accountId)
   --country-settings: list # The LIA settings for each country. — item shape: {about?: record, country?: string, hostedLocalStorefrontActive?: bool, inventory?: record, onDisplayToOrder?: record, posDataProvider?: record, storePickupActive?: bool}
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "`content#liaSettings`"
 ]: any -> oneof<record<accountId: string, countrySettings: table<about: record, country: string, hostedLocalStorefrontActive: bool, inventory: record, onDisplayToOrder: record, posDataProvider: record, storePickupActive: bool>, kind: string>, string, nothing> {
@@ -2037,9 +2064,9 @@ export def "content-liasettings-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "countrySettings": $country_settings, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2089,7 +2116,7 @@ export def "content-liasettings-getaccessiblegmbaccounts" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}/accessiblegmbaccounts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2141,7 +2168,7 @@ export def "content-liasettings-requestgmbaccess" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gmbEmail" $gmb_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}/requestgmbaccess") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2193,7 +2220,7 @@ export def "content-liasettings-requestinventoryverification" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id), country: (encode-path-segment $country)} | format pattern "/{merchant_id}/liasettings/{account_id}/requestinventoryverification/{country}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2251,7 +2278,7 @@ export def "content-liasettings-setinventoryverificationcontact" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "contactName" $contact_name "scalar") (serialize-qp "contactEmail" $contact_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}/setinventoryverificationcontact") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2305,7 +2332,7 @@ export def "content-liasettings-setposdataprovider" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "posDataProviderId" $pos_data_provider_id "scalar") (serialize-qp "posExternalAccountId" $pos_external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/liasettings/{account_id}/setposdataprovider") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2361,9 +2388,9 @@ export def "content-orderinvoices-createchargeinvoice" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orderinvoices/{order_id}/createChargeInvoice") $qp $auth.query)
   let req_body = {"invoiceId": $invoice_id, "invoiceSummary": $invoice_summary, "lineItemInvoices": $line_item_invoices, "operationId": $operation_id, "shipmentGroupId": $shipment_group_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2419,9 +2446,9 @@ export def "content-orderinvoices-createrefundinvoice" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orderinvoices/{order_id}/createRefundInvoice") $qp $auth.query)
   let req_body = {"invoiceId": $invoice_id, "operationId": $operation_id, "refundOnlyOption": $refund_only_option, "returnOption": $return_option, "shipmentInvoices": $shipment_invoices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2473,7 +2500,7 @@ export def "content-orderreports-listdisbursements" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "disbursementEndDate" $disbursement_end_date "scalar") (serialize-qp "disbursementStartDate" $disbursement_start_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/orderreports/disbursements") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2527,7 +2554,7 @@ export def "content-orderreports-listtransactions" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "transactionEndDate" $transaction_end_date "scalar") (serialize-qp "transactionStartDate" $transaction_start_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), disbursement_id: (encode-path-segment $disbursement_id)} | format pattern "/{merchant_id}/orderreports/disbursements/{disbursement_id}/transactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2580,7 +2607,7 @@ export def "content-orderreturns-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "createdEndDate" $created_end_date "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/orderreturns") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2630,7 +2657,7 @@ export def "content-orderreturns-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), return_id: (encode-path-segment $return_id)} | format pattern "/{merchant_id}/orderreturns/{return_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2685,7 +2712,7 @@ export def "content-orders-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placedDateEnd" $placed_date_end "scalar") (serialize-qp "placedDateStart" $placed_date_start "scalar") (serialize-qp "statuses" $statuses "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/orders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2735,7 +2762,7 @@ export def "content-orders-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2787,9 +2814,9 @@ export def "content-orders-acknowledge" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/acknowledge") $qp $auth.query)
   let req_body = {"operationId": $operation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2843,9 +2870,9 @@ export def "content-orders-cancel" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/cancel") $qp $auth.query)
   let req_body = {"operationId": $operation_id, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2905,9 +2932,9 @@ export def "content-orders-cancellineitem" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/cancelLineItem") $qp $auth.query)
   let req_body = {"amount": $amount, "amountPretax": $amount_pretax, "amountTax": $amount_tax, "lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "quantity": $quantity, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2966,9 +2993,9 @@ export def "content-orders-instorerefundlineitem" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/inStoreRefundLineItem") $qp $auth.query)
   let req_body = {"amountPretax": $amount_pretax, "amountTax": $amount_tax, "lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "quantity": $quantity, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3025,9 +3052,9 @@ export def "content-orders-refund" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/refund") $qp $auth.query)
   let req_body = {"amount": $amount, "amountPretax": $amount_pretax, "amountTax": $amount_tax, "operationId": $operation_id, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3084,9 +3111,9 @@ export def "content-orders-rejectreturnlineitem" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/rejectReturnLineItem") $qp $auth.query)
   let req_body = {"lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "quantity": $quantity, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3143,9 +3170,9 @@ export def "content-orders-returnlineitem" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/returnLineItem") $qp $auth.query)
   let req_body = {"lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "quantity": $quantity, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3204,9 +3231,9 @@ export def "content-orders-returnrefundlineitem" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/returnRefundLineItem") $qp $auth.query)
   let req_body = {"amountPretax": $amount_pretax, "amountTax": $amount_tax, "lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "quantity": $quantity, "reason": $reason, "reasonText": $reason_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3261,9 +3288,9 @@ export def "content-orders-setlineitemmetadata" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/setLineItemMetadata") $qp $auth.query)
   let req_body = {"annotations": $annotations, "lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3321,9 +3348,9 @@ export def "content-orders-shiplineitems" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/shipLineItems") $qp $auth.query)
   let req_body = {"carrier": $carrier, "lineItems": $line_items, "operationId": $operation_id, "shipmentGroupId": $shipment_group_id, "shipmentId": $shipment_id, "shipmentInfos": $shipment_infos, "trackingId": $tracking_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3375,9 +3402,9 @@ export def "content-orders-createtestreturn" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/testreturn") $qp $auth.query)
   let req_body = {"items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3433,9 +3460,9 @@ export def "content-orders-updatelineitemshippingdetails" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/updateLineItemShippingDetails") $qp $auth.query)
   let req_body = {"deliverByDate": $deliver_by_date, "lineItemId": $line_item_id, "operationId": $operation_id, "productId": $product_id, "shipByDate": $ship_by_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3488,9 +3515,9 @@ export def "content-orders-updatemerchantorderid" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/updateMerchantOrderId") $qp $auth.query)
   let req_body = {"merchantOrderId": $merchant_order_id, "operationId": $operation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3547,9 +3574,9 @@ export def "content-orders-updateshipment" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/orders/{order_id}/updateShipment") $qp $auth.query)
   let req_body = {"carrier": $carrier, "deliveryDate": $delivery_date, "operationId": $operation_id, "shipmentId": $shipment_id, "status": $status, "trackingId": $tracking_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3599,7 +3626,7 @@ export def "content-orders-getbymerchantorderid" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), merchant_order_id: (encode-path-segment $merchant_order_id)} | format pattern "/{merchant_id}/ordersbymerchantid/{merchant_order_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3641,7 +3668,7 @@ export def "content-pos-inventory" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --content-language: string # Required. The two-letter ISO 639-1 language code for the item.
   --gtin: string # Global Trade Item Number.
   --item-id: string # Required. A unique identifier for the item.
@@ -3659,9 +3686,9 @@ export def "content-pos-inventory" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/inventory") $qp $auth.query)
   let req_body = {"contentLanguage": $content_language, "gtin": $gtin, "itemId": $item_id, "price": $price, "quantity": $quantity, "storeCode": $store_code, "targetCountry": $target_country, "timestamp": $timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3703,7 +3730,7 @@ export def "content-pos-sale" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --content-language: string # Required. The two-letter ISO 639-1 language code for the item.
   --gtin: string # Global Trade Item Number.
   --item-id: string # Required. A unique identifier for the item.
@@ -3722,9 +3749,9 @@ export def "content-pos-sale" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/sale") $qp $auth.query)
   let req_body = {"contentLanguage": $content_language, "gtin": $gtin, "itemId": $item_id, "price": $price, "quantity": $quantity, "saleId": $sale_id, "storeCode": $store_code, "targetCountry": $target_country, "timestamp": $timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3774,7 +3801,7 @@ export def "content-pos-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/store") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3816,7 +3843,7 @@ export def "content-pos-insert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --gcid-category: list<string> # The business type of the store.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "`content#posStore`"
   --phone-number: string # The store phone number.
@@ -3834,9 +3861,9 @@ export def "content-pos-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/store") $qp $auth.query)
   let req_body = {"gcidCategory": $gcid_category, "kind": $kind, "phoneNumber": $phone_number, "placeId": $place_id, "storeAddress": $store_address, "storeCode": $store_code, "storeName": $store_name, "websiteUrl": $website_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3879,7 +3906,7 @@ export def "content-pos-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3889,7 +3916,7 @@ export def "content-pos-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id), store_code: (encode-path-segment $store_code)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/store/{store_code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3941,7 +3968,7 @@ export def "content-pos-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), target_merchant_id: (encode-path-segment $target_merchant_id), store_code: (encode-path-segment $store_code)} | format pattern "/{merchant_id}/pos/{target_merchant_id}/store/{store_code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3992,7 +4019,7 @@ export def "content-products-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeInvalidInsertedItems" $include_invalid_inserted_items "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4033,7 +4060,7 @@ export def "content-products-insert" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
   --additional-image-links: list<string> # Additional URLs of images of the item.
   --additional-product-types: list<string> # Additional categories of the item (formatted as in products data specification).
   --adult: oneof<nothing, bool> # Should be set to true if the item is targeted towards adults.
@@ -4121,9 +4148,9 @@ export def "content-products-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/products") $qp $auth.query)
   let req_body = {"additionalImageLinks": $additional_image_links, "additionalProductTypes": $additional_product_types, "adult": $adult, "adwordsGrouping": $adwords_grouping, "adwordsLabels": $adwords_labels, "adwordsRedirect": $adwords_redirect, "ageGroup": $age_group, "aspects": $aspects, "availability": $availability, "availabilityDate": $availability_date, "brand": $brand, "canonicalLink": $canonical_link, "channel": $channel, "color": $color, "condition": $condition, "contentLanguage": $content_language, "costOfGoodsSold": $cost_of_goods_sold, "customAttributes": $custom_attributes, "customGroups": $custom_groups, "customLabel0": $custom_label0, "customLabel1": $custom_label1, "customLabel2": $custom_label2, "customLabel3": $custom_label3, "customLabel4": $custom_label4, "description": $description, "destinations": $destinations, "displayAdsId": $display_ads_id, "displayAdsLink": $display_ads_link, "displayAdsSimilarIds": $display_ads_similar_ids, "displayAdsTitle": $display_ads_title, "displayAdsValue": $display_ads_value, "energyEfficiencyClass": $energy_efficiency_class, "expirationDate": $expiration_date, "gender": $gender, "googleProductCategory": $google_product_category, "gtin": $gtin, "id": $id, "identifierExists": $identifier_exists, "imageLink": $image_link, "installment": $installment, "isBundle": $is_bundle, "itemGroupId": $item_group_id, "kind": $kind, "link": $link, "loyaltyPoints": $loyalty_points, "material": $material, "maxEnergyEfficiencyClass": $max_energy_efficiency_class, "maxHandlingTime": $max_handling_time, "minEnergyEfficiencyClass": $min_energy_efficiency_class, "minHandlingTime": $min_handling_time, "mobileLink": $mobile_link, "mpn": $mpn, "multipack": $multipack, "offerId": $offer_id, "onlineOnly": $online_only, "pattern": $pattern, "price": $price, "productType": $product_type, "promotionIds": $promotion_ids, "salePrice": $sale_price, "salePriceEffectiveDate": $sale_price_effective_date, "sellOnGoogleQuantity": $sell_on_google_quantity, "shipping": $shipping, "shippingHeight": $shipping_height, "shippingLabel": $shipping_label, "shippingLength": $shipping_length, "shippingWeight": $shipping_weight, "shippingWidth": $shipping_width, "sizeSystem": $size_system, "sizeType": $size_type, "sizes": $sizes, "source": $source, "targetCountry": $target_country, "taxes": $taxes, "title": $title, "unitPricingBaseMeasure": $unit_pricing_base_measure, "unitPricingMeasure": $unit_pricing_measure, "validatedDestinations": $validated_destinations, "warnings": $warnings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4165,7 +4192,7 @@ export def "content-products-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4174,7 +4201,7 @@ export def "content-products-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), product_id: (encode-path-segment $product_id)} | format pattern "/{merchant_id}/products/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4224,7 +4251,7 @@ export def "content-products-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), product_id: (encode-path-segment $product_id)} | format pattern "/{merchant_id}/products/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4277,7 +4304,7 @@ export def "content-productstatuses-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinations" $destinations "multi") (serialize-qp "includeAttributes" $include_attributes "scalar") (serialize-qp "includeInvalidInsertedItems" $include_invalid_inserted_items "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/productstatuses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4329,7 +4356,7 @@ export def "content-productstatuses-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinations" $destinations "multi") (serialize-qp "includeAttributes" $include_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), product_id: (encode-path-segment $product_id)} | format pattern "/{merchant_id}/productstatuses/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4379,7 +4406,7 @@ export def "content-shippingsettings-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/shippingsettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4429,7 +4456,7 @@ export def "content-shippingsettings-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/shippingsettings/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4471,8 +4498,8 @@ export def "content-shippingsettings-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any).
-  --body-account-id: string # The ID of the account to which these account shipping settings belong. Ignored upon update, always present in get request responses. (format: uint64)
+  --qp-dry-run: oneof<nothing, bool> # Flag to simulate a request like in a live environment. If set to true, dry-run mode checks the validity of the request and returns errors (if any). (spec name: dryRun)
+  --body-account-id: string # The ID of the account to which these account shipping settings belong. Ignored upon update, always present in get request responses. (format: uint64) (spec name: accountId)
   --postal-code-groups: list # A list of postal code groups that can be referred to in `services`. Optional. — item shape: {country?: string, name?: string, postalCodeRanges?: list}
   --services: list # The target account's list of services. Optional. — item shape: {active?: bool, currency?: string, deliveryCountry?: string, deliveryTime?: record, eligibility?: string, minimumOrderValue?: record, minimumOrderValueTable?: record, name?: string, pickupService?: record, rateGroups?: list, shipmentType?: string}
   --warehouses: list # Optional. A list of warehouses which can be referred to in `services`. — item shape: {businessDayConfig?: record, cutoffTime?: record, handlingDays?: string, name?: string, shippingAddress?: record}
@@ -4485,9 +4512,9 @@ export def "content-shippingsettings-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), account_id: (encode-path-segment $account_id)} | format pattern "/{merchant_id}/shippingsettings/{account_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "postalCodeGroups": $postal_code_groups, "services": $services, "warehouses": $warehouses} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4535,7 +4562,7 @@ export def "content-shippingsettings-getsupportedcarriers" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/supportedCarriers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4583,7 +4610,7 @@ export def "content-shippingsettings-getsupportedholidays" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/supportedHolidays") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4631,7 +4658,7 @@ export def "content-shippingsettings-getsupportedpickupservices" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/supportedPickupServices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4683,9 +4710,9 @@ export def "content-orders-createtestorder" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/{merchant_id}/testorders") $qp $auth.query)
   let req_body = {"country": $country, "templateName": $template_name, "testOrder": $test_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4735,7 +4762,7 @@ export def "content-orders-advancetestorder" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/testorders/{order_id}/advance") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4787,9 +4814,9 @@ export def "content-orders-canceltestorderbycustomer" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), order_id: (encode-path-segment $order_id)} | format pattern "/{merchant_id}/testorders/{order_id}/cancelByCustomer") $qp $auth.query)
   let req_body = {"reason": $reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4840,7 +4867,7 @@ export def "content-orders-gettestordertemplate" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id), template_name: (encode-path-segment $template_name)} | format pattern "/{merchant_id}/testordertemplates/{template_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

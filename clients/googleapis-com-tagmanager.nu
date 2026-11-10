@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -202,7 +229,7 @@ export def "tagmanager-accounts-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeGoogleTags" $include_google_tags "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tagmanager/v2/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -249,7 +276,7 @@ export def "tagmanager-accounts-containers-lookup" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "destinationId" $destination_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tagmanager/v2/accounts/containers:lookup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -298,7 +325,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -347,7 +374,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-create"
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/built_in_variables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -396,7 +423,7 @@ export def "tagmanager-accounts-containers-workspaces-clients-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/clients") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -458,9 +485,9 @@ export def "tagmanager-accounts-containers-workspaces-clients-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/clients") $qp $auth.query)
   let req_body = {"accountId": $account_id, "clientId": $client_id, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "priority": $priority, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -509,7 +536,7 @@ export def "tagmanager-accounts-containers-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/containers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -571,9 +598,9 @@ export def "tagmanager-accounts-containers-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/containers") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "domainName": $domain_name, "features": $features, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "publicId": $public_id, "tagIds": $tag_ids, "tagManagerUrl": $tag_manager_url, "taggingServerUrls": $tagging_server_urls, "usageContext": $usage_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -621,7 +648,7 @@ export def "tagmanager-accounts-containers-destinations-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/destinations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -671,7 +698,7 @@ export def "tagmanager-accounts-containers-destinations-link" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "destinationId" $destination_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/destinations:link") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -720,7 +747,7 @@ export def "tagmanager-accounts-containers-environments-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/environments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -784,9 +811,9 @@ export def "tagmanager-accounts-containers-environments-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/environments") $qp $auth.query)
   let req_body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $url, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -835,7 +862,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/folders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -893,9 +920,9 @@ export def "tagmanager-accounts-containers-workspaces-folders-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/folders") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -944,7 +971,7 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1002,9 +1029,9 @@ export def "tagmanager-accounts-containers-workspaces-gtag-config-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/gtag_config") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "gtagConfigId": $gtag_config_id, "parameter": $parameter, "path": $path, "tagManagerUrl": $tag_manager_url, "type": $type, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1053,7 +1080,7 @@ export def "tagmanager-accounts-containers-workspaces-tags-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/tags") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1129,9 +1156,9 @@ export def "tagmanager-accounts-containers-workspaces-tags-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/tags") $qp $auth.query)
   let req_body = {"accountId": $account_id, "blockingRuleId": $blocking_rule_id, "blockingTriggerId": $blocking_trigger_id, "consentSettings": $consent_settings, "containerId": $container_id, "fingerprint": $fingerprint, "firingRuleId": $firing_rule_id, "firingTriggerId": $firing_trigger_id, "liveOnly": $live_only, "monitoringMetadata": $monitoring_metadata, "monitoringMetadataTagNameKey": $monitoring_metadata_tag_name_key, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "paused": $paused, "priority": $priority, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "setupTag": $setup_tag, "tagFiringOption": $tag_firing_option, "tagId": $tag_id, "tagManagerUrl": $tag_manager_url, "teardownTag": $teardown_tag, "type": $type, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1180,7 +1207,7 @@ export def "tagmanager-accounts-containers-workspaces-templates-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/templates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1239,9 +1266,9 @@ export def "tagmanager-accounts-containers-workspaces-templates-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/templates") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "galleryReference": $gallery_reference, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "templateData": $template_data, "templateId": $template_id, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1290,7 +1317,7 @@ export def "tagmanager-accounts-containers-workspaces-triggers-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/triggers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1371,9 +1398,9 @@ export def "tagmanager-accounts-containers-workspaces-triggers-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/triggers") $qp $auth.query)
   let req_body = {"accountId": $account_id, "autoEventFilter": $auto_event_filter, "checkValidation": $check_validation, "containerId": $container_id, "continuousTimeMinMilliseconds": $continuous_time_min_milliseconds, "customEventFilter": $custom_event_filter, "eventName": $event_name, "filter": $filter, "fingerprint": $fingerprint, "horizontalScrollPercentageList": $horizontal_scroll_percentage_list, "interval": $interval, "intervalSeconds": $interval_seconds, "limit": $limit, "maxTimerLengthSeconds": $max_timer_length_seconds, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "selector": $selector, "tagManagerUrl": $tag_manager_url, "totalTimeMinMilliseconds": $total_time_min_milliseconds, "triggerId": $trigger_id, "type": $type, "uniqueTriggerId": $unique_trigger_id, "verticalScrollPercentageList": $vertical_scroll_percentage_list, "visibilitySelector": $visibility_selector, "visiblePercentageMax": $visible_percentage_max, "visiblePercentageMin": $visible_percentage_min, "waitForTags": $wait_for_tags, "waitForTagsTimeout": $wait_for_tags_timeout, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1422,7 +1449,7 @@ export def "tagmanager-accounts-user-permissions-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1476,9 +1503,9 @@ export def "tagmanager-accounts-user-permissions-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/user_permissions") $qp $auth.query)
   let req_body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1527,7 +1554,7 @@ export def "tagmanager-accounts-containers-workspaces-variables-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/variables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1593,9 +1620,9 @@ export def "tagmanager-accounts-containers-workspaces-variables-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/variables") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "disablingTriggerId": $disabling_trigger_id, "enablingTriggerId": $enabling_trigger_id, "fingerprint": $fingerprint, "formatValue": $format_value, "name": $name, "notes": $notes, "parameter": $parameter, "parentFolderId": $parent_folder_id, "path": $path, "scheduleEndMs": $schedule_end_ms, "scheduleStartMs": $schedule_start_ms, "tagManagerUrl": $tag_manager_url, "type": $type, "variableId": $variable_id, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1645,7 +1672,7 @@ export def "tagmanager-accounts-containers-version-headers-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/version_headers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1693,7 +1720,7 @@ export def "tagmanager-accounts-containers-version-headers-latest" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/version_headers:latest") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1741,7 +1768,7 @@ export def "tagmanager-accounts-containers-versions-live" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/versions:live") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1790,7 +1817,7 @@ export def "tagmanager-accounts-containers-workspaces-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1847,9 +1874,9 @@ export def "tagmanager-accounts-containers-workspaces-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/workspaces") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "description": $description, "fingerprint": $fingerprint, "name": $name, "path": $path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1898,7 +1925,7 @@ export def "tagmanager-accounts-containers-workspaces-zones-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/zones") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1959,9 +1986,9 @@ export def "tagmanager-accounts-containers-workspaces-zones-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/tagmanager/v2/{parent}/zones") $qp $auth.query)
   let req_body = {"accountId": $account_id, "boundary": $boundary, "childContainer": $child_container, "containerId": $container_id, "fingerprint": $fingerprint, "name": $name, "notes": $notes, "path": $path, "tagManagerUrl": $tag_manager_url, "typeRestriction": $type_restriction, "workspaceId": $workspace_id, "zoneId": $zone_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2010,7 +2037,7 @@ export def "tagmanager-accounts-user-permissions-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2059,7 +2086,7 @@ export def "tagmanager-accounts-user-permissions-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "containerVersionId" $container_version_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2105,7 +2132,7 @@ export def "tagmanager-accounts-user-permissions-update" [
   --account-id: string # The Account ID uniquely identifies the GTM Account.
   --container-access: list # GTM Container access permissions. @mutable tagmanager.accounts.permissions.create @mutable tagmanager.accounts.permissions.update — item shape: {containerId?: string, permission?: "containerPermissionUnspecified"|"noAccess"|"read"|"edit"|"approve"|"publish"}
   --email-address: string # User's email address. @mutable tagmanager.accounts.permissions.create
-  --body-path: string # GTM UserPermission's API relative path.
+  --body-path: string # GTM UserPermission's API relative path. (spec name: path)
 ]: any -> oneof<record<accountAccess: record<permission: string>, accountId: string, containerAccess: table<containerId: string, permission: string>, emailAddress: string, path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2114,9 +2141,9 @@ export def "tagmanager-accounts-user-permissions-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}") $qp $auth.query)
   let req_body = {"accountAccess": $account_access, "accountId": $account_id, "containerAccess": $container_access, "emailAddress": $email_address, "path": $body_path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2165,7 +2192,7 @@ export def "tagmanager-accounts-containers-workspaces-built-in-variables-revert"
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}/built_in_variables:revert") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2213,7 +2240,7 @@ export def "tagmanager-accounts-containers-workspaces-get-status" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}/status") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2264,7 +2291,7 @@ export def "tagmanager-accounts-containers-combine" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "containerId" $container_id "scalar") (serialize-qp "settingSource" $setting_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:combine") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2315,9 +2342,9 @@ export def "tagmanager-accounts-containers-workspaces-create-version" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:create_version") $qp $auth.query)
   let req_body = {"name": $name, "notes": $notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2366,7 +2393,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-entities" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:entities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2416,7 +2443,7 @@ export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-f
   --folder-id: string # The Folder ID uniquely identifies the GTM Folder.
   --name: string # Folder display name. @mutable tagmanager.accounts.containers.workspaces.folders.create @mutable tagmanager.accounts.containers.workspaces.folders.update
   --notes: string # User notes on how to apply this folder in the container. @mutable tagmanager.accounts.containers.workspaces.folders.create @mutable tagmanager.accounts.containers.workspaces.folders.update
-  --body-path: string # GTM Folder's API relative path.
+  --body-path: string # GTM Folder's API relative path. (spec name: path)
   --tag-manager-url: string # Auto generated link to the tag manager UI
   --workspace-id: string # GTM Workspace ID.
 ]: any -> any {
@@ -2427,9 +2454,9 @@ export def "tagmanager-accounts-containers-workspaces-folders-move-entities-to-f
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "tagId" $tag_id "multi") (serialize-qp "triggerId" $trigger_id "multi") (serialize-qp "variableId" $variable_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:move_entities_to_folder") $qp $auth.query)
   let req_body = {"accountId": $account_id, "containerId": $container_id, "fingerprint": $fingerprint, "folderId": $folder_id, "name": $name, "notes": $notes, "path": $body_path, "tagManagerUrl": $tag_manager_url, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2483,7 +2510,7 @@ export def "tagmanager-accounts-containers-move-tag-id" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUserPermissionFeatureUpdate" $allow_user_permission_feature_update "scalar") (serialize-qp "copySettings" $copy_settings "scalar") (serialize-qp "copyTermsOfService" $copy_terms_of_service "scalar") (serialize-qp "copyUsers" $copy_users "scalar") (serialize-qp "tagId" $tag_id "scalar") (serialize-qp "tagName" $tag_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:move_tag_id") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2532,7 +2559,7 @@ export def "tagmanager-accounts-containers-versions-publish" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:publish") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2580,7 +2607,7 @@ export def "tagmanager-accounts-containers-workspaces-quick-preview" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:quick_preview") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2631,7 +2658,7 @@ export def "tagmanager-accounts-containers-environments-reauthorize" [
   --environment-id: string # GTM Environment ID uniquely identifies the GTM Environment.
   --fingerprint: string # The fingerprint of the GTM environment as computed at storage time. This value is recomputed whenever the environment is modified.
   --name: string # The environment display name. Can be set or changed only on USER type environments. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
-  --body-path: string # GTM Environment's API relative path.
+  --body-path: string # GTM Environment's API relative path. (spec name: path)
   --tag-manager-url: string # Auto generated link to the tag manager UI
   --type: string@type-completer # The type of this environment.
   --url: string # Default preview page url for the environment. @mutable tagmanager.accounts.containers.environments.create @mutable tagmanager.accounts.containers.environments.update
@@ -2644,9 +2671,9 @@ export def "tagmanager-accounts-containers-environments-reauthorize" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:reauthorize") $qp $auth.query)
   let req_body = {"accountId": $account_id, "authorizationCode": $authorization_code, "authorizationTimestamp": $authorization_timestamp, "containerId": $container_id, "containerVersionId": $container_version_id, "description": $description, "enableDebug": $enable_debug, "environmentId": $environment_id, "fingerprint": $fingerprint, "name": $name, "path": $body_path, "tagManagerUrl": $tag_manager_url, "type": $type, "url": $url, "workspaceId": $workspace_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2702,9 +2729,9 @@ export def "tagmanager-accounts-containers-workspaces-resolve-conflict" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:resolve_conflict") $qp $auth.query)
   let req_body = {"changeStatus": $change_status, "client": $client, "folder": $folder, "tag": $tag, "trigger": $trigger, "variable": $variable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2753,7 +2780,7 @@ export def "tagmanager-accounts-containers-workspaces-zones-revert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "fingerprint" $fingerprint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:revert") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2801,7 +2828,7 @@ export def "tagmanager-accounts-containers-versions-set-latest" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:set_latest") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2849,7 +2876,7 @@ export def "tagmanager-accounts-containers-snippet" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:snippet") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2897,7 +2924,7 @@ export def "tagmanager-accounts-containers-workspaces-sync" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:sync") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2945,7 +2972,7 @@ export def "tagmanager-accounts-containers-versions-undelete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/tagmanager/v2/{path}:undelete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

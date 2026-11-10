@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -189,16 +216,16 @@ export def "get-recurrencebyemail" [
   --email: string # If you wish to list tasks by email, insert the desired user's email. (e.g. {{email}})
   --cycle-status: string # If you wish to list tasks by Subscriptions with failures on the last execution cycle, insert the desired cycleStatus. (e.g. {{cycleStatus}})
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "cycleStatus" $cycle_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -228,7 +255,7 @@ export def "updaterecurrence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
   delivery_day: int # format: int32
   delivery_weekday: string
   email: string
@@ -240,13 +267,13 @@ export def "updaterecurrence" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions" $auth.query)
   let req_body = {"deliveryDay": $delivery_day, "deliveryWeekday": $delivery_weekday, "email": $email, "items": $items, "paymentAccountId": $payment_account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -276,15 +303,15 @@ export def "getselfrecurrence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/me" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -314,15 +341,15 @@ export def "getrecurrencesettings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -352,7 +379,7 @@ export def "updaterecurrencesettings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
   default_sla: string
   sales_channel: string
 ]: any -> any {
@@ -361,13 +388,13 @@ export def "updaterecurrencesettings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings" $auth.query)
   let req_body = {"defaultSLA": $default_sla, "salesChannel": $sales_channel} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -398,16 +425,16 @@ export def "get-recurrencebyrecurrence-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -438,7 +465,7 @@ export def "updatepartialrecurrence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
   delivery_day: int # format: int32
   delivery_weekday: string
   status: string
@@ -449,13 +476,13 @@ export def "updatepartialrecurrence" [
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}") $auth.query)
   let req_body = {"deliveryDay": $delivery_day, "deliveryWeekday": $delivery_weekday, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -486,16 +513,16 @@ export def "getrecurrenceaddresses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -526,7 +553,7 @@ export def "addrecurrenceitem" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
   --body: list
 ]: any -> any {
   let input = $in
@@ -535,13 +562,13 @@ export def "addrecurrenceitem" [
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/items") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -572,7 +599,7 @@ export def "reindexrecurrence" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
   --body: list
 ]: any -> any {
   let input = $in
@@ -581,13 +608,13 @@ export def "reindexrecurrence" [
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/reindex") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -618,16 +645,16 @@ export def "getpaymentaccounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrenceid | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceid' must be non-empty" } }
   let full_url = (build-url $base ({recurrenceid: (encode-path-segment $recurrenceid)} | format pattern "/subscriptions/{recurrenceid}/accounts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

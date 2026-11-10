@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -177,7 +204,7 @@ export def "list-assistant" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Assistants" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -218,9 +245,9 @@ export def "create-assistant" [
   let base = ($base_url | default "https://autopilot.twilio.com")
   let full_url = (build-url $base "/v1/Assistants" $auth.query)
   let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "Defaults": $defaults, "FriendlyName": $friendly_name, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -256,9 +283,9 @@ export def "update-restore-assistant" [
   let base = ($base_url | default "https://autopilot.twilio.com")
   let full_url = (build-url $base "/v1/Assistants/Restore" $auth.query)
   let req_body = {"Assistant": $assistant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -294,7 +321,7 @@ export def "fetch-defaults" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Defaults") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -331,9 +358,9 @@ export def "update-defaults" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Defaults") $auth.query)
   let req_body = {"Defaults": $defaults} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -371,7 +398,7 @@ export def "fetch-dialogue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Dialogues/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -410,7 +437,7 @@ export def "list-field-type" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -448,9 +475,9 @@ export def "create-field-type" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -493,7 +520,7 @@ export def "list-field-value" [
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -534,9 +561,9 @@ export def "create-field-value" [
   if ($field_type_sid | is-empty) { error make --unspanned { msg: "path parameter 'FieldTypeSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues") $auth.query)
   let req_body = {"Language": $language, "SynonymOf": $synonym_of, "Value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -576,7 +603,7 @@ export def "delete-field-value" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -615,7 +642,7 @@ export def "fetch-field-value" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), field_type_sid: (encode-path-segment $field_type_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{field_type_sid}/FieldValues/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -652,7 +679,7 @@ export def "delete-field-type" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -689,7 +716,7 @@ export def "fetch-field-type" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -729,9 +756,9 @@ export def "update-field-type" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/FieldTypes/{sid}") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -771,7 +798,7 @@ export def "list-model-build" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -809,9 +836,9 @@ export def "create-model-build" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds") $auth.query)
   let req_body = {"StatusCallback": $status_callback, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -849,7 +876,7 @@ export def "delete-model-build" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -886,7 +913,7 @@ export def "fetch-model-build" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -925,9 +952,9 @@ export def "update-model-build" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/ModelBuilds/{sid}") $auth.query)
   let req_body = {"UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -971,7 +998,7 @@ export def "list-query" [
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "ModelBuild" $model_build "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "DialogueSid" $dialogue_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1011,9 +1038,9 @@ export def "create-query" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries") $auth.query)
   let req_body = {"Language": $language, "ModelBuild": $model_build, "Query": $query, "Tasks": $tasks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1051,7 +1078,7 @@ export def "delete-query" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1088,7 +1115,7 @@ export def "fetch-query" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1128,9 +1155,9 @@ export def "update-query" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Queries/{sid}") $auth.query)
   let req_body = {"SampleSid": $sample_sid, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1167,7 +1194,7 @@ export def "fetch-style-sheet" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/StyleSheet") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,9 +1232,9 @@ export def "update-style-sheet" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/StyleSheet") $auth.query)
   let req_body = {"StyleSheet": $style_sheet} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1247,7 +1274,7 @@ export def "list-task" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1287,9 +1314,9 @@ export def "create-task" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks") $auth.query)
   let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1327,7 +1354,7 @@ export def "delete-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1364,7 +1391,7 @@ export def "fetch-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1406,9 +1433,9 @@ export def "update-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{sid}") $auth.query)
   let req_body = {"Actions": $actions, "ActionsUrl": $actions_url, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1447,7 +1474,7 @@ export def "fetch-task-actions" [
   if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1487,9 +1514,9 @@ export def "update-task-actions" [
   if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Actions") $auth.query)
   let req_body = {"Actions": $actions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1531,7 +1558,7 @@ export def "list-field" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1571,9 +1598,9 @@ export def "create-field" [
   if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields") $auth.query)
   let req_body = {"FieldType": $field_type, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1613,7 +1640,7 @@ export def "delete-field" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1652,7 +1679,7 @@ export def "fetch-field" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Fields/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1694,7 +1721,7 @@ export def "list-sample" [
   let qp = [(serialize-qp "Language" $language "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1735,9 +1762,9 @@ export def "create-sample" [
   if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples") $auth.query)
   let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1777,7 +1804,7 @@ export def "delete-sample" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1816,7 +1843,7 @@ export def "fetch-sample" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1859,9 +1886,9 @@ export def "update-sample" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Samples/{sid}") $auth.query)
   let req_body = {"Language": $language, "SourceChannel": $source_channel, "TaggedText": $tagged_text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1899,7 +1926,7 @@ export def "fetch-task-statistics" [
   if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Tasks/{task_sid}/Statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1938,7 +1965,7 @@ export def "list-webhook" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1978,9 +2005,9 @@ export def "create-webhook" [
   if ($assistant_sid | is-empty) { error make --unspanned { msg: "path parameter 'AssistantSid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks") $auth.query)
   let req_body = {"Events": $events, "UniqueName": $unique_name, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2018,7 +2045,7 @@ export def "delete-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2055,7 +2082,7 @@ export def "fetch-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2097,9 +2124,9 @@ export def "update-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({assistant_sid: (encode-path-segment $assistant_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{assistant_sid}/Webhooks/{sid}") $auth.query)
   let req_body = {"Events": $events, "UniqueName": $unique_name, "WebhookMethod": $webhook_method, "WebhookUrl": $webhook_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2135,7 +2162,7 @@ export def "delete-assistant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2170,7 +2197,7 @@ export def "fetch-assistant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2214,9 +2241,9 @@ export def "update-assistant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Assistants/{sid}") $auth.query)
   let req_body = {"CallbackEvents": $callback_events, "CallbackUrl": $callback_url, "Defaults": $defaults, "DevelopmentStage": $development_stage, "FriendlyName": $friendly_name, "LogQueries": $log_queries, "StyleSheet": $style_sheet, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

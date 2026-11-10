@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -277,11 +304,11 @@ export def "approve-skill" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ApproveSkill")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -327,11 +354,11 @@ export def "associate-contact-with-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateContactWithAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "AddressBookArn": $address_book_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -377,11 +404,11 @@ export def "associate-device-with-network-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateDeviceWithNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "NetworkProfileArn": $network_profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -427,11 +454,11 @@ export def "associate-device-with-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateDeviceWithRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -477,11 +504,11 @@ export def "associate-skill-group-with-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillGroupWithRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -527,11 +554,11 @@ export def "associate-skill-with-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillWithSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -576,11 +603,11 @@ export def "associate-skill-with-users" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.AssociateSkillWithUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -628,11 +655,11 @@ export def "create-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -684,11 +711,11 @@ export def "create-business-report-schedule" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleName": $schedule_name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "Format": $format, "ContentRange": $content_range, "Recurrence": $recurrence, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -739,11 +766,11 @@ export def "create-conference-provider" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderName": $conference_provider_name, "ConferenceProviderType": $conference_provider_type, "IPDialIn": $ip_dial_in, "PSTNDialIn": $pstn_dial_in, "MeetingSetting": $meeting_setting, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -795,11 +822,11 @@ export def "create-contact" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DisplayName": $display_name, "FirstName": $first_name, "LastName": $last_name, "PhoneNumber": $phone_number, "PhoneNumbers": $phone_numbers, "SipAddresses": $sip_addresses, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -847,11 +874,11 @@ export def "create-gateway-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -906,11 +933,11 @@ export def "create-network-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileName": $network_profile_name, "Description": $description, "Ssid": $ssid, "SecurityType": $security_type, "EapMethod": $eap_method, "CurrentPassword": $current_password, "NextPassword": $next_password, "CertificateAuthorityArn": $certificate_authority_arn, "TrustAnchors": $trust_anchors, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -968,11 +995,11 @@ export def "create-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileName": $profile_name, "Timezone": $timezone, "Address": $address, "DistanceUnit": $distance_unit, "TemperatureUnit": $temperature_unit, "WakeWord": $wake_word, "Locale": $locale, "ClientRequestToken": $client_request_token, "SetupModeDisabled": $setup_mode_disabled, "MaxVolumeLimit": $max_volume_limit, "PSTNEnabled": $pstn_enabled, "DataRetentionOptIn": $data_retention_opt_in, "MeetingRoomConfiguration": $meeting_room_configuration, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1022,11 +1049,11 @@ export def "create-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomName": $room_name, "Description": $description, "ProfileArn": $profile_arn, "ProviderCalendarId": $provider_calendar_id, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1074,11 +1101,11 @@ export def "create-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupName": $skill_group_name, "Description": $description, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1128,11 +1155,11 @@ export def "create-user" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.CreateUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserId": $user_id, "FirstName": $first_name, "LastName": $last_name, "Email": $email, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1177,11 +1204,11 @@ export def "delete-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1226,11 +1253,11 @@ export def "delete-business-report-schedule" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleArn": $schedule_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1275,11 +1302,11 @@ export def "delete-conference-provider" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1324,11 +1351,11 @@ export def "delete-contact" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1373,11 +1400,11 @@ export def "delete-device" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1423,11 +1450,11 @@ export def "delete-device-usage-data" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteDeviceUsageData")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "DeviceUsageType": $device_usage_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1472,11 +1499,11 @@ export def "delete-gateway-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1521,11 +1548,11 @@ export def "delete-network-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1570,11 +1597,11 @@ export def "delete-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1619,11 +1646,11 @@ export def "delete-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1670,11 +1697,11 @@ export def "delete-room-skill-parameter" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "ParameterKey": $parameter_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1720,11 +1747,11 @@ export def "delete-skill-authorization" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteSkillAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id, "RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1769,11 +1796,11 @@ export def "delete-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1819,11 +1846,11 @@ export def "delete-user" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DeleteUser")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn, "EnrollmentId": $enrollment_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1869,11 +1896,11 @@ export def "disassociate-contact-from-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateContactFromAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "AddressBookArn": $address_book_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1918,11 +1945,11 @@ export def "disassociate-device-from-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateDeviceFromRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1968,11 +1995,11 @@ export def "disassociate-skill-from-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillFromSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2017,11 +2044,11 @@ export def "disassociate-skill-from-users" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillFromUsers")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2067,11 +2094,11 @@ export def "disassociate-skill-group-from-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.DisassociateSkillGroupFromRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2116,11 +2143,11 @@ export def "forget-smart-home-appliances" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ForgetSmartHomeAppliances")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2165,11 +2192,11 @@ export def "get-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2214,11 +2241,11 @@ export def "get-conference-preference" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetConferencePreference")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2263,11 +2290,11 @@ export def "get-conference-provider" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2312,11 +2339,11 @@ export def "get-contact" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2361,11 +2388,11 @@ export def "get-device" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2410,11 +2437,11 @@ export def "get-gateway" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetGateway")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayArn": $gateway_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2459,11 +2486,11 @@ export def "get-gateway-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2508,11 +2535,11 @@ export def "get-invitation-configuration" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetInvitationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2557,11 +2584,11 @@ export def "get-network-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2606,11 +2633,11 @@ export def "get-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2655,11 +2682,11 @@ export def "get-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2706,11 +2733,11 @@ export def "get-room-skill-parameter" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "ParameterKey": $parameter_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2755,11 +2782,11 @@ export def "get-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.GetSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2798,8 +2825,8 @@ export def "list-business-report-schedules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
-  --next-token-body: string # The token used to list the remaining schedules from the previous API call. (body field)
-  --max-results-body: int # The maximum number of schedules listed in the call. (body field)
+  --body-next-token: string # The token used to list the remaining schedules from the previous API call. (spec name: NextToken)
+  --body-max-results: int # The maximum number of schedules listed in the call. (spec name: MaxResults)
 ]: any -> oneof<record<BusinessReportSchedules: table<ScheduleArn: string, ScheduleName: string, S3BucketName: string, S3KeyPrefix: string, Format: string, ContentRange: record, Recurrence: record, LastBusinessReport: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2807,12 +2834,12 @@ export def "list-business-report-schedules" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListBusinessReportSchedules")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2851,8 +2878,8 @@ export def "list-conference-providers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-51 # required
-  --next-token-body: string # The tokens used for pagination. (body field)
-  --max-results-body: int # The maximum number of conference providers to be returned, per paginated calls. (body field)
+  --body-next-token: string # The tokens used for pagination. (spec name: NextToken)
+  --body-max-results: int # The maximum number of conference providers to be returned, per paginated calls. (spec name: MaxResults)
 ]: any -> oneof<record<ConferenceProviders: table<Arn: string, Name: string, Type: string, IPDialIn: record, PSTNDialIn: record, MeetingSetting: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2860,12 +2887,12 @@ export def "list-conference-providers" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListConferenceProviders")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2906,8 +2933,8 @@ export def "list-device-events" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   device_arn: string # The ARN of a device.
   --event-type: string@event-type-completer # The event type to filter device events. If EventType isn't specified, this returns a list of all device events in reverse chronological order. If EventType is specified, this returns a list of device events for that EventType in reverse chronological order.
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. When the end of results is reached, the response has a value of null. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. The default value is 50. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. When the end of results is reached, the response has a value of null. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. The default value is 50. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
 ]: any -> oneof<record<DeviceEvents: table<Type: string, Value: string, Timestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2915,12 +2942,12 @@ export def "list-device-events" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListDeviceEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"DeviceArn": $device_arn, "EventType": $event_type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"DeviceArn": $device_arn, "EventType": $event_type, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2959,8 +2986,8 @@ export def "list-gateway-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
-  --next-token-body: string # The token used to paginate though multiple pages of gateway group summaries. (body field)
-  --max-results-body: int # The maximum number of gateway group summaries to return. The default is 50. (body field)
+  --body-next-token: string # The token used to paginate though multiple pages of gateway group summaries. (spec name: NextToken)
+  --body-max-results: int # The maximum number of gateway group summaries to return. The default is 50. (spec name: MaxResults)
 ]: any -> oneof<record<GatewayGroups: table<Arn: string, Name: string, Description: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2968,12 +2995,12 @@ export def "list-gateway-groups" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListGatewayGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3013,8 +3040,8 @@ export def "list-gateways" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   --gateway-group-arn: string # The gateway group ARN for which to list gateways.
-  --next-token-body: string # The token used to paginate though multiple pages of gateway summaries. (body field)
-  --max-results-body: int # The maximum number of gateway summaries to return. The default is 50. (body field)
+  --body-next-token: string # The token used to paginate though multiple pages of gateway summaries. (spec name: NextToken)
+  --body-max-results: int # The maximum number of gateway summaries to return. The default is 50. (spec name: MaxResults)
 ]: any -> oneof<record<Gateways: table<Arn: string, Name: string, Description: string, GatewayGroupArn: string, SoftwareVersion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3022,12 +3049,12 @@ export def "list-gateways" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListGateways")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"GatewayGroupArn": $gateway_group_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"GatewayGroupArn": $gateway_group_arn, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3069,8 +3096,8 @@ export def "list-skills" [
   --skill-group-arn: string # The ARN of the skill group for which to list enabled skills.
   --enablement-type: string@enablement-type-completer # Whether the skill is enabled under the user's account.
   --skill-type: string@skill-type-completer # Whether the skill is publicly available or is a private skill.
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
 ]: any -> oneof<record<SkillSummaries: table<SkillId: string, SkillName: string, SupportsLinking: bool, EnablementType: string, SkillType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3078,12 +3105,12 @@ export def "list-skills" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkills")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"SkillGroupArn": $skill_group_arn, "EnablementType": $enablement_type, "SkillType": $skill_type, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"SkillGroupArn": $skill_group_arn, "EnablementType": $enablement_type, "SkillType": $skill_type, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3122,8 +3149,8 @@ export def "list-skills-store-categories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
-  --next-token-body: string # The tokens used for pagination. (body field)
-  --max-results-body: int # The maximum number of categories returned, per paginated calls. (body field)
+  --body-next-token: string # The tokens used for pagination. (spec name: NextToken)
+  --body-max-results: int # The maximum number of categories returned, per paginated calls. (spec name: MaxResults)
 ]: any -> oneof<record<CategoryList: table<CategoryId: int, CategoryName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3131,12 +3158,12 @@ export def "list-skills-store-categories" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkillsStoreCategories")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3176,8 +3203,8 @@ export def "list-skills-store-skills-by-category" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-57 # required
   category_id: int # The category ID for which the skills are being retrieved from the skill store.
-  --next-token-body: string # The tokens used for pagination. (body field)
-  --max-results-body: int # The maximum number of skills returned per paginated calls. (body field)
+  --body-next-token: string # The tokens used for pagination. (spec name: NextToken)
+  --body-max-results: int # The maximum number of skills returned per paginated calls. (spec name: MaxResults)
 ]: any -> oneof<record<SkillsStoreSkills: table<SkillId: string, SkillName: string, ShortDescription: string, IconUrl: string, SampleUtterances: list, SkillDetails: record, SupportsLinking: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3185,12 +3212,12 @@ export def "list-skills-store-skills-by-category" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSkillsStoreSkillsByCategory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"CategoryId": $category_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"CategoryId": $category_id, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3230,8 +3257,8 @@ export def "list-smart-home-appliances" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
   room_arn: string # The room that the appliances are associated with.
-  --max-results-body: int # The maximum number of appliances to be returned, per paginated calls. (body field)
-  --next-token-body: string # The tokens used for pagination. (body field)
+  --body-max-results: int # The maximum number of appliances to be returned, per paginated calls. (spec name: MaxResults)
+  --body-next-token: string # The tokens used for pagination. (spec name: NextToken)
 ]: any -> oneof<record<SmartHomeAppliances: table<FriendlyName: string, Description: string, ManufacturerName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3239,12 +3266,12 @@ export def "list-smart-home-appliances" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListSmartHomeAppliances")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"RoomArn": $room_arn, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"RoomArn": $room_arn, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3284,8 +3311,8 @@ export def "list-tags" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   arn: string # The ARN of the specified resource for which to list tags.
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
 ]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3293,12 +3320,12 @@ export def "list-tags" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ListTags")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Arn": $arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Arn": $arn, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3343,11 +3370,11 @@ export def "put-conference-preference" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutConferencePreference")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferencePreference": $conference_preference} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3394,11 +3421,11 @@ export def "put-invitation-configuration" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutInvitationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationName": $organization_name, "ContactEmail": $contact_email, "PrivateSkillIds": $private_skill_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3445,11 +3472,11 @@ export def "put-room-skill-parameter" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutRoomSkillParameter")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "SkillId": $skill_id, "RoomSkillParameter": $room_skill_parameter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3496,11 +3523,11 @@ export def "put-skill-authorization" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.PutSkillAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizationResult": $authorization_result, "SkillId": $skill_id, "RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3551,11 +3578,11 @@ export def "register-avs-device" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RegisterAVSDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ClientId": $client_id, "UserCode": $user_code, "ProductId": $product_id, "DeviceSerialNumber": $device_serial_number, "AmazonId": $amazon_id, "RoomArn": $room_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3600,11 +3627,11 @@ export def "reject-skill" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RejectSkill")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3650,11 +3677,11 @@ export def "resolve-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.ResolveRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserId": $user_id, "SkillId": $skill_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3700,11 +3727,11 @@ export def "revoke-invitation" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.RevokeInvitation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn, "EnrollmentId": $enrollment_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3745,8 +3772,8 @@ export def "search-address-books" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   --filters: list # The filters to use to list a specified set of address books. The supported filter key is AddressBookName. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of address books. The supported sort key is AddressBookName. — item shape: {Key: string, Value: "ASC"|"DESC"}
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
 ]: any -> oneof<record<AddressBooks: table<AddressBookArn: string, Name: string, Description: string>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3754,12 +3781,12 @@ export def "search-address-books" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchAddressBooks")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3800,8 +3827,8 @@ export def "search-contacts" [
   --x-amz-target: string@x-amz-target-completer-69 # required
   --filters: list # The filters to use to list a specified set of address books. The supported filter keys are DisplayName, FirstName, LastName, and AddressBookArns. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of contacts. The supported sort keys are DisplayName, FirstName, and LastName. — item shape: {Key: string, Value: "ASC"|"DESC"}
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response only includes results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
 ]: any -> oneof<record<Contacts: table<ContactArn: string, DisplayName: string, FirstName: string, LastName: string, PhoneNumber: string, PhoneNumbers: list, SipAddresses: list>, NextToken: string, TotalCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3809,12 +3836,12 @@ export def "search-contacts" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchContacts")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "SortCriteria": $sort_criteria, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3853,8 +3880,8 @@ export def "search-devices" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-70 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
   --filters: list # The filters to use to list a specified set of devices. Supported filter keys are DeviceName, DeviceStatus, DeviceStatusDetailCode, RoomName, DeviceType, DeviceSerialNumber, UnassociatedOnly, ConnectionStatus (ONLINE and OFFLINE), NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of devices. Supported sort keys are DeviceName, DeviceStatus, RoomName, DeviceType, DeviceSerialNumber, ConnectionStatus, NetworkProfileName, NetworkProfileArn, Feature, and FailureCode. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<Devices: table<DeviceArn: string, DeviceSerialNumber: string, DeviceType: string, DeviceName: string, SoftwareVersion: string, MacAddress: string, DeviceStatus: string, NetworkProfileArn: string, NetworkProfileName: string, RoomArn: string, RoomName: string, DeviceStatusInfo: record, CreatedTime: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -3864,12 +3891,12 @@ export def "search-devices" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchDevices")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3908,8 +3935,8 @@ export def "search-network-profiles" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-71 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
   --filters: list # The filters to use to list a specified set of network profiles. Valid filters are NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use to list the specified set of network profiles. Valid sort criteria includes NetworkProfileName, Ssid, and SecurityType. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<NetworkProfiles: table<NetworkProfileArn: string, NetworkProfileName: string, Description: string, Ssid: string, SecurityType: string, EapMethod: string, CertificateAuthorityArn: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -3919,12 +3946,12 @@ export def "search-network-profiles" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchNetworkProfiles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3963,8 +3990,8 @@ export def "search-profiles" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-72 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
   --filters: list # The filters to use to list a specified set of room profiles. Supported filter keys are ProfileName and Address. Required. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of room profiles. Supported sort keys are ProfileName and Address. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<Profiles: table<ProfileArn: string, ProfileName: string, IsDefault: bool, Address: string, Timezone: string, DistanceUnit: string, TemperatureUnit: string, WakeWord: string, Locale: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -3974,12 +4001,12 @@ export def "search-profiles" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchProfiles")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4018,8 +4045,8 @@ export def "search-rooms" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-73 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
   --filters: list # The filters to use to list a specified set of rooms. The supported filter keys are RoomName and ProfileName. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of rooms. The supported sort keys are RoomName and ProfileName. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<Rooms: table<RoomArn: string, RoomName: string, Description: string, ProviderCalendarId: string, ProfileArn: string, ProfileName: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -4029,12 +4056,12 @@ export def "search-rooms" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchRooms")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4073,8 +4100,8 @@ export def "search-skill-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-74 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. (spec name: MaxResults)
   --filters: list # The filters to use to list a specified set of skill groups. The supported filter key is SkillGroupName. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the specified set of skill groups. The supported sort key is SkillGroupName. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<SkillGroups: table<SkillGroupArn: string, SkillGroupName: string, Description: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -4084,12 +4111,12 @@ export def "search-skill-groups" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchSkillGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4128,8 +4155,8 @@ export def "search-users" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-75 # required
-  --next-token-body: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (body field)
-  --max-results-body: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. Required. (body field)
+  --body-next-token: string # An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults. Required. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to include in the response. If more results exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved. Required. (spec name: MaxResults)
   --filters: list # The filters to use for listing a specific set of users. Required. Supported filter keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Values: list<string>}
   --sort-criteria: list # The sort order to use in listing the filtered set of users. Required. Supported sort keys are UserId, FirstName, LastName, Email, and EnrollmentStatus. — item shape: {Key: string, Value: "ASC"|"DESC"}
 ]: any -> oneof<record<Users: table<UserArn: string, FirstName: string, LastName: string, Email: string, EnrollmentStatus: string, EnrollmentId: string>, NextToken: string, TotalCount: int>, string, nothing> {
@@ -4139,12 +4166,12 @@ export def "search-users" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SearchUsers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Filters": $filters, "SortCriteria": $sort_criteria} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4192,11 +4219,11 @@ export def "send-announcement" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SendAnnouncement")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomFilters": $room_filters, "Content": $content, "TimeToLiveInSeconds": $time_to_live_in_seconds, "ClientRequestToken": $client_request_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4241,11 +4268,11 @@ export def "send-invitation" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.SendInvitation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"UserArn": $user_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4292,11 +4319,11 @@ export def "start-device-sync" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.StartDeviceSync")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "DeviceArn": $device_arn, "Features": $features} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4341,11 +4368,11 @@ export def "start-smart-home-appliance-discovery" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.StartSmartHomeApplianceDiscovery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4391,11 +4418,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4441,11 +4468,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Arn": $arn, "TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4492,11 +4519,11 @@ export def "update-address-book" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateAddressBook")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AddressBookArn": $address_book_arn, "Name": $name, "Description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4546,11 +4573,11 @@ export def "update-business-report-schedule" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateBusinessReportSchedule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ScheduleArn": $schedule_arn, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "Format": $format, "ScheduleName": $schedule_name, "Recurrence": $recurrence} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4599,11 +4626,11 @@ export def "update-conference-provider" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateConferenceProvider")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConferenceProviderArn": $conference_provider_arn, "ConferenceProviderType": $conference_provider_type, "IPDialIn": $ip_dial_in, "PSTNDialIn": $pstn_dial_in, "MeetingSetting": $meeting_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4654,11 +4681,11 @@ export def "update-contact" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateContact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ContactArn": $contact_arn, "DisplayName": $display_name, "FirstName": $first_name, "LastName": $last_name, "PhoneNumber": $phone_number, "PhoneNumbers": $phone_numbers, "SipAddresses": $sip_addresses} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4704,11 +4731,11 @@ export def "update-device" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateDevice")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeviceArn": $device_arn, "DeviceName": $device_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4756,11 +4783,11 @@ export def "update-gateway" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateGateway")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayArn": $gateway_arn, "Name": $name, "Description": $description, "SoftwareVersion": $software_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4807,11 +4834,11 @@ export def "update-gateway-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateGatewayGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"GatewayGroupArn": $gateway_group_arn, "Name": $name, "Description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4862,11 +4889,11 @@ export def "update-network-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateNetworkProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"NetworkProfileArn": $network_profile_arn, "NetworkProfileName": $network_profile_name, "Description": $description, "CurrentPassword": $current_password, "NextPassword": $next_password, "CertificateAuthorityArn": $certificate_authority_arn, "TrustAnchors": $trust_anchors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4924,11 +4951,11 @@ export def "update-profile" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateProfile")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProfileArn": $profile_arn, "ProfileName": $profile_name, "IsDefault": $is_default, "Timezone": $timezone, "Address": $address, "DistanceUnit": $distance_unit, "TemperatureUnit": $temperature_unit, "WakeWord": $wake_word, "Locale": $locale, "SetupModeDisabled": $setup_mode_disabled, "MaxVolumeLimit": $max_volume_limit, "PSTNEnabled": $pstn_enabled, "DataRetentionOptIn": $data_retention_opt_in, "MeetingRoomConfiguration": $meeting_room_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4977,11 +5004,11 @@ export def "update-room" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateRoom")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RoomArn": $room_arn, "RoomName": $room_name, "Description": $description, "ProviderCalendarId": $provider_calendar_id, "ProfileArn": $profile_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5028,11 +5055,11 @@ export def "update-skill-group" [
   let x_amz_target = ($x_amz_target | default "AlexaForBusiness.UpdateSkillGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SkillGroupArn": $skill_group_arn, "SkillGroupName": $skill_group_name, "Description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

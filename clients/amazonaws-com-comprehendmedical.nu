@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -200,11 +227,11 @@ export def "describe-entities-detection-v2-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -249,11 +276,11 @@ export def "describe-icd10cm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -298,11 +325,11 @@ export def "describe-phi-detection-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribePHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -347,11 +374,11 @@ export def "describe-rx-norm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -396,11 +423,11 @@ export def "describe-snomedct-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DescribeSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -447,11 +474,11 @@ export def "detect-entities" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -496,11 +523,11 @@ export def "detect-entities-v2" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectEntitiesV2")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -545,11 +572,11 @@ export def "detect-phi" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.DetectPHI")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -594,11 +621,11 @@ export def "infer-icd10cm" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferICD10CM")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -643,11 +670,11 @@ export def "infer-rx-norm" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferRxNorm")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -692,11 +719,11 @@ export def "infer-snomedct" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.InferSNOMEDCT")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -743,11 +770,11 @@ export def "list-entities-detection-v2-jobs" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListEntitiesDetectionV2Jobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -794,11 +821,11 @@ export def "list-icd10cm-inference-jobs" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListICD10CMInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -845,11 +872,11 @@ export def "list-phi-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListPHIDetectionJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -896,11 +923,11 @@ export def "list-rx-norm-inference-jobs" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListRxNormInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -947,11 +974,11 @@ export def "list-snomedct-inference-jobs" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.ListSNOMEDCTInferenceJobs")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1002,11 +1029,11 @@ export def "start-entities-detection-v2-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1057,11 +1084,11 @@ export def "start-icd10cm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1112,11 +1139,11 @@ export def "start-phi-detection-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartPHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1167,11 +1194,11 @@ export def "start-rx-norm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1222,11 +1249,11 @@ export def "start-snomedct-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StartSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "KMSKey": $kms_key, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1271,11 +1298,11 @@ export def "stop-entities-detection-v2-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopEntitiesDetectionV2Job")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1320,11 +1347,11 @@ export def "stop-icd10cm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopICD10CMInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1369,11 +1396,11 @@ export def "stop-phi-detection-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopPHIDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1418,11 +1445,11 @@ export def "stop-rx-norm-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopRxNormInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1467,11 +1494,11 @@ export def "stop-snomedct-inference-job" [
   let x_amz_target = ($x_amz_target | default "ComprehendMedical_20181030.StopSNOMEDCTInferenceJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

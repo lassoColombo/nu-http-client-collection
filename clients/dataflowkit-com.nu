@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -190,9 +217,9 @@ export def "url-to-pdf" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/pdf" $auth.query)
   let req_body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "landscape": $landscape, "marginBottom": $margin_bottom, "marginLeft": $margin_left, "marginRight": $margin_right, "marginTop": $margin_top, "output": $output, "pageRanges": $page_ranges, "paperSize": $paper_size, "printBackground": $print_background, "printHeaderFooter": $print_header_footer, "proxy": $proxy, "scale": $scale, "url": $url, "waitDelay": $wait_delay} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/pdf")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -245,9 +272,9 @@ export def "url-to-screenshot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/screenshot" $auth.query)
   let req_body = {"actions": $actions, "clipSelector": $clip_selector, "format": $format, "fullPage": $full_page, "height": $height, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "offsetx": $offsetx, "offsety": $offsety, "output": $output, "printBackground": $print_background, "proxy": $proxy, "quality": $quality, "scale": $scale, "url": $url, "waitDelay": $wait_delay, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -291,9 +318,9 @@ export def "fetch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fetch" $auth.query)
   let req_body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "output": $output, "proxy": $proxy, "type": $type, "url": $url, "waitDelay": $wait_delay} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "text/html; charset=utf-8")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -335,9 +362,9 @@ export def "post-parse" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse" $auth.query)
   let req_body = {"commonParent": $common_parent, "fields": $fields, "format": $format, "name": $name, "paginator": $paginator, "path": $path, "request": $request} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -380,9 +407,9 @@ export def "serp" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp" $auth.query)
   let req_body = {"fields": $fields, "format": $format, "name": $name, "pageNum": $page_num, "proxy": $proxy, "type": $type, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

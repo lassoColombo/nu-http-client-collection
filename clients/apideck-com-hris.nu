@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -182,7 +209,7 @@ export def "companies-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
@@ -197,9 +224,9 @@ export def "companies-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/companies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -228,7 +255,7 @@ export def "companies-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -251,11 +278,11 @@ export def "companies-add" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/companies" $qp $auth.query)
   let req_body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -285,7 +312,7 @@ export def "companies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -298,9 +325,9 @@ export def "companies-delete" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -330,7 +357,7 @@ export def "companies-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -344,9 +371,9 @@ export def "companies-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -376,7 +403,7 @@ export def "companies-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -400,11 +427,11 @@ export def "companies-update" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/companies/{id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "company_number": $company_number, "debtor_id": $debtor_id, "display_name": $display_name, "emails": $emails, "legal_name": $legal_name, "phone_numbers": $phone_numbers, "status": $status, "subdomain": $subdomain, "websites": $websites} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -433,7 +460,7 @@ export def "departments-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
@@ -448,9 +475,9 @@ export def "departments-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/departments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -479,7 +506,7 @@ export def "departments-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -495,11 +522,11 @@ export def "departments-add" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/departments" $qp $auth.query)
   let req_body = {"code": $code, "description": $description, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -529,7 +556,7 @@ export def "departments-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -542,9 +569,9 @@ export def "departments-delete" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -574,7 +601,7 @@ export def "departments-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -588,9 +615,9 @@ export def "departments-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -620,7 +647,7 @@ export def "departments-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -637,11 +664,11 @@ export def "departments-update" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/departments/{id}") $qp $auth.query)
   let req_body = {"code": $code, "description": $description, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -670,7 +697,7 @@ export def "employees-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {company_id: 1234, department_id: 1234, email: elon@tesla.com, employee_number: 123456-AB, employment_status: active, first_name: Elon, last_name: Musk, manager_id: 1234, title: Manager})
@@ -687,9 +714,9 @@ export def "employees-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "sort" $sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/employees" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -719,7 +746,7 @@ export def "employees-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -788,11 +815,11 @@ export def "employees-add" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/employees" $qp $auth.query)
   let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -822,7 +849,7 @@ export def "employees-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -835,9 +862,9 @@ export def "employees-delete" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -867,7 +894,7 @@ export def "employees-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -881,9 +908,9 @@ export def "employees-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -914,7 +941,7 @@ export def "employees-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -984,11 +1011,11 @@ export def "employees-update" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/employees/{id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "compensations": $compensations, "country_of_birth": $country_of_birth, "custom_fields": $custom_fields, "deceased_on": $deceased_on, "deleted": $deleted, "department": $department, "department_id": $department_id, "department_name": $department_name, "description": $description, "dietary_preference": $dietary_preference, "direct_reports": $direct_reports, "display_name": $display_name, "division": $division, "division_id": $division_id, "emails": $emails, "employee_number": $employee_number, "employment_end_date": $employment_end_date, "employment_role": $employment_role, "employment_start_date": $employment_start_date, "employment_status": $employment_status, "first_name": $first_name, "food_allergies": $food_allergies, "gender": $gender, "initials": $initials, "jobs": $jobs, "languages": $languages, "last_name": $last_name, "leaving_reason": $leaving_reason, "manager": $manager, "marital_status": $marital_status, "middle_name": $middle_name, "nationalities": $nationalities, "partner": $partner, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "preferred_language": $preferred_language, "preferred_name": $preferred_name, "pronouns": $pronouns, "record_url": $record_url, "row_version": $row_version, "salutation": $salutation, "social_links": $social_links, "social_security_number": $social_security_number, "source": $source, "source_id": $source_id, "tags": $tags, "tax_code": $tax_code, "tax_id": $tax_id, "team": $team, "timezone": $timezone, "title": $title, "works_remote": $works_remote} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1018,7 +1045,7 @@ export def "jobs-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1032,9 +1059,9 @@ export def "jobs-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/jobs/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1065,7 +1092,7 @@ export def "jobs-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1080,9 +1107,9 @@ export def "jobs-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), job_id: (encode-path-segment $job_id)} | format pattern "/hris/jobs/employees/{employee_id}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1111,7 +1138,7 @@ export def "payrolls-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --filter: record # Apply filters (e.g. {end_date: 2022-04-21, start_date: 2022-04-08})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
@@ -1125,9 +1152,9 @@ export def "payrolls-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/payrolls" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1157,7 +1184,7 @@ export def "employee-payrolls-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --filter: record # Apply filters (e.g. {end_date: 2022-04-21, start_date: 2022-04-08})
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
@@ -1172,9 +1199,9 @@ export def "employee-payrolls-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/payrolls/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "employee-payrolls-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1220,9 +1247,9 @@ export def "employee-payrolls-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), payroll_id: (encode-path-segment $payroll_id)} | format pattern "/hris/payrolls/employees/{employee_id}/payrolls/{payroll_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1252,7 +1279,7 @@ export def "payrolls-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1266,9 +1293,9 @@ export def "payrolls-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_id: (encode-path-segment $payroll_id)} | format pattern "/hris/payrolls/{payroll_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1298,7 +1325,7 @@ export def "employee-schedules-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1312,9 +1339,9 @@ export def "employee-schedules-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/hris/schedules/employees/{employee_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1343,7 +1370,7 @@ export def "time-off-requests-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {employee_id: 1234, end_date: 2022-04-21, start_date: 2022-04-08, time_off_request_status: approved})
@@ -1359,9 +1386,9 @@ export def "time-off-requests-all" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/time-off-requests" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1390,7 +1417,7 @@ export def "time-off-requests-add" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1415,11 +1442,11 @@ export def "time-off-requests-add" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hris/time-off-requests" $qp $auth.query)
   let req_body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1449,7 +1476,7 @@ export def "time-off-requests-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1462,9 +1489,9 @@ export def "time-off-requests-delete" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1494,7 +1521,7 @@ export def "time-off-requests-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. Example: `fields=name,email,addresses.city`In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1508,9 +1535,9 @@ export def "time-off-requests-one" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1540,7 +1567,7 @@ export def "time-off-requests-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false) (spec name: raw)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1566,11 +1593,11 @@ export def "time-off-requests-update" [
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hris/time-off-requests/{id}") $qp $auth.query)
   let req_body = {"amount": $amount, "approval_date": $approval_date, "description": $description, "employee_id": $employee_id, "end_date": $end_date, "notes": $notes, "policy_id": $policy_id, "request_date": $request_date, "request_type": $request_type, "start_date": $start_date, "status": $status, "units": $units} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -187,9 +214,9 @@ export def "list-domains" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -228,11 +255,11 @@ export def "create-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/domains" $auth.query)
   let req_body = {"Name": $name, "ReturnPathDomain": $return_path_domain} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -270,9 +297,9 @@ export def "delete-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -310,9 +337,9 @@ export def "get-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -352,11 +379,11 @@ export def "edit-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}") $auth.query)
   let req_body = {"ReturnPathDomain": $return_path_domain} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -394,9 +421,9 @@ export def "rotate-dkim-key-for-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/rotatedkim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -434,9 +461,9 @@ export def "request-dkim-verification-for-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifydkim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -474,9 +501,9 @@ export def "request-return-path-verification-for-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyreturnpath") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -514,9 +541,9 @@ export def "request-spf-verification-for-domain" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyspf") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -557,9 +584,9 @@ export def "list-sender-signatures" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/senders" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -600,11 +627,11 @@ export def "create-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/senders" $auth.query)
   let req_body = {"FromEmail": $from_email, "Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -642,9 +669,9 @@ export def "delete-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -682,9 +709,9 @@ export def "get-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -726,11 +753,11 @@ export def "edit-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}") $auth.query)
   let req_body = {"Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -768,9 +795,9 @@ export def "request-new-dkim-key-for-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/requestnewdkim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -808,9 +835,9 @@ export def "resend-sender-signature-confirmation-email" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/resend") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -848,9 +875,9 @@ export def "request-spf-verification-for-sender-signature" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/verifyspf") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -892,9 +919,9 @@ export def "list-servers" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/servers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -945,11 +972,11 @@ export def "create-server" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/servers" $auth.query)
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -987,9 +1014,9 @@ export def "delete-server" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1027,9 +1054,9 @@ export def "get-server-information" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1082,11 +1109,11 @@ export def "edit-server-information" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}") $auth.query)
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1126,11 +1153,11 @@ export def "push-templates" [
   if ($x_postmark_account_token == null) { error make --unspanned { msg: "required header parameter 'X-Postmark-Account-Token' missing: pass --x-postmark-account-token" } }
   let full_url = (build-url $base "/templates/push" $auth.query)
   let req_body = {"DestinationServerId": $destination_server_id, "PerformChanges": $perform_changes, "SourceServerId": $source_server_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

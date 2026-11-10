@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -219,11 +246,11 @@ export def "count-closed-workflow-executions" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountClosedWorkflowExecutions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "closeStatusFilter": $close_status_filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -272,11 +299,11 @@ export def "count-open-workflow-executions" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountOpenWorkflowExecutions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "executionFilter": $execution_filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -322,11 +349,11 @@ export def "count-pending-activity-tasks" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountPendingActivityTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -372,11 +399,11 @@ export def "count-pending-decision-tasks" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.CountPendingDecisionTasks")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -422,11 +449,11 @@ export def "deprecate-activity-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -471,11 +498,11 @@ export def "deprecate-domain" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -521,11 +548,11 @@ export def "deprecate-workflow-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DeprecateWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -571,11 +598,11 @@ export def "describe-activity-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -620,11 +647,11 @@ export def "describe-domain" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -670,11 +697,11 @@ export def "describe-workflow-execution" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "execution": $execution} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -720,11 +747,11 @@ export def "describe-workflow-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.DescribeWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -765,8 +792,8 @@ export def "get-workflow-execution-history" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   domain: string # The name of the domain containing the workflow execution.
   execution: record # Represents a workflow execution. — shape: {workflowId: string, runId: string}
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimeStamp of the events.
 ]: any -> oneof<record<events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string>, string, nothing> {
   let input = $in
@@ -775,12 +802,12 @@ export def "get-workflow-execution-history" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.GetWorkflowExecutionHistory")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "execution": $execution, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "execution": $execution, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -822,8 +849,8 @@ export def "list-activity-types" [
   domain: string # The name of the domain in which the activity types have been registered.
   --name: string # If specified, only lists the activity types that have this name.
   registration_status: string@registration-status-completer # Specifies the registration status of the activity types to list.
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the activity types.
 ]: any -> oneof<record<typeInfos: table<activityType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string>, string, nothing> {
   let input = $in
@@ -832,12 +859,12 @@ export def "list-activity-types" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListActivityTypes")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -883,8 +910,8 @@ export def "list-closed-workflow-executions" [
   --close-status-filter: record # Used to filter the closed workflow executions in visibility APIs by their close status. — shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
   --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
   --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start or the close time of the executions.
 ]: any -> oneof<record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string>, string, nothing> {
   let input = $in
@@ -893,12 +920,12 @@ export def "list-closed-workflow-executions" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListClosedWorkflowExecutions")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "closeStatusFilter": $close_status_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "closeStatusFilter": $close_status_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -937,9 +964,9 @@ export def "list-domains" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
   registration_status: string@registration-status-completer # Specifies the registration status of the domains to list.
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the domains.
 ]: any -> oneof<record<domainInfos: table<name: string, status: string, description: string, arn: string>, nextPageToken: string>, string, nothing> {
   let input = $in
@@ -948,12 +975,12 @@ export def "list-domains" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListDomains")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextPageToken": $next_page_token_body, "registrationStatus": $registration_status, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextPageToken": $body_next_page_token, "registrationStatus": $registration_status, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -996,8 +1023,8 @@ export def "list-open-workflow-executions" [
   start_time_filter: record # Used to filter the workflow executions in visibility APIs by various time-based rules. Each parameter, if specified, defines a rule that must be satisfied by each returned query result. The parameter values are in the Unix Time format (https://en.wikipedia.org/wiki/Unix_time). For example: "oldestDate": 1325376070. — shape: {oldestDate: string, latestDate?: string}
   --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
   --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start time of the executions.
   --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
 ]: any -> oneof<record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string>, string, nothing> {
@@ -1007,12 +1034,12 @@ export def "list-open-workflow-executions" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListOpenWorkflowExecutions")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order, "executionFilter": $execution_filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order, "executionFilter": $execution_filter} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1057,11 +1084,11 @@ export def "list-tags-for-resource" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1103,8 +1130,8 @@ export def "list-workflow-types" [
   domain: string # The name of the domain in which the workflow types have been registered.
   --name: string # If specified, lists the workflow type with this name.
   registration_status: string@registration-status-completer # Specifies the registration status of the workflow types to list.
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in ascending alphabetical order of the name of the workflow types.
 ]: any -> oneof<record<typeInfos: table<workflowType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string>, string, nothing> {
   let input = $in
@@ -1113,12 +1140,12 @@ export def "list-workflow-types" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.ListWorkflowTypes")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1165,11 +1192,11 @@ export def "poll-for-activity-task" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.PollForActivityTask")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "taskList": $task_list, "identity": $identity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1211,8 +1238,8 @@ export def "poll-for-decision-task" [
   domain: string # The name of the domain containing the task lists to poll.
   task_list: record # Represents a task list. — shape: {name: string}
   --identity: string # Identity of the decider making the request, which is recorded in the DecisionTaskStarted event in the workflow history. This enables diagnostic tracing when problems arise. The form of this identity is user defined.
-  --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. The nextPageToken returned by this action cannot be used with GetWorkflowExecutionHistory to get the next page. You must call PollForDecisionTask again (with the nextPageToken) to retrieve the next page of history records. Calling PollForDecisionTask with a nextPageToken doesn't return a new decision task. (body field)
-  --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. This is an upper limit only; the actual number of results returned per call may be fewer than the specified maximum. (body field)
+  --body-next-page-token: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. The nextPageToken returned by this action cannot be used with GetWorkflowExecutionHistory to get the next page. You must call PollForDecisionTask again (with the nextPageToken) to retrieve the next page of history records. Calling PollForDecisionTask with a nextPageToken doesn't return a new decision task. (spec name: nextPageToken)
+  --body-maximum-page-size: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. This is an upper limit only; the actual number of results returned per call may be fewer than the specified maximum. (spec name: maximumPageSize)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimestamp of the events.
 ]: any -> oneof<record<taskToken: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string, previousStartedEventId: int>, string, nothing> {
   let input = $in
@@ -1221,12 +1248,12 @@ export def "poll-for-decision-task" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.PollForDecisionTask")
   let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"domain": $domain, "taskList": $task_list, "identity": $identity, "nextPageToken": $next_page_token_body, "maximumPageSize": $maximum_page_size_body, "reverseOrder": $reverse_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"domain": $domain, "taskList": $task_list, "identity": $identity, "nextPageToken": $body_next_page_token, "maximumPageSize": $body_maximum_page_size, "reverseOrder": $reverse_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1272,11 +1299,11 @@ export def "record-activity-task-heartbeat" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RecordActivityTaskHeartbeat")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "details": $details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1330,11 +1357,11 @@ export def "register-activity-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultTaskHeartbeatTimeout": $default_task_heartbeat_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultTaskScheduleToStartTimeout": $default_task_schedule_to_start_timeout, "defaultTaskScheduleToCloseTimeout": $default_task_schedule_to_close_timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1382,11 +1409,11 @@ export def "register-domain" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "description": $description, "workflowExecutionRetentionPeriodInDays": $workflow_execution_retention_period_in_days, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1440,11 +1467,11 @@ export def "register-workflow-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RegisterWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultExecutionStartToCloseTimeout": $default_execution_start_to_close_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultChildPolicy": $default_child_policy, "defaultLambdaRole": $default_lambda_role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1491,11 +1518,11 @@ export def "request-cancel-workflow-execution" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RequestCancelWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1541,11 +1568,11 @@ export def "respond-activity-task-canceled" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskCanceled")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "details": $details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1591,11 +1618,11 @@ export def "respond-activity-task-completed" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskCompleted")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "result": $result} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1642,11 +1669,11 @@ export def "respond-activity-task-failed" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondActivityTaskFailed")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "reason": $reason, "details": $details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1693,11 +1720,11 @@ export def "respond-decision-task-completed" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.RespondDecisionTaskCompleted")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"taskToken": $task_token, "decisions": $decisions, "executionContext": $execution_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1738,7 +1765,7 @@ export def "signal-workflow-execution" [
   workflow_id: string # The workflowId of the workflow execution to signal.
   --run-id: string # The runId of the workflow execution to signal.
   signal_name: string # The name of the signal. This name must be meaningful to the target workflow.
-  --body-input: string # Data to attach to the WorkflowExecutionSignaled event in the target workflow execution's history.
+  --body-input: string # Data to attach to the WorkflowExecutionSignaled event in the target workflow execution's history. (spec name: input)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1746,11 +1773,11 @@ export def "signal-workflow-execution" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.SignalWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "signalName": $signal_name, "input": $body_input} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1792,7 +1819,7 @@ export def "start-workflow-execution" [
   workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
   --task-list: record # Represents a task list. — shape: {name: string}
   --task-priority: string # The task priority to use for this workflow execution. This overrides any default priority that was assigned when the workflow type was registered. If not set, then the default task priority for the workflow type is used. Valid values are integers that range from Java's Integer.MIN_VALUE (-2147483648) to Integer.MAX_VALUE (2147483647). Higher numbers indicate higher priority. For more information about setting task priority, see Setting Task Priority (https://docs.aws.amazon.com/amazonswf/latest/developerguide/programming-priority.html) in the Amazon SWF Developer Guide.
-  --body-input: string # The input for the workflow execution. This is a free form string which should be meaningful to the workflow you are starting. This input is made available to the new workflow execution in the WorkflowExecutionStarted history event.
+  --body-input: string # The input for the workflow execution. This is a free form string which should be meaningful to the workflow you are starting. This input is made available to the new workflow execution in the WorkflowExecutionStarted history event. (spec name: input)
   --execution-start-to-close-timeout: string # The total duration for this workflow execution. This overrides the defaultExecutionStartToCloseTimeout specified when registering the workflow type. The duration is specified in seconds; an integer greater than or equal to 0. Exceeding this limit causes the workflow execution to time out. Unlike some of the other timeout parameters in Amazon SWF, you cannot specify a value of "NONE" for this timeout; there is a one-year max limit on the time that a workflow execution can run. An execution start-to-close timeout must be specified either through this parameter or as a default when the workflow type is registered. If neither this parameter nor a default execution start-to-close timeout is specified, a fault is returned.
   --tag-list: list<string> # The list of tags to associate with the workflow execution. You can specify a maximum of 5 tags. You can list workflow executions with a specific tag by calling ListOpenWorkflowExecutions or ListClosedWorkflowExecutions and specifying a TagFilter.
   --task-start-to-close-timeout: string # Specifies the maximum duration of decision tasks for this workflow execution. This parameter overrides the defaultTaskStartToCloseTimout specified when registering the workflow type using RegisterWorkflowType. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration. A task start-to-close timeout for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default task start-to-close timeout was specified at registration time then a fault is returned.
@@ -1805,11 +1832,11 @@ export def "start-workflow-execution" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.StartWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "workflowType": $workflow_type, "taskList": $task_list, "taskPriority": $task_priority, "input": $body_input, "executionStartToCloseTimeout": $execution_start_to_close_timeout, "tagList": $tag_list, "taskStartToCloseTimeout": $task_start_to_close_timeout, "childPolicy": $child_policy, "lambdaRole": $lambda_role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1855,11 +1882,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1909,11 +1936,11 @@ export def "terminate-workflow-execution" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.TerminateWorkflowExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "reason": $reason, "details": $details, "childPolicy": $child_policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1959,11 +1986,11 @@ export def "undeprecate-activity-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateActivityType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "activityType": $activity_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2008,11 +2035,11 @@ export def "undeprecate-domain" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateDomain")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2058,11 +2085,11 @@ export def "undeprecate-workflow-type" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UndeprecateWorkflowType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"domain": $domain, "workflowType": $workflow_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2108,11 +2135,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "SimpleWorkflowService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

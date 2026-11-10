@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -162,18 +189,18 @@ export def "get-seatmap-from-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --flight-order-id: string # identifier of the order (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy)
-  --flight-order-id-2: string # DEPRECATED identifier of the order , kept for backward compatibility (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy) (disambiguated-2)
+  --qp-flight-order-id: string # DEPRECATED identifier of the order , kept for backward compatibility (e.g. MlpZVkFMfFdBVFNPTnwyMDE1LTExLTAy) (spec name: flight-orderId)
 ]: nothing -> oneof<record<data: table<aircraft: record, aircraftCabinAmenities: record, arrival: record, availableSeatsCounters: list, carrierCode: string, class: string, decks: list, departure: record, flightOfferId: string, id: string, number: string, operating: record, segmentId: string, self: record, type: string>, dictionaries: record<facilities: record, locations: any, seatCharacteristics: record>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "flightOrderId" $flight_order_id "scalar") (serialize-qp "flight-orderId" $flight_order_id_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "flightOrderId" $flight_order_id "scalar") (serialize-qp "flight-orderId" $qp_flight_order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/seatmaps" $qp $auth.query)
   let accept_val = "application/vnd.amadeus+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"flightOrderId": $flight_order_id, "flight-orderId": $flight_order_id_2} | compact)
+    query: ({"flightOrderId": $flight_order_id, "flight-orderId": $qp_flight_order_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -199,19 +226,21 @@ export def "get-seatmap-from-flight-offer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-http-method-override: string # the HTTP method to apply (required, default: GET)
-  --body: any
+  data: list # item shape: {disablePricing?: bool, fareRules?: record, id: string, instantTicketingRequired?: bool, itineraries?: list, lastTicketingDate?: string, nonHomogeneous?: bool, numberOfBookableSeats?: float, oneWay?: bool, paymentCardRequired?: bool, price?: record, pricingOptions?: record, source?: "GDS", travelerPricings?: list, type: string, validatingAirlineCodes?: list<string>}
+  --included: any # shape: {travelers?: any}
 ]: any -> oneof<record<data: table<aircraft: record, aircraftCabinAmenities: record, arrival: record, availableSeatsCounters: list, carrierCode: string, class: string, decks: list, departure: record, flightOfferId: string, id: string, number: string, operating: record, segmentId: string, self: record, type: string>, dictionaries: record<facilities: record, locations: any, seatCharacteristics: record>, meta: record<count: int, links: record<first: string, last: string, next: string, previous: string, self: string, up: string>>, warnings: table<code: int, detail: string, source: record, status: int, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_http_method_override = ($x_http_method_override | default "GET")
   let full_url = (build-url $base "/shopping/seatmaps" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data, "included": $included} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.amadeus+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -223,5 +252,5 @@ export def "get-seatmap-from-flight-offer" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }

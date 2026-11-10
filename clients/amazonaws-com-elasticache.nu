@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -61,9 +84,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -86,9 +111,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -178,9 +229,9 @@ def action-completer-64 [] { ["TestFailover"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-tags-to-resource" "post-add-tags-to-resource" "get-authorize-cache-security-group-ingress" "post-authorize-cache-security-group-ingress" "get-batch-apply-update-action" "post-batch-apply-update-action" "get-batch-stop-update-action" "post-batch-stop-update-action" "get-complete-migration" "post-complete-migration" "get-copy-snapshot" "post-copy-snapshot" "get-create-cache-cluster" "post-create-cache-cluster" "get-create-cache-parameter-group" "post-create-cache-parameter-group" "get-create-cache-security-group" "post-create-cache-security-group" "get-create-cache-subnet-group" "post-create-cache-subnet-group" "get-create-global-replication-group" "post-create-global-replication-group" "get-create-replication-group" "post-create-replication-group" "get-create-snapshot" "post-create-snapshot" "get-create-user" "post-create-user" "get-create-user-group" "post-create-user-group" "get-decrease-node-groups-in-global-replication-group" "post-decrease-node-groups-in-global-replication-group" "get-decrease-replica-count" "post-decrease-replica-count" "get-delete-cache-cluster" "post-delete-cache-cluster" "get-delete-cache-parameter-group" "post-delete-cache-parameter-group" "get-delete-cache-security-group" "post-delete-cache-security-group" "get-delete-cache-subnet-group" "post-delete-cache-subnet-group" "get-delete-global-replication-group" "post-delete-global-replication-group" "get-delete-replication-group" "post-delete-replication-group" "get-delete-snapshot" "post-delete-snapshot" "get-delete-user" "post-delete-user" "get-delete-user-group" "post-delete-user-group" "get-describe-cache-clusters" "post-describe-cache-clusters" "get-describe-cache-engine-versions" "post-describe-cache-engine-versions" "get-describe-cache-parameter-groups" "post-describe-cache-parameter-groups" "get-describe-cache-parameters" "post-describe-cache-parameters" "get-describe-cache-security-groups" "post-describe-cache-security-groups" "get-describe-cache-subnet-groups" "post-describe-cache-subnet-groups" "get-describe-engine-default-parameters" "post-describe-engine-default-parameters" "get-describe-events" "post-describe-events" "get-describe-global-replication-groups" "post-describe-global-replication-groups" "get-describe-replication-groups" "post-describe-replication-groups" "get-describe-reserved-cache-nodes" "post-describe-reserved-cache-nodes" "get-describe-reserved-cache-nodes-offerings" "post-describe-reserved-cache-nodes-offerings" "get-describe-service-updates" "post-describe-service-updates" "get-describe-snapshots" "post-describe-snapshots" "get-describe-update-actions" "post-describe-update-actions" "get-describe-user-groups" "post-describe-user-groups" "get-describe-users" "post-describe-users" "get-disassociate-global-replication-group" "post-disassociate-global-replication-group" "get-failover-global-replication-group" "post-failover-global-replication-group" "get-increase-node-groups-in-global-replication-group" "post-increase-node-groups-in-global-replication-group" "get-increase-replica-count" "post-increase-replica-count" "get-list-allowed-node-type-modifications" "post-list-allowed-node-type-modifications" "get-list-tags-for-resource" "post-list-tags-for-resource" "get-modify-cache-cluster" "post-modify-cache-cluster" "get-modify-cache-parameter-group" "post-modify-cache-parameter-group" "get-modify-cache-subnet-group" "post-modify-cache-subnet-group" "get-modify-global-replication-group" "post-modify-global-replication-group" "get-modify-replication-group" "post-modify-replication-group" "get-modify-replication-group-shard-configuration" "post-modify-replication-group-shard-configuration" "get-modify-user" "post-modify-user" "get-modify-user-group" "post-modify-user-group" "get-purchase-reserved-cache-nodes-offering" "post-purchase-reserved-cache-nodes-offering" "get-rebalance-slots-in-global-replication-group" "post-rebalance-slots-in-global-replication-group" "get-reboot-cache-cluster" "post-reboot-cache-cluster" "get-remove-tags-from-resource" "post-remove-tags-from-resource" "get-reset-cache-parameter-group" "post-reset-cache-parameter-group" "get-revoke-cache-security-group-ingress" "post-revoke-cache-security-group-ingress" "get-start-migration" "post-start-migration" "get-test-failover" "post-test-failover" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -212,10 +263,10 @@ export def "get-add-tags-to-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon Resource Name (ARN) of the resource to which the tags are to be added, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. ElastiCache resources are cluster and snapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-  --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer
-  --version: string@version-completer
+  --resource-name: string # The Amazon Resource Name (ARN) of the resource to which the tags are to be added, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. ElastiCache resources are cluster and snapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html). (required)
+  --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted. (required)
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -223,15 +274,19 @@ export def "get-add-tags-to-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  if ($tags == null) { error make --unspanned { msg: "required query parameter 'Tags' missing: pass --tags" } }
+  let action = ($action | default "AddTagsToResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -260,8 +315,8 @@ export def "post-add-tags-to-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer
-  --version: string@version-completer
+  --action: string@action-completer # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -270,18 +325,20 @@ export def "post-add-tags-to-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagList: record> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AddTagsToResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -310,11 +367,11 @@ export def "get-authorize-cache-security-group-ingress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-security-group-name: string # The cache security group that allows network ingress.
-  --ec2-security-group-name: string # The Amazon EC2 security group to be authorized for ingress to the cache security group.
-  --ec2-security-group-owner-id: string # The Amazon account number of the Amazon EC2 security group owner. Note that this is not the same thing as an Amazon access key ID - you must provide a valid Amazon account number for this parameter.
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --cache-security-group-name: string # The cache security group that allows network ingress. (required)
+  --ec2-security-group-name: string # The Amazon EC2 security group to be authorized for ingress to the cache security group. (required)
+  --ec2-security-group-owner-id: string # The Amazon account number of the Amazon EC2 security group owner. Note that this is not the same thing as an Amazon access key ID - you must provide a valid Amazon account number for this parameter. (required)
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -322,15 +379,20 @@ export def "get-authorize-cache-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: nothing -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_security_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSecurityGroupName' missing: pass --cache-security-group-name" } }
+  if ($ec2_security_group_name == null) { error make --unspanned { msg: "required query parameter 'EC2SecurityGroupName' missing: pass --ec2-security-group-name" } }
+  if ($ec2_security_group_owner_id == null) { error make --unspanned { msg: "required query parameter 'EC2SecurityGroupOwnerId' missing: pass --ec2-security-group-owner-id" } }
+  let action = ($action | default "AuthorizeCacheSecurityGroupIngress")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -359,8 +421,8 @@ export def "post-authorize-cache-security-group-ingress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-1
-  --version: string@version-completer
+  --action: string@action-completer-1 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -369,18 +431,20 @@ export def "post-authorize-cache-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: any -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "AuthorizeCacheSecurityGroupIngress")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -411,9 +475,9 @@ export def "get-batch-apply-update-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --replication-group-ids: list # The replication group IDs
   --cache-cluster-ids: list # The cache cluster IDs
-  --service-update-name: string # The unique ID of the service update
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --service-update-name: string # The unique ID of the service update (required)
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -421,15 +485,18 @@ export def "get-batch-apply-update-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
+]: nothing -> oneof<record<ProcessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, UpdateActionStatus: string>, UnprocessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ErrorType: string, ErrorMessage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_update_name == null) { error make --unspanned { msg: "required query parameter 'ServiceUpdateName' missing: pass --service-update-name" } }
+  let action = ($action | default "BatchApplyUpdateAction")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -458,8 +525,8 @@ export def "post-batch-apply-update-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-2
-  --version: string@version-completer
+  --action: string@action-completer-2 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -468,18 +535,20 @@ export def "post-batch-apply-update-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
+]: any -> oneof<record<ProcessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, UpdateActionStatus: string>, UnprocessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ErrorType: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BatchApplyUpdateAction")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -510,9 +579,9 @@ export def "get-batch-stop-update-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --replication-group-ids: list # The replication group IDs
   --cache-cluster-ids: list # The cache cluster IDs
-  --service-update-name: string # The unique ID of the service update
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --service-update-name: string # The unique ID of the service update (required)
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -520,15 +589,18 @@ export def "get-batch-stop-update-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
+]: nothing -> oneof<record<ProcessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, UpdateActionStatus: string>, UnprocessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ErrorType: string, ErrorMessage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_update_name == null) { error make --unspanned { msg: "required query parameter 'ServiceUpdateName' missing: pass --service-update-name" } }
+  let action = ($action | default "BatchStopUpdateAction")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -557,8 +629,8 @@ export def "post-batch-stop-update-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-3
-  --version: string@version-completer
+  --action: string@action-completer-3 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -567,18 +639,20 @@ export def "post-batch-stop-update-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
+]: any -> oneof<record<ProcessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, UpdateActionStatus: string>, UnprocessedUpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ErrorType: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "BatchStopUpdateAction")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -607,10 +681,10 @@ export def "get-complete-migration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The ID of the replication group to which data is being migrated.
+  --replication-group-id: string # The ID of the replication group to which data is being migrated. (required)
   --force: oneof<nothing, bool> # Forces the migration to stop without ensuring that data is in sync. It is recommended to use this option only to abort the migration and not recommended when application wants to continue migration to ElastiCache.
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -618,15 +692,18 @@ export def "get-complete-migration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  let action = ($action | default "CompleteMigration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -655,8 +732,8 @@ export def "post-complete-migration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-4
-  --version: string@version-completer
+  --action: string@action-completer-4 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -665,18 +742,20 @@ export def "post-complete-migration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CompleteMigration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -705,13 +784,13 @@ export def "get-copy-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --source-snapshot-name: string # The name of an existing snapshot from which to make a copy.
-  --target-snapshot-name: string # A name for the snapshot copy. ElastiCache does not permit overwriting a snapshot, therefore this name must be unique within its context - ElastiCache or an Amazon S3 bucket if exporting.
+  --source-snapshot-name: string # The name of an existing snapshot from which to make a copy. (required)
+  --target-snapshot-name: string # A name for the snapshot copy. ElastiCache does not permit overwriting a snapshot, therefore this name must be unique within its context - ElastiCache or an Amazon S3 bucket if exporting. (required)
   --target-bucket: string # The Amazon S3 bucket to which the snapshot is exported. This parameter is used only when exporting a snapshot for external access. When using this parameter to export a snapshot, be sure Amazon ElastiCache has the needed permissions to this S3 bucket. For more information, see Step 2: Grant ElastiCache Access to Your Amazon S3 Bucket (https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/backups-exporting.html#backups-exporting-grant-access) in the Amazon ElastiCache User Guide. For more information, see Exporting a Snapshot (https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/backups-exporting.html) in the Amazon ElastiCache User Guide.
   --kms-key-id: string # The ID of the KMS key used to encrypt the target snapshot.
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -719,15 +798,19 @@ export def "get-copy-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: nothing -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($source_snapshot_name == null) { error make --unspanned { msg: "required query parameter 'SourceSnapshotName' missing: pass --source-snapshot-name" } }
+  if ($target_snapshot_name == null) { error make --unspanned { msg: "required query parameter 'TargetSnapshotName' missing: pass --target-snapshot-name" } }
+  let action = ($action | default "CopySnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "SourceSnapshotName" $source_snapshot_name "scalar") (serialize-qp "TargetSnapshotName" $target_snapshot_name "scalar") (serialize-qp "TargetBucket" $target_bucket "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -756,8 +839,8 @@ export def "post-copy-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-5
-  --version: string@version-completer
+  --action: string@action-completer-5 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -766,18 +849,20 @@ export def "post-copy-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: any -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CopySnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -806,7 +891,7 @@ export def "get-create-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-cluster-id: string # The node group (shard) identifier. This parameter is stored as a lowercase string. Constraints: A name must contain from 1 to 50 alphanumeric characters or hyphens. The first character must be a letter. A name cannot end with a hyphen or contain two consecutive hyphens.
+  --cache-cluster-id: string # The node group (shard) identifier. This parameter is stored as a lowercase string. Constraints: A name must contain from 1 to 50 alphanumeric characters or hyphens. The first character must be a letter. A name cannot end with a hyphen or contain two consecutive hyphens. (required)
   --replication-group-id: string # The ID of the replication group to which this cluster should belong. If this parameter is specified, the cluster is added to the specified replication group as a read replica; otherwise, the cluster is a standalone primary that is not part of any replication group. If the specified replication group is Multi-AZ enabled and the Availability Zone is not specified, the cluster is created in Availability Zones that provide the best spread of read replicas across Availability Zones. This parameter is only valid if the Engine parameter is redis.
   --az-mode: string@az-mode-completer # Specifies whether the nodes in this Memcached cluster are created in a single Availability Zone or created across multiple Availability Zones in the cluster's region. This parameter is only supported for Memcached clusters. If the AZMode and PreferredAvailabilityZones are not specified, ElastiCache assumes single-az mode.
   --preferred-availability-zone: string # The EC2 Availability Zone in which the cluster is created. All nodes belonging to this cluster are placed in the preferred Availability Zone. If you want to create your nodes across multiple Availability Zones, use PreferredAvailabilityZones. Default: System chosen Availability Zone.
@@ -836,8 +921,8 @@ export def "get-create-cache-cluster" [
   --transit-encryption-enabled: oneof<nothing, bool> # A flag that enables in-transit encryption when set to true. Only available when creating a cache cluster in an Amazon VPC using Memcached version 1.6.12 or later.
   --network-type: string@network-type-completer # Must be either ipv4 | ipv6 | dual_stack. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
   --ip-discovery: string@ip-discovery-completer # The network type you choose when modifying a cluster, either ipv4 | ipv6. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -845,15 +930,18 @@ export def "get-create-cache-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_cluster_id == null) { error make --unspanned { msg: "required query parameter 'CacheClusterId' missing: pass --cache-cluster-id" } }
+  let action = ($action | default "CreateCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "AZMode" $az_mode "scalar") (serialize-qp "PreferredAvailabilityZone" $preferred_availability_zone "scalar") (serialize-qp "PreferredAvailabilityZones" $preferred_availability_zones "multi") (serialize-qp "NumCacheNodes" $num_cache_nodes "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "SnapshotArns" $snapshot_arns "multi") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "OutpostMode" $outpost_mode "scalar") (serialize-qp "PreferredOutpostArn" $preferred_outpost_arn "scalar") (serialize-qp "PreferredOutpostArns" $preferred_outpost_arns "multi") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -882,8 +970,8 @@ export def "post-create-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-6
-  --version: string@version-completer
+  --action: string@action-completer-6 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -892,18 +980,20 @@ export def "post-create-cache-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -932,12 +1022,12 @@ export def "get-create-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-name: string # A user-specified name for the cache parameter group.
-  --cache-parameter-group-family: string # The name of the cache parameter group family that the cache parameter group can be used with. Valid values are: memcached1.4 | memcached1.5 | memcached1.6 | redis2.6 | redis2.8 | redis3.2 | redis4.0 | redis5.0 | redis6.x
-  --description: string # A user-specified description for the cache parameter group.
+  --cache-parameter-group-name: string # A user-specified name for the cache parameter group. (required)
+  --cache-parameter-group-family: string # The name of the cache parameter group family that the cache parameter group can be used with. Valid values are: memcached1.4 | memcached1.5 | memcached1.6 | redis2.6 | redis2.8 | redis3.2 | redis4.0 | redis5.0 | redis6.x (required)
+  --description: string # A user-specified description for the cache parameter group. (required)
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -945,15 +1035,20 @@ export def "get-create-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheParameterGroup: record<CacheParameterGroupName: record, CacheParameterGroupFamily: record, Description: record, IsGlobal: record, ARN: record>> {
+]: nothing -> oneof<record<CacheParameterGroup: record<CacheParameterGroupName: string, CacheParameterGroupFamily: string, Description: string, IsGlobal: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupName' missing: pass --cache-parameter-group-name" } }
+  if ($cache_parameter_group_family == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupFamily' missing: pass --cache-parameter-group-family" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'Description' missing: pass --description" } }
+  let action = ($action | default "CreateCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -982,8 +1077,8 @@ export def "post-create-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-7
-  --version: string@version-completer
+  --action: string@action-completer-7 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -992,18 +1087,20 @@ export def "post-create-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheParameterGroup: record<CacheParameterGroupName: record, CacheParameterGroupFamily: record, Description: record, IsGlobal: record, ARN: record>> {
+]: any -> oneof<record<CacheParameterGroup: record<CacheParameterGroupName: string, CacheParameterGroupFamily: string, Description: string, IsGlobal: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1032,11 +1129,11 @@ export def "get-create-cache-security-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-security-group-name: string # A name for the cache security group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters. Cannot be the word "Default". Example: mysecuritygroup
-  --description: string # A description for the cache security group.
+  --cache-security-group-name: string # A name for the cache security group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters. Cannot be the word "Default". Example: mysecuritygroup (required)
+  --description: string # A description for the cache security group. (required)
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1044,15 +1141,19 @@ export def "get-create-cache-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: nothing -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_security_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSecurityGroupName' missing: pass --cache-security-group-name" } }
+  if ($description == null) { error make --unspanned { msg: "required query parameter 'Description' missing: pass --description" } }
+  let action = ($action | default "CreateCacheSecurityGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1081,8 +1182,8 @@ export def "post-create-cache-security-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-8
-  --version: string@version-completer
+  --action: string@action-completer-8 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1091,18 +1192,20 @@ export def "post-create-cache-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: any -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateCacheSecurityGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1131,12 +1234,12 @@ export def "get-create-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-subnet-group-name: string # A name for the cache subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters or hyphens. Example: mysubnetgroup
-  --cache-subnet-group-description: string # A description for the cache subnet group.
-  --subnet-ids: list # A list of VPC subnet IDs for the cache subnet group.
+  --cache-subnet-group-name: string # A name for the cache subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters or hyphens. Example: mysubnetgroup (required)
+  --cache-subnet-group-description: string # A description for the cache subnet group. (required)
+  --subnet-ids: list # A list of VPC subnet IDs for the cache subnet group. (required)
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1144,15 +1247,20 @@ export def "get-create-cache-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
+]: nothing -> oneof<record<CacheSubnetGroup: record<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list<record>, ARN: string, SupportedNetworkTypes: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSubnetGroupName' missing: pass --cache-subnet-group-name" } }
+  if ($cache_subnet_group_description == null) { error make --unspanned { msg: "required query parameter 'CacheSubnetGroupDescription' missing: pass --cache-subnet-group-description" } }
+  if ($subnet_ids == null) { error make --unspanned { msg: "required query parameter 'SubnetIds' missing: pass --subnet-ids" } }
+  let action = ($action | default "CreateCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSubnetGroupDescription" $cache_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1181,8 +1289,8 @@ export def "post-create-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-9
-  --version: string@version-completer
+  --action: string@action-completer-9 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1191,18 +1299,20 @@ export def "post-create-cache-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
+]: any -> oneof<record<CacheSubnetGroup: record<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list<record>, ARN: string, SupportedNetworkTypes: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1231,11 +1341,11 @@ export def "get-create-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id-suffix: string # The suffix name of a Global datastore. Amazon ElastiCache automatically applies a prefix to the Global datastore ID when it is created. Each Amazon Region has its own prefix. For instance, a Global datastore ID created in the US-West-1 region will begin with "dsdfu" along with the suffix name you provide. The suffix, combined with the auto-generated prefix, guarantees uniqueness of the Global datastore name across multiple regions. For a full list of Amazon Regions and their respective Global datastore iD prefixes, see Using the Amazon CLI with Global datastores (http://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Redis-Global-Datastores-CLI.html).
+  --global-replication-group-id-suffix: string # The suffix name of a Global datastore. Amazon ElastiCache automatically applies a prefix to the Global datastore ID when it is created. Each Amazon Region has its own prefix. For instance, a Global datastore ID created in the US-West-1 region will begin with "dsdfu" along with the suffix name you provide. The suffix, combined with the auto-generated prefix, guarantees uniqueness of the Global datastore name across multiple regions. For a full list of Amazon Regions and their respective Global datastore iD prefixes, see Using the Amazon CLI with Global datastores (http://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/Redis-Global-Datastores-CLI.html). (required)
   --global-replication-group-description: string # Provides details of the Global datastore
-  --primary-replication-group-id: string # The name of the primary cluster that accepts writes and will replicate updates to the secondary cluster.
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --primary-replication-group-id: string # The name of the primary cluster that accepts writes and will replicate updates to the secondary cluster. (required)
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1243,15 +1353,19 @@ export def "get-create-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id_suffix == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupIdSuffix' missing: pass --global-replication-group-id-suffix" } }
+  if ($primary_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'PrimaryReplicationGroupId' missing: pass --primary-replication-group-id" } }
+  let action = ($action | default "CreateGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupIdSuffix" $global_replication_group_id_suffix "scalar") (serialize-qp "GlobalReplicationGroupDescription" $global_replication_group_description "scalar") (serialize-qp "PrimaryReplicationGroupId" $primary_replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1280,8 +1394,8 @@ export def "post-create-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-10
-  --version: string@version-completer
+  --action: string@action-completer-10 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1290,18 +1404,20 @@ export def "post-create-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1330,8 +1446,8 @@ export def "get-create-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The replication group identifier. This parameter is stored as a lowercase string. Constraints: A name must contain from 1 to 40 alphanumeric characters or hyphens. The first character must be a letter. A name cannot end with a hyphen or contain two consecutive hyphens.
-  --replication-group-description: string # A user-created description for the replication group.
+  --replication-group-id: string # The replication group identifier. This parameter is stored as a lowercase string. Constraints: A name must contain from 1 to 40 alphanumeric characters or hyphens. The first character must be a letter. A name cannot end with a hyphen or contain two consecutive hyphens. (required)
+  --replication-group-description: string # A user-created description for the replication group. (required)
   --global-replication-group-id: string # The name of the Global datastore
   --primary-cluster-id: string # The identifier of the cluster that serves as the primary for this replication group. This cluster must already exist and have a status of available. This parameter is not required if NumCacheClusters, NumNodeGroups, or ReplicasPerNodeGroup is specified.
   --automatic-failover-enabled: oneof<nothing, bool> # Specifies whether a read-only replica is automatically promoted to read/write primary if the existing primary fails. AutomaticFailoverEnabled must be enabled for Redis (cluster mode enabled) replication groups. Default: false
@@ -1367,8 +1483,8 @@ export def "get-create-replication-group" [
   --network-type: string@network-type-completer # Must be either ipv4 | ipv6 | dual_stack. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
   --ip-discovery: string@ip-discovery-completer # The network type you choose when creating a replication group, either ipv4 | ipv6. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
   --transit-encryption-mode: string@transit-encryption-mode-completer # A setting that allows you to migrate your clients to use in-transit encryption, with no downtime. When setting TransitEncryptionEnabled to true, you can set your TransitEncryptionMode to preferred in the same request, to allow both encrypted and unencrypted connections at the same time. Once you migrate all your Redis clients to use encrypted connections you can modify the value to required to allow encrypted connections only. Setting TransitEncryptionMode to required is a two-step process that requires you to first set the TransitEncryptionMode to preferred first, after that you can set TransitEncryptionMode to required.
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1376,15 +1492,19 @@ export def "get-create-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($replication_group_description == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupDescription' missing: pass --replication-group-description" } }
+  let action = ($action | default "CreateReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupDescription" $replication_group_description "scalar") (serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "PrimaryClusterId" $primary_cluster_id "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "MultiAZEnabled" $multi_az_enabled "scalar") (serialize-qp "NumCacheClusters" $num_cache_clusters "scalar") (serialize-qp "PreferredCacheClusterAZs" $preferred_cache_cluster_a_zs "multi") (serialize-qp "NumNodeGroups" $num_node_groups "scalar") (serialize-qp "ReplicasPerNodeGroup" $replicas_per_node_group "scalar") (serialize-qp "NodeGroupConfiguration" $node_group_configuration "multi") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "SnapshotArns" $snapshot_arns "multi") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "AtRestEncryptionEnabled" $at_rest_encryption_enabled "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "UserGroupIds" $user_group_ids "multi") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "DataTieringEnabled" $data_tiering_enabled "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "TransitEncryptionMode" $transit_encryption_mode "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1413,8 +1533,8 @@ export def "post-create-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-11
-  --version: string@version-completer
+  --action: string@action-completer-11 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1423,18 +1543,20 @@ export def "post-create-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1465,11 +1587,11 @@ export def "get-create-snapshot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --replication-group-id: string # The identifier of an existing replication group. The snapshot is created from this replication group.
   --cache-cluster-id: string # The identifier of an existing cluster. The snapshot is created from this cluster.
-  --snapshot-name: string # A name for the snapshot being created.
+  --snapshot-name: string # A name for the snapshot being created. (required)
   --kms-key-id: string # The ID of the KMS key used to encrypt the snapshot.
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1477,15 +1599,18 @@ export def "get-create-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: nothing -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($snapshot_name == null) { error make --unspanned { msg: "required query parameter 'SnapshotName' missing: pass --snapshot-name" } }
+  let action = ($action | default "CreateSnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1514,8 +1639,8 @@ export def "post-create-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-12
-  --version: string@version-completer
+  --action: string@action-completer-12 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1524,18 +1649,20 @@ export def "post-create-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: any -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateSnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1564,16 +1691,16 @@ export def "get-create-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The ID of the user.
-  --user-name: string # The username of the user.
-  --engine: string # The current supported value is Redis.
+  --user-id: string # The ID of the user. (required)
+  --user-name: string # The username of the user. (required)
+  --engine: string # The current supported value is Redis. (required)
   --passwords: list # Passwords used for this user. You can create up to two passwords for each user.
-  --access-string: string # Access permissions string used for this user.
+  --access-string: string # Access permissions string used for this user. (required)
   --no-password-required: oneof<nothing, bool> # Indicates a password is not required for this user.
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
   --authentication-mode: record # Specifies how to authenticate the user.
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1581,15 +1708,21 @@ export def "get-create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: nothing -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'UserId' missing: pass --user-id" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'UserName' missing: pass --user-name" } }
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  if ($access_string == null) { error make --unspanned { msg: "required query parameter 'AccessString' missing: pass --access-string" } }
+  let action = ($action | default "CreateUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "UserName" $user_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "Passwords" $passwords "multi") (serialize-qp "AccessString" $access_string "scalar") (serialize-qp "NoPasswordRequired" $no_password_required "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "AuthenticationMode" $authentication_mode "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1618,8 +1751,8 @@ export def "post-create-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-13
-  --version: string@version-completer
+  --action: string@action-completer-13 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1628,18 +1761,20 @@ export def "post-create-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: any -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1668,12 +1803,12 @@ export def "get-create-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-group-id: string # The ID of the user group.
-  --engine: string # The current supported value is Redis.
+  --user-group-id: string # The ID of the user group. (required)
+  --engine: string # The current supported value is Redis. (required)
   --user-ids: list # The list of user IDs that belong to the user group.
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1681,15 +1816,19 @@ export def "get-create-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: nothing -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_group_id == null) { error make --unspanned { msg: "required query parameter 'UserGroupId' missing: pass --user-group-id" } }
+  if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
+  let action = ($action | default "CreateUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "UserIds" $user_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1718,8 +1857,8 @@ export def "post-create-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-14
-  --version: string@version-completer
+  --action: string@action-completer-14 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1728,18 +1867,20 @@ export def "post-create-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: any -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "CreateUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1768,13 +1909,13 @@ export def "get-decrease-node-groups-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --node-group-count: int # The number of node groups (shards) that results from the modification of the shard configuration
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --node-group-count: int # The number of node groups (shards) that results from the modification of the shard configuration (required)
   --global-node-groups-to-remove: list # If the value of NodeGroupCount is less than the current number of node groups (shards), then either NodeGroupsToRemove or NodeGroupsToRetain is required. GlobalNodeGroupsToRemove is a list of NodeGroupIds to remove from the cluster. ElastiCache for Redis will attempt to remove all node groups listed by GlobalNodeGroupsToRemove from the cluster.
   --global-node-groups-to-retain: list # If the value of NodeGroupCount is less than the current number of node groups (shards), then either NodeGroupsToRemove or NodeGroupsToRetain is required. GlobalNodeGroupsToRetain is a list of NodeGroupIds to retain from the cluster. ElastiCache for Redis will attempt to retain all node groups listed by GlobalNodeGroupsToRetain from the cluster.
-  --apply-immediately: oneof<nothing, bool> # Indicates that the shard reconfiguration process begins immediately. At present, the only permitted value for this parameter is true.
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --apply-immediately: oneof<nothing, bool> # Indicates that the shard reconfiguration process begins immediately. At present, the only permitted value for this parameter is true. (required)
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1782,15 +1923,20 @@ export def "get-decrease-node-groups-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($node_group_count == null) { error make --unspanned { msg: "required query parameter 'NodeGroupCount' missing: pass --node-group-count" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "DecreaseNodeGroupsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "GlobalNodeGroupsToRemove" $global_node_groups_to_remove "multi") (serialize-qp "GlobalNodeGroupsToRetain" $global_node_groups_to_retain "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1819,8 +1965,8 @@ export def "post-decrease-node-groups-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-15
-  --version: string@version-completer
+  --action: string@action-completer-15 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1829,18 +1975,20 @@ export def "post-decrease-node-groups-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DecreaseNodeGroupsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1869,13 +2017,13 @@ export def "get-decrease-replica-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The id of the replication group from which you want to remove replica nodes.
+  --replication-group-id: string # The id of the replication group from which you want to remove replica nodes. (required)
   --new-replica-count: int # The number of read replica nodes you want at the completion of this operation. For Redis (cluster mode disabled) replication groups, this is the number of replica nodes in the replication group. For Redis (cluster mode enabled) replication groups, this is the number of replica nodes in each of the replication group's node groups. The minimum number of replicas in a shard or replication group is: Redis (cluster mode disabled) If Multi-AZ is enabled: 1 If Multi-AZ is not enabled: 0 Redis (cluster mode enabled): 0 (though you will not be able to failover to a replica if your primary node fails)
   --replica-configuration: list # A list of ConfigureShard objects that can be used to configure each shard in a Redis (cluster mode enabled) replication group. The ConfigureShard has three members: NewReplicaCount, NodeGroupId, and PreferredAvailabilityZones.
   --replicas-to-remove: list # A list of the node ids to remove from the replication group or node group (shard).
-  --apply-immediately: oneof<nothing, bool> # If True, the number of replica nodes is decreased immediately. ApplyImmediately=False is not currently supported.
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --apply-immediately: oneof<nothing, bool> # If True, the number of replica nodes is decreased immediately. ApplyImmediately=False is not currently supported. (required)
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1883,15 +2031,19 @@ export def "get-decrease-replica-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "DecreaseReplicaCount")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NewReplicaCount" $new_replica_count "scalar") (serialize-qp "ReplicaConfiguration" $replica_configuration "multi") (serialize-qp "ReplicasToRemove" $replicas_to_remove "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1920,8 +2072,8 @@ export def "post-decrease-replica-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-16
-  --version: string@version-completer
+  --action: string@action-completer-16 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1930,18 +2082,20 @@ export def "post-decrease-replica-count" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DecreaseReplicaCount")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1970,10 +2124,10 @@ export def "get-delete-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-cluster-id: string # The cluster identifier for the cluster to be deleted. This parameter is not case sensitive.
+  --cache-cluster-id: string # The cluster identifier for the cluster to be deleted. This parameter is not case sensitive. (required)
   --final-snapshot-identifier: string # The user-supplied name of a final cluster snapshot. This is the unique name that identifies the snapshot. ElastiCache creates the snapshot, and then deletes the cluster immediately afterward.
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1981,15 +2135,18 @@ export def "get-delete-cache-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_cluster_id == null) { error make --unspanned { msg: "required query parameter 'CacheClusterId' missing: pass --cache-cluster-id" } }
+  let action = ($action | default "DeleteCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "FinalSnapshotIdentifier" $final_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2018,8 +2175,8 @@ export def "post-delete-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-17
-  --version: string@version-completer
+  --action: string@action-completer-17 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2028,18 +2185,20 @@ export def "post-delete-cache-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2068,9 +2227,9 @@ export def "get-delete-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-name: string # The name of the cache parameter group to delete. The specified cache security group must not be associated with any clusters.
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --cache-parameter-group-name: string # The name of the cache parameter group to delete. The specified cache security group must not be associated with any clusters. (required)
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2081,12 +2240,15 @@ export def "get-delete-cache-parameter-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupName' missing: pass --cache-parameter-group-name" } }
+  let action = ($action | default "DeleteCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2115,8 +2277,8 @@ export def "post-delete-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-18
-  --version: string@version-completer
+  --action: string@action-completer-18 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2129,14 +2291,16 @@ export def "post-delete-cache-parameter-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2165,9 +2329,9 @@ export def "get-delete-cache-security-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-security-group-name: string # The name of the cache security group to delete. You cannot delete the default security group.
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --cache-security-group-name: string # The name of the cache security group to delete. You cannot delete the default security group. (required)
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2178,12 +2342,15 @@ export def "get-delete-cache-security-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_security_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSecurityGroupName' missing: pass --cache-security-group-name" } }
+  let action = ($action | default "DeleteCacheSecurityGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2212,8 +2379,8 @@ export def "post-delete-cache-security-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-19
-  --version: string@version-completer
+  --action: string@action-completer-19 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2226,14 +2393,16 @@ export def "post-delete-cache-security-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteCacheSecurityGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2262,9 +2431,9 @@ export def "get-delete-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-subnet-group-name: string # The name of the cache subnet group to delete. Constraints: Must contain no more than 255 alphanumeric characters or hyphens.
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --cache-subnet-group-name: string # The name of the cache subnet group to delete. Constraints: Must contain no more than 255 alphanumeric characters or hyphens. (required)
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2275,12 +2444,15 @@ export def "get-delete-cache-subnet-group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSubnetGroupName' missing: pass --cache-subnet-group-name" } }
+  let action = ($action | default "DeleteCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2309,8 +2481,8 @@ export def "post-delete-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-20
-  --version: string@version-completer
+  --action: string@action-completer-20 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2323,14 +2495,16 @@ export def "post-delete-cache-subnet-group" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2359,10 +2533,10 @@ export def "get-delete-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --retain-primary-replication-group: oneof<nothing, bool> # The primary replication group is retained as a standalone replication group.
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --retain-primary-replication-group: oneof<nothing, bool> # The primary replication group is retained as a standalone replication group. (required)
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2370,15 +2544,19 @@ export def "get-delete-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($retain_primary_replication_group == null) { error make --unspanned { msg: "required query parameter 'RetainPrimaryReplicationGroup' missing: pass --retain-primary-replication-group" } }
+  let action = ($action | default "DeleteGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "RetainPrimaryReplicationGroup" $retain_primary_replication_group "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2407,8 +2585,8 @@ export def "post-delete-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-21
-  --version: string@version-completer
+  --action: string@action-completer-21 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2417,18 +2595,20 @@ export def "post-delete-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2457,11 +2637,11 @@ export def "get-delete-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The identifier for the cluster to be deleted. This parameter is not case sensitive.
+  --replication-group-id: string # The identifier for the cluster to be deleted. This parameter is not case sensitive. (required)
   --retain-primary-cluster: oneof<nothing, bool> # If set to true, all of the read replicas are deleted, but the primary node is retained.
   --final-snapshot-identifier: string # The name of a final node group (shard) snapshot. ElastiCache creates the snapshot from the primary node in the cluster, rather than one of the replicas; this is to ensure that it captures the freshest data. After the final snapshot is taken, the replication group is immediately deleted.
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2469,15 +2649,18 @@ export def "get-delete-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  let action = ($action | default "DeleteReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "RetainPrimaryCluster" $retain_primary_cluster "scalar") (serialize-qp "FinalSnapshotIdentifier" $final_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2506,8 +2689,8 @@ export def "post-delete-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-22
-  --version: string@version-completer
+  --action: string@action-completer-22 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2516,18 +2699,20 @@ export def "post-delete-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2556,9 +2741,9 @@ export def "get-delete-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --snapshot-name: string # The name of the snapshot to be deleted.
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --snapshot-name: string # The name of the snapshot to be deleted. (required)
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2566,15 +2751,18 @@ export def "get-delete-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: nothing -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($snapshot_name == null) { error make --unspanned { msg: "required query parameter 'SnapshotName' missing: pass --snapshot-name" } }
+  let action = ($action | default "DeleteSnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2603,8 +2791,8 @@ export def "post-delete-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-23
-  --version: string@version-completer
+  --action: string@action-completer-23 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2613,18 +2801,20 @@ export def "post-delete-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
+]: any -> oneof<record<Snapshot: record<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list<record>, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteSnapshot")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2653,9 +2843,9 @@ export def "get-delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The ID of the user.
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --user-id: string # The ID of the user. (required)
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2663,15 +2853,18 @@ export def "get-delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: nothing -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'UserId' missing: pass --user-id" } }
+  let action = ($action | default "DeleteUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2700,8 +2893,8 @@ export def "post-delete-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-24
-  --version: string@version-completer
+  --action: string@action-completer-24 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2710,18 +2903,20 @@ export def "post-delete-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: any -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2750,9 +2945,9 @@ export def "get-delete-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-group-id: string # The ID of the user group.
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --user-group-id: string # The ID of the user group. (required)
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2760,15 +2955,18 @@ export def "get-delete-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: nothing -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_group_id == null) { error make --unspanned { msg: "required query parameter 'UserGroupId' missing: pass --user-group-id" } }
+  let action = ($action | default "DeleteUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2797,8 +2995,8 @@ export def "post-delete-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-25
-  --version: string@version-completer
+  --action: string@action-completer-25 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2807,18 +3005,20 @@ export def "post-delete-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: any -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DeleteUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2852,8 +3052,8 @@ export def "get-describe-cache-clusters" [
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --show-cache-node-info: oneof<nothing, bool> # An optional flag that can be included in the DescribeCacheCluster request to retrieve information about the individual cache nodes.
   --show-cache-clusters-not-in-replication-groups: oneof<nothing, bool> # An optional flag that can be included in the DescribeCacheCluster request to show only nodes (API/CLI: clusters) that are not members of a replication group. In practice, this mean Memcached and single node Redis clusters.
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2861,15 +3061,17 @@ export def "get-describe-cache-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, CacheClusters: record> {
+]: nothing -> oneof<record<Marker: string, CacheClusters: table<CacheClusterId: string, ConfigurationEndpoint: record, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record, NotificationConfiguration: record, CacheSecurityGroups: list, CacheParameterGroup: record, CacheSubnetGroupName: string, CacheNodes: list, AutoMinorVersionUpgrade: bool, SecurityGroups: list, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheClusters")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "ShowCacheNodeInfo" $show_cache_node_info "scalar") (serialize-qp "ShowCacheClustersNotInReplicationGroups" $show_cache_clusters_not_in_replication_groups "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2900,8 +3102,8 @@ export def "post-describe-cache-clusters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-26
-  --version: string@version-completer
+  --action: string@action-completer-26 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2910,18 +3112,20 @@ export def "post-describe-cache-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, CacheClusters: record> {
+]: any -> oneof<record<Marker: string, CacheClusters: table<CacheClusterId: string, ConfigurationEndpoint: record, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record, NotificationConfiguration: record, CacheSecurityGroups: list, CacheParameterGroup: record, CacheSubnetGroupName: string, CacheNodes: list, AutoMinorVersionUpgrade: bool, SecurityGroups: list, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheClusters")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2956,8 +3160,8 @@ export def "get-describe-cache-engine-versions" [
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --default-only: oneof<nothing, bool> # If true, specifies that only the default version of the specified engine or engine and major version combination is to be returned.
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2965,15 +3169,17 @@ export def "get-describe-cache-engine-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, CacheEngineVersions: record> {
+]: nothing -> oneof<record<Marker: string, CacheEngineVersions: table<Engine: string, EngineVersion: string, CacheParameterGroupFamily: string, CacheEngineDescription: string, CacheEngineVersionDescription: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheEngineVersions")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "DefaultOnly" $default_only "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3004,8 +3210,8 @@ export def "post-describe-cache-engine-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-27
-  --version: string@version-completer
+  --action: string@action-completer-27 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3014,18 +3220,20 @@ export def "post-describe-cache-engine-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, CacheEngineVersions: record> {
+]: any -> oneof<record<Marker: string, CacheEngineVersions: table<Engine: string, EngineVersion: string, CacheParameterGroupFamily: string, CacheEngineDescription: string, CacheEngineVersionDescription: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheEngineVersions")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3057,8 +3265,8 @@ export def "get-describe-cache-parameter-groups" [
   --cache-parameter-group-name: string # The name of a specific cache parameter group to return details for.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3066,15 +3274,17 @@ export def "get-describe-cache-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, CacheParameterGroups: record> {
+]: nothing -> oneof<record<Marker: string, CacheParameterGroups: table<CacheParameterGroupName: string, CacheParameterGroupFamily: string, Description: string, IsGlobal: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheParameterGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3105,8 +3315,8 @@ export def "post-describe-cache-parameter-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-28
-  --version: string@version-completer
+  --action: string@action-completer-28 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3115,18 +3325,20 @@ export def "post-describe-cache-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, CacheParameterGroups: record> {
+]: any -> oneof<record<Marker: string, CacheParameterGroups: table<CacheParameterGroupName: string, CacheParameterGroupFamily: string, Description: string, IsGlobal: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheParameterGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3155,12 +3367,12 @@ export def "get-describe-cache-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-name: string # The name of a specific cache parameter group to return details for.
-  --qp-source: string # The parameter types to return. Valid values: user | system | engine-default
+  --cache-parameter-group-name: string # The name of a specific cache parameter group to return details for. (required)
+  --source: string # The parameter types to return. Valid values: user | system | engine-default
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3168,19 +3380,22 @@ export def "get-describe-cache-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record> {
+]: nothing -> oneof<record<Marker: string, Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ChangeType: string>, CacheNodeTypeSpecificParameters: table<ParameterName: string, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, CacheNodeTypeSpecificValues: list, ChangeType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
+  if ($cache_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupName' missing: pass --cache-parameter-group-name" } }
+  let action = ($action | default "DescribeCacheParameters")
+  let version = ($version | default "2015-02-02")
+  let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "Source" $source "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"CacheParameterGroupName": $cache_parameter_group_name, "Source": $qp_source, "MaxRecords": $max_records, "Marker": $marker, "Action": $action, "Version": $version} | compact)
+    query: ({"CacheParameterGroupName": $cache_parameter_group_name, "Source": $source, "MaxRecords": $max_records, "Marker": $marker, "Action": $action, "Version": $version} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3207,8 +3422,8 @@ export def "post-describe-cache-parameters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-29
-  --version: string@version-completer
+  --action: string@action-completer-29 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3217,18 +3432,20 @@ export def "post-describe-cache-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record> {
+]: any -> oneof<record<Marker: string, Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ChangeType: string>, CacheNodeTypeSpecificParameters: table<ParameterName: string, Description: string, Source: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, CacheNodeTypeSpecificValues: list, ChangeType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheParameters")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3260,8 +3477,8 @@ export def "get-describe-cache-security-groups" [
   --cache-security-group-name: string # The name of the cache security group to return details for.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3269,15 +3486,17 @@ export def "get-describe-cache-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, CacheSecurityGroups: record> {
+]: nothing -> oneof<record<Marker: string, CacheSecurityGroups: table<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheSecurityGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3308,8 +3527,8 @@ export def "post-describe-cache-security-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-30
-  --version: string@version-completer
+  --action: string@action-completer-30 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3318,18 +3537,20 @@ export def "post-describe-cache-security-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, CacheSecurityGroups: record> {
+]: any -> oneof<record<Marker: string, CacheSecurityGroups: table<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheSecurityGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3361,8 +3582,8 @@ export def "get-describe-cache-subnet-groups" [
   --cache-subnet-group-name: string # The name of the cache subnet group to return details for.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3370,15 +3591,17 @@ export def "get-describe-cache-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, CacheSubnetGroups: record> {
+]: nothing -> oneof<record<Marker: string, CacheSubnetGroups: table<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list, ARN: string, SupportedNetworkTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheSubnetGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3409,8 +3632,8 @@ export def "post-describe-cache-subnet-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-31
-  --version: string@version-completer
+  --action: string@action-completer-31 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3419,18 +3642,20 @@ export def "post-describe-cache-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, CacheSubnetGroups: record> {
+]: any -> oneof<record<Marker: string, CacheSubnetGroups: table<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list, ARN: string, SupportedNetworkTypes: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeCacheSubnetGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3459,11 +3684,11 @@ export def "get-describe-engine-default-parameters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-family: string # The name of the cache parameter group family. Valid values are: memcached1.4 | memcached1.5 | memcached1.6 | redis2.6 | redis2.8 | redis3.2 | redis4.0 | redis5.0 | redis6.x | redis6.2 | redis7
+  --cache-parameter-group-family: string # The name of the cache parameter group family. Valid values are: memcached1.4 | memcached1.5 | memcached1.6 | redis2.6 | redis2.8 | redis3.2 | redis4.0 | redis5.0 | redis6.x | redis6.2 | redis7 (required)
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3471,15 +3696,18 @@ export def "get-describe-engine-default-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EngineDefaults: record<CacheParameterGroupFamily: record, Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record>> {
+]: nothing -> oneof<record<EngineDefaults: record<CacheParameterGroupFamily: string, Marker: string, Parameters: list<record>, CacheNodeTypeSpecificParameters: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_parameter_group_family == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupFamily' missing: pass --cache-parameter-group-family" } }
+  let action = ($action | default "DescribeEngineDefaultParameters")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3510,8 +3738,8 @@ export def "post-describe-engine-default-parameters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-32
-  --version: string@version-completer
+  --action: string@action-completer-32 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3520,18 +3748,20 @@ export def "post-describe-engine-default-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EngineDefaults: record<CacheParameterGroupFamily: record, Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record>> {
+]: any -> oneof<record<EngineDefaults: record<CacheParameterGroupFamily: string, Marker: string, Parameters: list<record>, CacheNodeTypeSpecificParameters: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEngineDefaultParameters")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3567,8 +3797,8 @@ export def "get-describe-events" [
   --duration: int # The number of minutes worth of events to retrieve.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3576,15 +3806,17 @@ export def "get-describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, Events: record> {
+]: nothing -> oneof<record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, Date: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3615,8 +3847,8 @@ export def "post-describe-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-33
-  --version: string@version-completer
+  --action: string@action-completer-33 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3625,18 +3857,20 @@ export def "post-describe-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, Events: record> {
+]: any -> oneof<record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, Date: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeEvents")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3669,8 +3903,8 @@ export def "get-describe-global-replication-groups" [
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --show-member-info: oneof<nothing, bool> # Returns the list of members that comprise the Global datastore.
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3678,15 +3912,17 @@ export def "get-describe-global-replication-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, GlobalReplicationGroups: record> {
+]: nothing -> oneof<record<Marker: string, GlobalReplicationGroups: table<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list, ClusterEnabled: bool, GlobalNodeGroups: list, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeGlobalReplicationGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "ShowMemberInfo" $show_member_info "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3717,8 +3953,8 @@ export def "post-describe-global-replication-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-34
-  --version: string@version-completer
+  --action: string@action-completer-34 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3727,18 +3963,20 @@ export def "post-describe-global-replication-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, GlobalReplicationGroups: record> {
+]: any -> oneof<record<Marker: string, GlobalReplicationGroups: table<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list, ClusterEnabled: bool, GlobalNodeGroups: list, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeGlobalReplicationGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3770,8 +4008,8 @@ export def "get-describe-replication-groups" [
   --replication-group-id: string # The identifier for the replication group to be described. This parameter is not case sensitive. If you do not specify this parameter, information about all replication groups is returned.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3779,15 +4017,17 @@ export def "get-describe-replication-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, ReplicationGroups: record> {
+]: nothing -> oneof<record<Marker: string, ReplicationGroups: table<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record, Status: string, PendingModifiedValues: record, MemberClusters: list, NodeGroups: list, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list, KmsKeyId: string, ARN: string, UserGroupIds: list, LogDeliveryConfigurations: list, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReplicationGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3818,8 +4058,8 @@ export def "post-describe-replication-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-35
-  --version: string@version-completer
+  --action: string@action-completer-35 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3828,18 +4068,20 @@ export def "post-describe-replication-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, ReplicationGroups: record> {
+]: any -> oneof<record<Marker: string, ReplicationGroups: table<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record, Status: string, PendingModifiedValues: record, MemberClusters: list, NodeGroups: list, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list, KmsKeyId: string, ARN: string, UserGroupIds: list, LogDeliveryConfigurations: list, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReplicationGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3876,8 +4118,8 @@ export def "get-describe-reserved-cache-nodes" [
   --offering-type: string # The offering type filter value. Use this parameter to show only the available offerings matching the specified offering type. Valid values: "Light Utilization"|"Medium Utilization"|"Heavy Utilization"|"All Upfront"|"Partial Upfront"| "No Upfront"
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3885,15 +4127,17 @@ export def "get-describe-reserved-cache-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, ReservedCacheNodes: record> {
+]: nothing -> oneof<record<Marker: string, ReservedCacheNodes: table<ReservedCacheNodeId: string, ReservedCacheNodesOfferingId: string, CacheNodeType: string, StartTime: string, Duration: int, FixedPrice: float, UsagePrice: float, CacheNodeCount: int, ProductDescription: string, OfferingType: string, State: string, RecurringCharges: list, ReservationARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReservedCacheNodes")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReservedCacheNodeId" $reserved_cache_node_id "scalar") (serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3924,8 +4168,8 @@ export def "post-describe-reserved-cache-nodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-36
-  --version: string@version-completer
+  --action: string@action-completer-36 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3934,18 +4178,20 @@ export def "post-describe-reserved-cache-nodes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, ReservedCacheNodes: record> {
+]: any -> oneof<record<Marker: string, ReservedCacheNodes: table<ReservedCacheNodeId: string, ReservedCacheNodesOfferingId: string, CacheNodeType: string, StartTime: string, Duration: int, FixedPrice: float, UsagePrice: float, CacheNodeCount: int, ProductDescription: string, OfferingType: string, State: string, RecurringCharges: list, ReservationARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReservedCacheNodes")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3981,8 +4227,8 @@ export def "get-describe-reserved-cache-nodes-offerings" [
   --offering-type: string # The offering type filter value. Use this parameter to show only the available offerings matching the specified offering type. Valid Values: "Light Utilization"|"Medium Utilization"|"Heavy Utilization" |"All Upfront"|"Partial Upfront"| "No Upfront"
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 100 Constraints: minimum 20; maximum 100.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -3990,15 +4236,17 @@ export def "get-describe-reserved-cache-nodes-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, ReservedCacheNodesOfferings: record> {
+]: nothing -> oneof<record<Marker: string, ReservedCacheNodesOfferings: table<ReservedCacheNodesOfferingId: string, CacheNodeType: string, Duration: int, FixedPrice: float, UsagePrice: float, ProductDescription: string, OfferingType: string, RecurringCharges: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReservedCacheNodesOfferings")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4029,8 +4277,8 @@ export def "post-describe-reserved-cache-nodes-offerings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-37
-  --version: string@version-completer
+  --action: string@action-completer-37 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4039,18 +4287,20 @@ export def "post-describe-reserved-cache-nodes-offerings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, ReservedCacheNodesOfferings: record> {
+]: any -> oneof<record<Marker: string, ReservedCacheNodesOfferings: table<ReservedCacheNodesOfferingId: string, CacheNodeType: string, Duration: int, FixedPrice: float, UsagePrice: float, ProductDescription: string, OfferingType: string, RecurringCharges: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeReservedCacheNodesOfferings")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4083,8 +4333,8 @@ export def "get-describe-service-updates" [
   --service-update-status: list # The status of the service update
   --max-records: int # The maximum number of records to include in the response
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4092,15 +4342,17 @@ export def "get-describe-service-updates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, ServiceUpdates: record> {
+]: nothing -> oneof<record<Marker: string, ServiceUpdates: table<ServiceUpdateName: string, ServiceUpdateReleaseDate: string, ServiceUpdateEndDate: string, ServiceUpdateSeverity: string, ServiceUpdateRecommendedApplyByDate: string, ServiceUpdateStatus: string, ServiceUpdateDescription: string, ServiceUpdateType: string, Engine: string, EngineVersion: string, AutoUpdateAfterRecommendedApplyByDate: bool, EstimatedUpdateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeServiceUpdates")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "ServiceUpdateStatus" $service_update_status "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4131,8 +4383,8 @@ export def "post-describe-service-updates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-38
-  --version: string@version-completer
+  --action: string@action-completer-38 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4141,18 +4393,20 @@ export def "post-describe-service-updates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, ServiceUpdates: record> {
+]: any -> oneof<record<Marker: string, ServiceUpdates: table<ServiceUpdateName: string, ServiceUpdateReleaseDate: string, ServiceUpdateEndDate: string, ServiceUpdateSeverity: string, ServiceUpdateRecommendedApplyByDate: string, ServiceUpdateStatus: string, ServiceUpdateDescription: string, ServiceUpdateType: string, Engine: string, EngineVersion: string, AutoUpdateAfterRecommendedApplyByDate: bool, EstimatedUpdateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeServiceUpdates")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4188,8 +4442,8 @@ export def "get-describe-snapshots" [
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved. Default: 50 Constraints: minimum 20; maximum 50.
   --show-node-group-config: oneof<nothing, bool> # A Boolean value which if true, the node group (shard) configuration is included in the snapshot description.
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4197,15 +4451,17 @@ export def "get-describe-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, Snapshots: record> {
+]: nothing -> oneof<record<Marker: string, Snapshots: table<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeSnapshots")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "SnapshotSource" $snapshot_source "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "ShowNodeGroupConfig" $show_node_group_config "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4236,8 +4492,8 @@ export def "post-describe-snapshots" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-39
-  --version: string@version-completer
+  --action: string@action-completer-39 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4246,18 +4502,20 @@ export def "post-describe-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, Snapshots: record> {
+]: any -> oneof<record<Marker: string, Snapshots: table<SnapshotName: string, ReplicationGroupId: string, ReplicationGroupDescription: string, CacheClusterId: string, SnapshotStatus: string, SnapshotSource: string, CacheNodeType: string, Engine: string, EngineVersion: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, TopicArn: string, Port: int, CacheParameterGroupName: string, CacheSubnetGroupName: string, VpcId: string, AutoMinorVersionUpgrade: bool, SnapshotRetentionLimit: int, SnapshotWindow: string, NumNodeGroups: int, AutomaticFailover: string, NodeSnapshots: list, KmsKeyId: string, ARN: string, DataTiering: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeSnapshots")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4296,8 +4554,8 @@ export def "get-describe-update-actions" [
   --show-node-level-update-status: oneof<nothing, bool> # Dictates whether to include node level update status in the response
   --max-records: int # The maximum number of records to include in the response
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords.
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4305,15 +4563,17 @@ export def "get-describe-update-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: record, UpdateActions: record> {
+]: nothing -> oneof<record<Marker: string, UpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ServiceUpdateReleaseDate: string, ServiceUpdateSeverity: string, ServiceUpdateStatus: string, ServiceUpdateRecommendedApplyByDate: string, ServiceUpdateType: string, UpdateActionAvailableDate: string, UpdateActionStatus: string, NodesUpdated: string, UpdateActionStatusModifiedDate: string, SlaMet: string, NodeGroupUpdateStatus: list, CacheNodeUpdateStatus: list, EstimatedUpdateTime: string, Engine: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUpdateActions")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "Engine" $engine "scalar") (serialize-qp "ServiceUpdateStatus" $service_update_status "multi") (serialize-qp "ServiceUpdateTimeRange" $service_update_time_range "multi") (serialize-qp "UpdateActionStatus" $update_action_status "multi") (serialize-qp "ShowNodeLevelUpdateStatus" $show_node_level_update_status "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4344,8 +4604,8 @@ export def "post-describe-update-actions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-40
-  --version: string@version-completer
+  --action: string@action-completer-40 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4354,18 +4614,20 @@ export def "post-describe-update-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: record, UpdateActions: record> {
+]: any -> oneof<record<Marker: string, UpdateActions: table<ReplicationGroupId: string, CacheClusterId: string, ServiceUpdateName: string, ServiceUpdateReleaseDate: string, ServiceUpdateSeverity: string, ServiceUpdateStatus: string, ServiceUpdateRecommendedApplyByDate: string, ServiceUpdateType: string, UpdateActionAvailableDate: string, UpdateActionStatus: string, NodesUpdated: string, UpdateActionStatusModifiedDate: string, SlaMet: string, NodeGroupUpdateStatus: list, CacheNodeUpdateStatus: list, EstimatedUpdateTime: string, Engine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUpdateActions")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4397,8 +4659,8 @@ export def "get-describe-user-groups" [
   --user-group-id: string # The ID of the user group.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords. >
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4406,15 +4668,17 @@ export def "get-describe-user-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserGroups: record, Marker: record> {
+]: nothing -> oneof<record<UserGroups: table<UserGroupId: string, Status: string, Engine: string, UserIds: list, MinimumEngineVersion: string, PendingChanges: record, ReplicationGroups: list, ARN: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUserGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4445,8 +4709,8 @@ export def "post-describe-user-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-41
-  --version: string@version-completer
+  --action: string@action-completer-41 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4455,18 +4719,20 @@ export def "post-describe-user-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserGroups: record, Marker: record> {
+]: any -> oneof<record<UserGroups: table<UserGroupId: string, Status: string, Engine: string, UserIds: list, MinimumEngineVersion: string, PendingChanges: record, ReplicationGroups: list, ARN: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUserGroups")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4500,8 +4766,8 @@ export def "get-describe-users" [
   --filters: list # Filter to determine the list of User IDs to return.
   --max-records: int # The maximum number of records to include in the response. If more records exist than the specified MaxRecords value, a marker is included in the response so that the remaining results can be retrieved.
   --marker: string # An optional marker returned from a prior request. Use this marker for pagination of results from this operation. If this parameter is specified, the response includes only records beyond the marker, up to the value specified by MaxRecords. >
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4509,15 +4775,17 @@ export def "get-describe-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Users: record, Marker: record> {
+]: nothing -> oneof<record<Users: table<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list, Authentication: record, ARN: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUsers")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "UserId" $user_id "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4548,8 +4816,8 @@ export def "post-describe-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-records: string # Pagination limit
   --marker: string # Pagination token
-  --action: string@action-completer-42
-  --version: string@version-completer
+  --action: string@action-completer-42 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4558,18 +4826,20 @@ export def "post-describe-users" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Users: record, Marker: record> {
+]: any -> oneof<record<Users: table<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list, Authentication: record, ARN: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DescribeUsers")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4598,11 +4868,11 @@ export def "get-disassociate-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --replication-group-id: string # The name of the secondary cluster you wish to remove from the Global datastore
-  --replication-group-region: string # The Amazon region of secondary cluster you wish to remove from the Global datastore
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --replication-group-id: string # The name of the secondary cluster you wish to remove from the Global datastore (required)
+  --replication-group-region: string # The Amazon region of secondary cluster you wish to remove from the Global datastore (required)
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4610,15 +4880,20 @@ export def "get-disassociate-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($replication_group_region == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupRegion' missing: pass --replication-group-region" } }
+  let action = ($action | default "DisassociateGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupRegion" $replication_group_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4647,8 +4922,8 @@ export def "post-disassociate-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-43
-  --version: string@version-completer
+  --action: string@action-completer-43 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4657,18 +4932,20 @@ export def "post-disassociate-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "DisassociateGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4697,11 +4974,11 @@ export def "get-failover-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --primary-region: string # The Amazon region of the primary cluster of the Global datastore
-  --primary-replication-group-id: string # The name of the primary replication group
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --primary-region: string # The Amazon region of the primary cluster of the Global datastore (required)
+  --primary-replication-group-id: string # The name of the primary replication group (required)
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4709,15 +4986,20 @@ export def "get-failover-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($primary_region == null) { error make --unspanned { msg: "required query parameter 'PrimaryRegion' missing: pass --primary-region" } }
+  if ($primary_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'PrimaryReplicationGroupId' missing: pass --primary-replication-group-id" } }
+  let action = ($action | default "FailoverGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "PrimaryRegion" $primary_region "scalar") (serialize-qp "PrimaryReplicationGroupId" $primary_replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4746,8 +5028,8 @@ export def "post-failover-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-44
-  --version: string@version-completer
+  --action: string@action-completer-44 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4756,18 +5038,20 @@ export def "post-failover-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "FailoverGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4796,12 +5080,12 @@ export def "get-increase-node-groups-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --node-group-count: int # The number of node groups you wish to add
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --node-group-count: int # The number of node groups you wish to add (required)
   --regional-configurations: list # Describes the replication group IDs, the Amazon regions where they are stored and the shard configuration for each that comprise the Global datastore
-  --apply-immediately: oneof<nothing, bool> # Indicates that the process begins immediately. At present, the only permitted value for this parameter is true.
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --apply-immediately: oneof<nothing, bool> # Indicates that the process begins immediately. At present, the only permitted value for this parameter is true. (required)
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4809,15 +5093,20 @@ export def "get-increase-node-groups-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($node_group_count == null) { error make --unspanned { msg: "required query parameter 'NodeGroupCount' missing: pass --node-group-count" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "IncreaseNodeGroupsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "RegionalConfigurations" $regional_configurations "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4846,8 +5135,8 @@ export def "post-increase-node-groups-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-45
-  --version: string@version-completer
+  --action: string@action-completer-45 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4856,18 +5145,20 @@ export def "post-increase-node-groups-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "IncreaseNodeGroupsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4896,12 +5187,12 @@ export def "get-increase-replica-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The id of the replication group to which you want to add replica nodes.
+  --replication-group-id: string # The id of the replication group to which you want to add replica nodes. (required)
   --new-replica-count: int # The number of read replica nodes you want at the completion of this operation. For Redis (cluster mode disabled) replication groups, this is the number of replica nodes in the replication group. For Redis (cluster mode enabled) replication groups, this is the number of replica nodes in each of the replication group's node groups.
   --replica-configuration: list # A list of ConfigureShard objects that can be used to configure each shard in a Redis (cluster mode enabled) replication group. The ConfigureShard has three members: NewReplicaCount, NodeGroupId, and PreferredAvailabilityZones.
-  --apply-immediately: oneof<nothing, bool> # If True, the number of replica nodes is increased immediately. ApplyImmediately=False is not currently supported.
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --apply-immediately: oneof<nothing, bool> # If True, the number of replica nodes is increased immediately. ApplyImmediately=False is not currently supported. (required)
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4909,15 +5200,19 @@ export def "get-increase-replica-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "IncreaseReplicaCount")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NewReplicaCount" $new_replica_count "scalar") (serialize-qp "ReplicaConfiguration" $replica_configuration "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4946,8 +5241,8 @@ export def "post-increase-replica-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-46
-  --version: string@version-completer
+  --action: string@action-completer-46 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -4956,18 +5251,20 @@ export def "post-increase-replica-count" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "IncreaseReplicaCount")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4998,8 +5295,8 @@ export def "get-list-allowed-node-type-modifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-cluster-id: string # The name of the cluster you want to scale up to a larger node instanced type. ElastiCache uses the cluster id to identify the current node type of this cluster and from that to create a list of node types you can scale up to. You must provide a value for either the CacheClusterId or the ReplicationGroupId.
   --replication-group-id: string # The name of the replication group want to scale up to a larger node type. ElastiCache uses the replication group id to identify the current node type being used by this replication group, and from that to create a list of node types you can scale up to. You must provide a value for either the CacheClusterId or the ReplicationGroupId.
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5007,15 +5304,17 @@ export def "get-list-allowed-node-type-modifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ScaleUpModifications: record, ScaleDownModifications: record> {
+]: nothing -> oneof<record<ScaleUpModifications: list<string>, ScaleDownModifications: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListAllowedNodeTypeModifications")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5044,8 +5343,8 @@ export def "post-list-allowed-node-type-modifications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-47
-  --version: string@version-completer
+  --action: string@action-completer-47 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5054,18 +5353,20 @@ export def "post-list-allowed-node-type-modifications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ScaleUpModifications: record, ScaleDownModifications: record> {
+]: any -> oneof<record<ScaleUpModifications: list<string>, ScaleDownModifications: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListAllowedNodeTypeModifications")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5094,9 +5395,9 @@ export def "get-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon Resource Name (ARN) of the resource for which you want the list of tags, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --resource-name: string # The Amazon Resource Name (ARN) of the resource for which you want the list of tags, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html). (required)
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5104,15 +5405,18 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5141,8 +5445,8 @@ export def "post-list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-48
-  --version: string@version-completer
+  --action: string@action-completer-48 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5151,18 +5455,20 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagList: record> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ListTagsForResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5191,7 +5497,7 @@ export def "get-modify-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-cluster-id: string # The cluster identifier. This value is stored as a lowercase string.
+  --cache-cluster-id: string # The cluster identifier. This value is stored as a lowercase string. (required)
   --num-cache-nodes: int # The number of cache nodes that the cluster should have. If the value for NumCacheNodes is greater than the sum of the number of current cache nodes and the number of cache nodes pending creation (which may be zero), more nodes are added. If the value is less than the number of existing cache nodes, nodes are removed. If the value is equal to the number of current cache nodes, any pending add or remove requests are canceled. If you are removing cache nodes, you must use the CacheNodeIdsToRemove parameter to provide the IDs of the specific cache nodes to remove. For clusters running Redis, this value must be 1. For clusters running Memcached, this value must be between 1 and 40. Adding or removing Memcached cache nodes can be applied immediately or as a pending operation (see ApplyImmediately). A pending operation to modify the number of cache nodes in a cluster during its maintenance window, whether by adding or removing nodes in accordance with the scale out architecture, is not queued. The customer's latest request to add or remove nodes to the cluster overrides any previous pending operations to modify the number of cache nodes in the cluster. For example, a request to remove 2 nodes would override a previous pending operation to remove 3 nodes. Similarly, a request to add 2 nodes would override a previous pending operation to remove 3 nodes and vice versa. As Memcached cache nodes may now be provisioned in different Availability Zones with flexible cache node placement, a request to add nodes does not automatically override a previous pending operation to add nodes. The customer can modify the previous pending operation to add more nodes or explicitly cancel the pending request and retry the new request. To cancel pending operations to modify the number of cache nodes in a cluster, use the ModifyCacheCluster request and set NumCacheNodes equal to the number of cache nodes currently in the cluster.
   --cache-node-ids-to-remove: list # A list of cache node IDs to be removed. A node ID is a numeric identifier (0001, 0002, etc.). This parameter is only valid when NumCacheNodes is less than the existing number of cache nodes. The number of cache node IDs supplied in this parameter must match the difference between the existing number of cache nodes in the cluster or pending cache nodes, whichever is greater, and the value of NumCacheNodes in the request. For example: If you have 3 active cache nodes, 7 pending cache nodes, and the number of cache nodes in this ModifyCacheCluster call is 5, you must list 2 (7 - 5) cache node IDs to remove.
   --az-mode: string@az-mode-completer # Specifies whether the new nodes in this Memcached cluster are all created in a single Availability Zone or created across multiple Availability Zones. Valid values: single-az | cross-az. This option is only supported for Memcached clusters. You cannot specify single-az if the Memcached cluster already has cache nodes in different Availability Zones. If cross-az is specified, existing Memcached nodes remain in their current Availability Zone. Only newly created nodes are located in different Availability Zones.
@@ -5212,8 +5518,8 @@ export def "get-modify-cache-cluster" [
   --auth-token-update-strategy: string@auth-token-update-strategy-completer # Specifies the strategy to use to update the AUTH token. This parameter must be specified with the auth-token parameter. Possible values: Rotate Set For more information, see Authenticating Users with Redis AUTH (http://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/auth.html)
   --log-delivery-configurations: list # Specifies the destination, format and type of the logs.
   --ip-discovery: string@ip-discovery-completer # The network type you choose when modifying a cluster, either ipv4 | ipv6. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5221,15 +5527,18 @@ export def "get-modify-cache-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_cluster_id == null) { error make --unspanned { msg: "required query parameter 'CacheClusterId' missing: pass --cache-cluster-id" } }
+  let action = ($action | default "ModifyCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "NumCacheNodes" $num_cache_nodes "scalar") (serialize-qp "CacheNodeIdsToRemove" $cache_node_ids_to_remove "multi") (serialize-qp "AZMode" $az_mode "scalar") (serialize-qp "NewAvailabilityZones" $new_availability_zones "multi") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "NotificationTopicStatus" $notification_topic_status "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "AuthTokenUpdateStrategy" $auth_token_update_strategy "scalar") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5258,8 +5567,8 @@ export def "post-modify-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-49
-  --version: string@version-completer
+  --action: string@action-completer-49 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5268,18 +5577,20 @@ export def "post-modify-cache-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5308,10 +5619,10 @@ export def "get-modify-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-name: string # The name of the cache parameter group to modify.
-  --parameter-name-values: list # An array of parameter names and values for the parameter update. You must supply at least one parameter name and value; subsequent arguments are optional. A maximum of 20 parameters may be modified per request.
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --cache-parameter-group-name: string # The name of the cache parameter group to modify. (required)
+  --parameter-name-values: list # An array of parameter names and values for the parameter update. You must supply at least one parameter name and value; subsequent arguments are optional. A maximum of 20 parameters may be modified per request. (required)
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5319,15 +5630,19 @@ export def "get-modify-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheParameterGroupName: record> {
+]: nothing -> oneof<record<CacheParameterGroupName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupName' missing: pass --cache-parameter-group-name" } }
+  if ($parameter_name_values == null) { error make --unspanned { msg: "required query parameter 'ParameterNameValues' missing: pass --parameter-name-values" } }
+  let action = ($action | default "ModifyCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "ParameterNameValues" $parameter_name_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5356,8 +5671,8 @@ export def "post-modify-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-50
-  --version: string@version-completer
+  --action: string@action-completer-50 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5366,18 +5681,20 @@ export def "post-modify-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheParameterGroupName: record> {
+]: any -> oneof<record<CacheParameterGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5406,11 +5723,11 @@ export def "get-modify-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-subnet-group-name: string # The name for the cache subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters or hyphens. Example: mysubnetgroup
+  --cache-subnet-group-name: string # The name for the cache subnet group. This value is stored as a lowercase string. Constraints: Must contain no more than 255 alphanumeric characters or hyphens. Example: mysubnetgroup (required)
   --cache-subnet-group-description: string # A description of the cache subnet group.
   --subnet-ids: list # The EC2 subnet IDs for the cache subnet group.
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5418,15 +5735,18 @@ export def "get-modify-cache-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
+]: nothing -> oneof<record<CacheSubnetGroup: record<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list<record>, ARN: string, SupportedNetworkTypes: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSubnetGroupName' missing: pass --cache-subnet-group-name" } }
+  let action = ($action | default "ModifyCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSubnetGroupDescription" $cache_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5455,8 +5775,8 @@ export def "post-modify-cache-subnet-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-51
-  --version: string@version-completer
+  --action: string@action-completer-51 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5465,18 +5785,20 @@ export def "post-modify-cache-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
+]: any -> oneof<record<CacheSubnetGroup: record<CacheSubnetGroupName: string, CacheSubnetGroupDescription: string, VpcId: string, Subnets: list<record>, ARN: string, SupportedNetworkTypes: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyCacheSubnetGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5505,15 +5827,15 @@ export def "get-modify-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --apply-immediately: oneof<nothing, bool> # This parameter causes the modifications in this request and any pending modifications to be applied, asynchronously and as soon as possible. Modifications to Global Replication Groups cannot be requested to be applied in PreferredMaintenceWindow.
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --apply-immediately: oneof<nothing, bool> # This parameter causes the modifications in this request and any pending modifications to be applied, asynchronously and as soon as possible. Modifications to Global Replication Groups cannot be requested to be applied in PreferredMaintenceWindow. (required)
   --cache-node-type: string # A valid cache node type that you want to scale this Global datastore to.
   --engine-version: string # The upgraded version of the cache engine to be run on the clusters in the Global datastore.
   --cache-parameter-group-name: string # The name of the cache parameter group to use with the Global datastore. It must be compatible with the major engine version used by the Global datastore.
   --global-replication-group-description: string # A description of the Global datastore
   --automatic-failover-enabled: oneof<nothing, bool> # Determines whether a read replica is automatically promoted to read/write primary if the existing primary encounters a failure.
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5521,15 +5843,19 @@ export def "get-modify-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "ModifyGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "GlobalReplicationGroupDescription" $global_replication_group_description "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5558,8 +5884,8 @@ export def "post-modify-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-52
-  --version: string@version-completer
+  --action: string@action-completer-52 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5568,18 +5894,20 @@ export def "post-modify-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5608,7 +5936,7 @@ export def "get-modify-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The identifier of the replication group to modify.
+  --replication-group-id: string # The identifier of the replication group to modify. (required)
   --replication-group-description: string # A description for the replication group. Maximum length is 255 characters.
   --primary-cluster-id: string # For replication groups with a single primary, if this parameter is specified, ElastiCache promotes the specified cluster in the specified replication group to the primary role. The nodes of all other clusters in the replication group are read replicas.
   --snapshotting-cluster-id: string # The cluster ID that is used as the daily snapshot source for the replication group. This parameter cannot be set for Redis (cluster mode enabled) replication groups.
@@ -5636,8 +5964,8 @@ export def "get-modify-replication-group" [
   --ip-discovery: string@ip-discovery-completer # The network type you choose when modifying a cluster, either ipv4 | ipv6. IPv6 is supported for workloads using Redis engine version 6.2 onward or Memcached engine version 1.6.6 on all instances built on the Nitro system (https://aws.amazon.com/ec2/nitro/).
   --transit-encryption-enabled: oneof<nothing, bool> # A flag that enables in-transit encryption when set to true. If you are enabling in-transit encryption for an existing cluster, you must also set TransitEncryptionMode to preferred.
   --transit-encryption-mode: string@transit-encryption-mode-completer # A setting that allows you to migrate your clients to use in-transit encryption, with no downtime. You must set TransitEncryptionEnabled to true, for your existing cluster, and set TransitEncryptionMode to preferred in the same request to allow both encrypted and unencrypted connections at the same time. Once you migrate all your Redis clients to use encrypted connections you can set the value to required to allow encrypted connections only. Setting TransitEncryptionMode to required is a two-step process that requires you to first set the TransitEncryptionMode to preferred first, after that you can set TransitEncryptionMode to required.
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5645,15 +5973,18 @@ export def "get-modify-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  let action = ($action | default "ModifyReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupDescription" $replication_group_description "scalar") (serialize-qp "PrimaryClusterId" $primary_cluster_id "scalar") (serialize-qp "SnapshottingClusterId" $snapshotting_cluster_id "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "MultiAZEnabled" $multi_az_enabled "scalar") (serialize-qp "NodeGroupId" $node_group_id "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "NotificationTopicStatus" $notification_topic_status "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "AuthTokenUpdateStrategy" $auth_token_update_strategy "scalar") (serialize-qp "UserGroupIdsToAdd" $user_group_ids_to_add "multi") (serialize-qp "UserGroupIdsToRemove" $user_group_ids_to_remove "multi") (serialize-qp "RemoveUserGroups" $remove_user_groups "scalar") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "TransitEncryptionMode" $transit_encryption_mode "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5682,8 +6013,8 @@ export def "post-modify-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-53
-  --version: string@version-completer
+  --action: string@action-completer-53 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5692,18 +6023,20 @@ export def "post-modify-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5732,14 +6065,14 @@ export def "get-modify-replication-group-shard-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The name of the Redis (cluster mode enabled) cluster (replication group) on which the shards are to be configured.
-  --node-group-count: int # The number of node groups (shards) that results from the modification of the shard configuration.
-  --apply-immediately: oneof<nothing, bool> # Indicates that the shard reconfiguration process begins immediately. At present, the only permitted value for this parameter is true. Value: true
+  --replication-group-id: string # The name of the Redis (cluster mode enabled) cluster (replication group) on which the shards are to be configured. (required)
+  --node-group-count: int # The number of node groups (shards) that results from the modification of the shard configuration. (required)
+  --apply-immediately: oneof<nothing, bool> # Indicates that the shard reconfiguration process begins immediately. At present, the only permitted value for this parameter is true. Value: true (required)
   --resharding-configuration: list # Specifies the preferred availability zones for each node group in the cluster. If the value of NodeGroupCount is greater than the current number of node groups (shards), you can use this parameter to specify the preferred availability zones of the cluster's shards. If you omit this parameter ElastiCache selects availability zones for you. You can specify this parameter only if the value of NodeGroupCount is greater than the current number of node groups (shards).
   --node-groups-to-remove: list # If the value of NodeGroupCount is less than the current number of node groups (shards), then either NodeGroupsToRemove or NodeGroupsToRetain is required. NodeGroupsToRemove is a list of NodeGroupIds to remove from the cluster. ElastiCache for Redis will attempt to remove all node groups listed by NodeGroupsToRemove from the cluster.
   --node-groups-to-retain: list # If the value of NodeGroupCount is less than the current number of node groups (shards), then either NodeGroupsToRemove or NodeGroupsToRetain is required. NodeGroupsToRetain is a list of NodeGroupIds to retain in the cluster. ElastiCache for Redis will attempt to remove all node groups except those listed by NodeGroupsToRetain from the cluster.
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5747,15 +6080,20 @@ export def "get-modify-replication-group-shard-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($node_group_count == null) { error make --unspanned { msg: "required query parameter 'NodeGroupCount' missing: pass --node-group-count" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "ModifyReplicationGroupShardConfiguration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "ReshardingConfiguration" $resharding_configuration "multi") (serialize-qp "NodeGroupsToRemove" $node_groups_to_remove "multi") (serialize-qp "NodeGroupsToRetain" $node_groups_to_retain "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5784,8 +6122,8 @@ export def "post-modify-replication-group-shard-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-54
-  --version: string@version-completer
+  --action: string@action-completer-54 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5794,18 +6132,20 @@ export def "post-modify-replication-group-shard-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyReplicationGroupShardConfiguration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5834,14 +6174,14 @@ export def "get-modify-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-id: string # The ID of the user.
+  --user-id: string # The ID of the user. (required)
   --access-string: string # Access permissions string used for this user.
   --append-access-string: string # Adds additional user permissions to the access string.
   --passwords: list # The passwords belonging to the user. You are allowed up to two.
   --no-password-required: oneof<nothing, bool> # Indicates no password is required for the user.
   --authentication-mode: record # Specifies how to authenticate the user.
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5849,15 +6189,18 @@ export def "get-modify-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: nothing -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id == null) { error make --unspanned { msg: "required query parameter 'UserId' missing: pass --user-id" } }
+  let action = ($action | default "ModifyUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccessString" $access_string "scalar") (serialize-qp "AppendAccessString" $append_access_string "scalar") (serialize-qp "Passwords" $passwords "multi") (serialize-qp "NoPasswordRequired" $no_password_required "scalar") (serialize-qp "AuthenticationMode" $authentication_mode "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5886,8 +6229,8 @@ export def "post-modify-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-55
-  --version: string@version-completer
+  --action: string@action-completer-55 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5896,18 +6239,20 @@ export def "post-modify-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
+]: any -> oneof<record<UserId: string, UserName: string, Status: string, Engine: string, MinimumEngineVersion: string, AccessString: string, UserGroupIds: list<string>, Authentication: record<Type: string, PasswordCount: int>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyUser")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5936,11 +6281,11 @@ export def "get-modify-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-group-id: string # The ID of the user group.
+  --user-group-id: string # The ID of the user group. (required)
   --user-ids-to-add: list # The list of user IDs to add to the user group.
   --user-ids-to-remove: list # The list of user IDs to remove from the user group.
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5948,15 +6293,18 @@ export def "get-modify-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: nothing -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_group_id == null) { error make --unspanned { msg: "required query parameter 'UserGroupId' missing: pass --user-group-id" } }
+  let action = ($action | default "ModifyUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "UserIdsToAdd" $user_ids_to_add "multi") (serialize-qp "UserIdsToRemove" $user_ids_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5985,8 +6333,8 @@ export def "post-modify-user-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-56
-  --version: string@version-completer
+  --action: string@action-completer-56 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -5995,18 +6343,20 @@ export def "post-modify-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
+]: any -> oneof<record<UserGroupId: string, Status: string, Engine: string, UserIds: list<string>, MinimumEngineVersion: string, PendingChanges: record<UserIdsToRemove: list<string>, UserIdsToAdd: list<string>>, ReplicationGroups: list<string>, ARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ModifyUserGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6035,12 +6385,12 @@ export def "get-purchase-reserved-cache-nodes-offering" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --reserved-cache-nodes-offering-id: string # The ID of the reserved cache node offering to purchase. Example: 438012d3-4052-4cc7-b2e3-8d3372e0e706
+  --reserved-cache-nodes-offering-id: string # The ID of the reserved cache node offering to purchase. Example: 438012d3-4052-4cc7-b2e3-8d3372e0e706 (required)
   --reserved-cache-node-id: string # A customer-specified identifier to track this reservation. The Reserved Cache Node ID is an unique customer-specified identifier to track this reservation. If this parameter is not specified, ElastiCache automatically generates an identifier for the reservation. Example: myreservationID
   --cache-node-count: int # The number of cache node instances to reserve. Default: 1
   --tags: list # A list of tags to be added to this resource. A tag is a key-value pair. A tag key must be accompanied by a tag value, although null is accepted.
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6048,15 +6398,18 @@ export def "get-purchase-reserved-cache-nodes-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReservedCacheNode: record<ReservedCacheNodeId: record, ReservedCacheNodesOfferingId: record, CacheNodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CacheNodeCount: record, ProductDescription: record, OfferingType: record, State: record, RecurringCharges: record, ReservationARN: record>> {
+]: nothing -> oneof<record<ReservedCacheNode: record<ReservedCacheNodeId: string, ReservedCacheNodesOfferingId: string, CacheNodeType: string, StartTime: string, Duration: int, FixedPrice: float, UsagePrice: float, CacheNodeCount: int, ProductDescription: string, OfferingType: string, State: string, RecurringCharges: list<record>, ReservationARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($reserved_cache_nodes_offering_id == null) { error make --unspanned { msg: "required query parameter 'ReservedCacheNodesOfferingId' missing: pass --reserved-cache-nodes-offering-id" } }
+  let action = ($action | default "PurchaseReservedCacheNodesOffering")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "ReservedCacheNodeId" $reserved_cache_node_id "scalar") (serialize-qp "CacheNodeCount" $cache_node_count "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6085,8 +6438,8 @@ export def "post-purchase-reserved-cache-nodes-offering" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-57
-  --version: string@version-completer
+  --action: string@action-completer-57 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6095,18 +6448,20 @@ export def "post-purchase-reserved-cache-nodes-offering" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReservedCacheNode: record<ReservedCacheNodeId: record, ReservedCacheNodesOfferingId: record, CacheNodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CacheNodeCount: record, ProductDescription: record, OfferingType: record, State: record, RecurringCharges: record, ReservationARN: record>> {
+]: any -> oneof<record<ReservedCacheNode: record<ReservedCacheNodeId: string, ReservedCacheNodesOfferingId: string, CacheNodeType: string, StartTime: string, Duration: int, FixedPrice: float, UsagePrice: float, CacheNodeCount: int, ProductDescription: string, OfferingType: string, State: string, RecurringCharges: list<record>, ReservationARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "PurchaseReservedCacheNodesOffering")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6135,10 +6490,10 @@ export def "get-rebalance-slots-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --global-replication-group-id: string # The name of the Global datastore
-  --apply-immediately: oneof<nothing, bool> # If True, redistribution is applied immediately.
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --global-replication-group-id: string # The name of the Global datastore (required)
+  --apply-immediately: oneof<nothing, bool> # If True, redistribution is applied immediately. (required)
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6146,15 +6501,19 @@ export def "get-rebalance-slots-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: nothing -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($global_replication_group_id == null) { error make --unspanned { msg: "required query parameter 'GlobalReplicationGroupId' missing: pass --global-replication-group-id" } }
+  if ($apply_immediately == null) { error make --unspanned { msg: "required query parameter 'ApplyImmediately' missing: pass --apply-immediately" } }
+  let action = ($action | default "RebalanceSlotsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6183,8 +6542,8 @@ export def "post-rebalance-slots-in-global-replication-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-58
-  --version: string@version-completer
+  --action: string@action-completer-58 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6193,18 +6552,20 @@ export def "post-rebalance-slots-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
+]: any -> oneof<record<GlobalReplicationGroup: record<GlobalReplicationGroupId: string, GlobalReplicationGroupDescription: string, Status: string, CacheNodeType: string, Engine: string, EngineVersion: string, Members: list<record>, ClusterEnabled: bool, GlobalNodeGroups: list<record>, AuthTokenEnabled: bool, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RebalanceSlotsInGlobalReplicationGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6233,10 +6594,10 @@ export def "get-reboot-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-cluster-id: string # The cluster identifier. This parameter is stored as a lowercase string.
-  --cache-node-ids-to-reboot: list # A list of cache node IDs to reboot. A node ID is a numeric identifier (0001, 0002, etc.). To reboot an entire cluster, specify all of the cache node IDs.
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --cache-cluster-id: string # The cluster identifier. This parameter is stored as a lowercase string. (required)
+  --cache-node-ids-to-reboot: list # A list of cache node IDs to reboot. A node ID is a numeric identifier (0001, 0002, etc.). To reboot an entire cluster, specify all of the cache node IDs. (required)
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6244,15 +6605,19 @@ export def "get-reboot-cache-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_cluster_id == null) { error make --unspanned { msg: "required query parameter 'CacheClusterId' missing: pass --cache-cluster-id" } }
+  if ($cache_node_ids_to_reboot == null) { error make --unspanned { msg: "required query parameter 'CacheNodeIdsToReboot' missing: pass --cache-node-ids-to-reboot" } }
+  let action = ($action | default "RebootCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "CacheNodeIdsToReboot" $cache_node_ids_to_reboot "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6281,8 +6646,8 @@ export def "post-reboot-cache-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-59
-  --version: string@version-completer
+  --action: string@action-completer-59 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6291,18 +6656,20 @@ export def "post-reboot-cache-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<CacheCluster: record<CacheClusterId: string, ConfigurationEndpoint: record<Address: string, Port: int>, ClientDownloadLandingPage: string, CacheNodeType: string, Engine: string, EngineVersion: string, CacheClusterStatus: string, NumCacheNodes: int, PreferredAvailabilityZone: string, PreferredOutpostArn: string, CacheClusterCreateTime: string, PreferredMaintenanceWindow: string, PendingModifiedValues: record<NumCacheNodes: int, CacheNodeIdsToRemove: list, EngineVersion: string, CacheNodeType: string, AuthTokenStatus: string, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, NotificationConfiguration: record<TopicArn: string, TopicStatus: string>, CacheSecurityGroups: list<record>, CacheParameterGroup: record<CacheParameterGroupName: string, ParameterApplyStatus: string, CacheNodeIdsToReboot: list>, CacheSubnetGroupName: string, CacheNodes: list<record>, AutoMinorVersionUpgrade: bool, SecurityGroups: list<record>, ReplicationGroupId: string, SnapshotRetentionLimit: int, SnapshotWindow: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, ARN: string, ReplicationGroupLogDeliveryEnabled: bool, LogDeliveryConfigurations: list<record>, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RebootCacheCluster")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6331,10 +6698,10 @@ export def "get-remove-tags-from-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resource-name: string # The Amazon Resource Name (ARN) of the resource from which you want the tags removed, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html).
-  --tag-keys: list # A list of TagKeys identifying the tags you want removed from the named resource.
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --resource-name: string # The Amazon Resource Name (ARN) of the resource from which you want the tags removed, for example arn:aws:elasticache:us-west-2:0123456789:cluster:myCluster or arn:aws:elasticache:us-west-2:0123456789:snapshot:mySnapshot. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html). (required)
+  --tag-keys: list # A list of TagKeys identifying the tags you want removed from the named resource. (required)
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6342,15 +6709,19 @@ export def "get-remove-tags-from-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: record> {
+]: nothing -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'TagKeys' missing: pass --tag-keys" } }
+  let action = ($action | default "RemoveTagsFromResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6379,8 +6750,8 @@ export def "post-remove-tags-from-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-60
-  --version: string@version-completer
+  --action: string@action-completer-60 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6389,18 +6760,20 @@ export def "post-remove-tags-from-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagList: record> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RemoveTagsFromResource")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6429,11 +6802,11 @@ export def "get-reset-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-parameter-group-name: string # The name of the cache parameter group to reset.
+  --cache-parameter-group-name: string # The name of the cache parameter group to reset. (required)
   --reset-all-parameters: oneof<nothing, bool> # If true, all parameters in the cache parameter group are reset to their default values. If false, only the parameters listed by ParameterNameValues are reset to their default values. Valid values: true | false
   --parameter-name-values: list # An array of parameter names to reset to their default values. If ResetAllParameters is true, do not use ParameterNameValues. If ResetAllParameters is false, you must specify the name of at least one parameter to reset.
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6441,15 +6814,18 @@ export def "get-reset-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheParameterGroupName: record> {
+]: nothing -> oneof<record<CacheParameterGroupName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheParameterGroupName' missing: pass --cache-parameter-group-name" } }
+  let action = ($action | default "ResetCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "ParameterNameValues" $parameter_name_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6478,8 +6854,8 @@ export def "post-reset-cache-parameter-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-61
-  --version: string@version-completer
+  --action: string@action-completer-61 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6488,18 +6864,20 @@ export def "post-reset-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheParameterGroupName: record> {
+]: any -> oneof<record<CacheParameterGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "ResetCacheParameterGroup")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6528,11 +6906,11 @@ export def "get-revoke-cache-security-group-ingress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cache-security-group-name: string # The name of the cache security group to revoke ingress from.
-  --ec2-security-group-name: string # The name of the Amazon EC2 security group to revoke access from.
-  --ec2-security-group-owner-id: string # The Amazon account number of the Amazon EC2 security group owner. Note that this is not the same thing as an Amazon access key ID - you must provide a valid Amazon account number for this parameter.
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --cache-security-group-name: string # The name of the cache security group to revoke ingress from. (required)
+  --ec2-security-group-name: string # The name of the Amazon EC2 security group to revoke access from. (required)
+  --ec2-security-group-owner-id: string # The Amazon account number of the Amazon EC2 security group owner. Note that this is not the same thing as an Amazon access key ID - you must provide a valid Amazon account number for this parameter. (required)
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6540,15 +6918,20 @@ export def "get-revoke-cache-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: nothing -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cache_security_group_name == null) { error make --unspanned { msg: "required query parameter 'CacheSecurityGroupName' missing: pass --cache-security-group-name" } }
+  if ($ec2_security_group_name == null) { error make --unspanned { msg: "required query parameter 'EC2SecurityGroupName' missing: pass --ec2-security-group-name" } }
+  if ($ec2_security_group_owner_id == null) { error make --unspanned { msg: "required query parameter 'EC2SecurityGroupOwnerId' missing: pass --ec2-security-group-owner-id" } }
+  let action = ($action | default "RevokeCacheSecurityGroupIngress")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6577,8 +6960,8 @@ export def "post-revoke-cache-security-group-ingress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-62
-  --version: string@version-completer
+  --action: string@action-completer-62 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6587,18 +6970,20 @@ export def "post-revoke-cache-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
+]: any -> oneof<record<CacheSecurityGroup: record<OwnerId: string, CacheSecurityGroupName: string, Description: string, EC2SecurityGroups: list<record>, ARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "RevokeCacheSecurityGroupIngress")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6627,10 +7012,10 @@ export def "get-start-migration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The ID of the replication group to which data should be migrated.
-  --customer-node-endpoint-list: list # List of endpoints from which data should be migrated. For Redis (cluster mode disabled), list should have only one element.
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --replication-group-id: string # The ID of the replication group to which data should be migrated. (required)
+  --customer-node-endpoint-list: list # List of endpoints from which data should be migrated. For Redis (cluster mode disabled), list should have only one element. (required)
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6638,15 +7023,19 @@ export def "get-start-migration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($customer_node_endpoint_list == null) { error make --unspanned { msg: "required query parameter 'CustomerNodeEndpointList' missing: pass --customer-node-endpoint-list" } }
+  let action = ($action | default "StartMigration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CustomerNodeEndpointList" $customer_node_endpoint_list "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6675,8 +7064,8 @@ export def "post-start-migration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-63
-  --version: string@version-completer
+  --action: string@action-completer-63 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6685,18 +7074,20 @@ export def "post-start-migration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "StartMigration")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6725,10 +7116,10 @@ export def "get-test-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replication-group-id: string # The name of the replication group (console: cluster) whose automatic failover is being tested by this operation.
-  --node-group-id: string # The name of the node group (called shard in the console) in this replication group on which automatic failover is to be tested. You may test automatic failover on up to 5 node groups in any rolling 24-hour period.
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --replication-group-id: string # The name of the replication group (console: cluster) whose automatic failover is being tested by this operation. (required)
+  --node-group-id: string # The name of the node group (called shard in the console) in this replication group on which automatic failover is to be tested. You may test automatic failover on up to 5 node groups in any rolling 24-hour period. (required)
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6736,15 +7127,19 @@ export def "get-test-failover" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: nothing -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($replication_group_id == null) { error make --unspanned { msg: "required query parameter 'ReplicationGroupId' missing: pass --replication-group-id" } }
+  if ($node_group_id == null) { error make --unspanned { msg: "required query parameter 'NodeGroupId' missing: pass --node-group-id" } }
+  let action = ($action | default "TestFailover")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NodeGroupId" $node_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6773,8 +7168,8 @@ export def "post-test-failover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --action: string@action-completer-64
-  --version: string@version-completer
+  --action: string@action-completer-64 # required
+  --version: string@version-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6783,18 +7178,20 @@ export def "post-test-failover" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
+]: any -> oneof<record<ReplicationGroup: record<ReplicationGroupId: string, Description: string, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: string, GlobalReplicationGroupMemberRole: string>, Status: string, PendingModifiedValues: record<PrimaryClusterId: string, AutomaticFailoverStatus: string, Resharding: record, AuthTokenStatus: string, UserGroups: record, LogDeliveryConfigurations: list, TransitEncryptionEnabled: bool, TransitEncryptionMode: string>, MemberClusters: list<string>, NodeGroups: list<record>, SnapshottingClusterId: string, AutomaticFailover: string, MultiAZ: string, ConfigurationEndpoint: record<Address: string, Port: int>, SnapshotRetentionLimit: int, SnapshotWindow: string, ClusterEnabled: bool, CacheNodeType: string, AuthTokenEnabled: bool, AuthTokenLastModifiedDate: string, TransitEncryptionEnabled: bool, AtRestEncryptionEnabled: bool, MemberClustersOutpostArns: list<string>, KmsKeyId: string, ARN: string, UserGroupIds: list<string>, LogDeliveryConfigurations: list<record>, ReplicationGroupCreateTime: string, DataTiering: string, AutoMinorVersionUpgrade: bool, NetworkType: string, IpDiscovery: string, TransitEncryptionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let action = ($action | default "TestFailover")
+  let version = ($version | default "2015-02-02")
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

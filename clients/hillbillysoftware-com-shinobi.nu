@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,7 +200,7 @@ export def "actor-get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Actors/Search/{accesstoken}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -217,9 +244,9 @@ export def "add-actor-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddActor" $auth.query)
   let req_body = {"AccessToken": $access_token, "Bio": $bio, "BirthYear": $birth_year, "DeathYear": $death_year, "Gender": $gender, "Name": $name, "PopularityIndex": $popularity_index, "ProfileImage": $profile_image} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -266,9 +293,9 @@ export def "add-tv-show-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/AddTVShow" $auth.query)
   let req_body = {"AccessToken": $access_token, "EpisodeCount": $episode_count, "EpisodeRuntime": $episode_runtime, "Genres": $genres, "ImdbID": $imdb_id, "PremierYear": $premier_year, "Seasons": $seasons, "ShowImage": $show_image, "ShowStatus": $show_status, "Synopsis": $synopsis, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -307,7 +334,7 @@ export def "aliases-by-id-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Aliases/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -346,7 +373,7 @@ export def "aliases-get" [
   if ($title | is-empty) { error make --unspanned { msg: "path parameter 'Title' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), title: (encode-path-segment $title)} | format pattern "/Aliases/ByName/{access_token}/{title}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -385,7 +412,7 @@ export def "awardsby-winner-get" [
   if ($nominee | is-empty) { error make --unspanned { msg: "path parameter 'Nominee' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), nominee: (encode-path-segment $nominee)} | format pattern "/Awards/ByWinner/{access_token}/{nominee}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -422,7 +449,7 @@ export def "awards-get" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'Year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/Awards/ByYear/{year}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "schedule-by-date-get" [
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'Country' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date), country: (encode-path-segment $country)} | format pattern "/Calendar/ByDate/{access_token}/{date}/{country}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -500,7 +527,7 @@ export def "calendar-countries-get" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Countries/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -537,7 +564,7 @@ export def "calendar-networks-get" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Networks/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -576,7 +603,7 @@ export def "calendar-show-seasons-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Calendar/Seasons/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -617,7 +644,7 @@ export def "calendarby-showname-season-get" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'Season' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), season: (encode-path-segment $season)} | format pattern "/Calendar/Show/Season/{access_token}/{name}/{season}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -658,7 +685,7 @@ export def "calendar-by-show-name-get" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'Year' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name), year: (encode-path-segment $year)} | format pattern "/Calendar/Show/{access_token}/{name}/{year}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -695,7 +722,7 @@ export def "calendar-today-get" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'AccessToken' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/Calendar/Today/{access_token}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -734,7 +761,7 @@ export def "actor-in-shows-get" [
   if ($actor | is-empty) { error make --unspanned { msg: "path parameter 'Actor' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ActorBySearch/{access_token}/{actor}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -773,7 +800,7 @@ export def "cast-by-actor-get" [
   if ($actor | is-empty) { error make --unspanned { msg: "path parameter 'Actor' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), actor: (encode-path-segment $actor)} | format pattern "/Cast/ByActor/{access_token}/{actor}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -812,7 +839,7 @@ export def "actors-in-tv-show-get" [
   if ($show_name | is-empty) { error make --unspanned { msg: "path parameter 'ShowName' must be non-empty" } }
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), show_name: (encode-path-segment $show_name)} | format pattern "/Cast/ByTVShow/{accesstoken}/{show_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -851,7 +878,7 @@ export def "crew-by-id-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Crew/ByID/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -890,7 +917,7 @@ export def "crew-by-person-get" [
   if ($person_name | is-empty) { error make --unspanned { msg: "path parameter 'PersonName' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), person_name: (encode-path-segment $person_name)} | format pattern "/Crew/ByPerson/{access_token}/{person_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -929,7 +956,7 @@ export def "crewby-showname-get" [
   if ($show_name | is-empty) { error make --unspanned { msg: "path parameter 'ShowName' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), show_name: (encode-path-segment $show_name)} | format pattern "/Crew/ByShowName/{access_token}/{show_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,7 +995,7 @@ export def "crew-get" [
   if ($phrase | is-empty) { error make --unspanned { msg: "path parameter 'Phrase' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Crew/Search/{access_token}/{phrase}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1007,7 +1034,7 @@ export def "episodes-by-id-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/ByID/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1048,7 +1075,7 @@ export def "episodes-by-season-get" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'Season' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/Episodes/BySeason/{access_token}/{id}/{season}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1087,7 +1114,7 @@ export def "episodes-get" [
   if ($showname | is-empty) { error make --unspanned { msg: "path parameter 'Showname' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), showname: (encode-path-segment $showname)} | format pattern "/Episodes/ByShowName/{access_token}/{showname}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,7 +1153,7 @@ export def "episodes-last-available-seasonby-name-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Episodes/LatestSeason/Show/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1165,7 +1192,7 @@ export def "episodes-last-available-season-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/LatestSeason/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1204,7 +1231,7 @@ export def "episodes-season-count-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), id: (encode-path-segment $id)} | format pattern "/Episodes/SeasonCount/{access_token}/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1243,7 +1270,7 @@ export def "get-imd-bid-get-async" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/GetIMDBid/ByID/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1282,7 +1309,7 @@ export def "images-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Images/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1323,7 +1350,7 @@ export def "image-search-get" [
   let qp = [(serialize-qp "Strictmatch" $strictmatch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), query: (encode-path-segment $query)} | format pattern "/Images/Search/{accesstoken}/{query}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1362,7 +1389,7 @@ export def "magnets-by-date-get-async" [
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'Date' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), date: (encode-path-segment $date)} | format pattern "/Magnets/ByDate/{access_token}/{date}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1401,7 +1428,7 @@ export def "magnets-byimdb-id-get-async" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Magnets/ByIMDB/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1440,7 +1467,7 @@ export def "magnets-movie-by-id-get-async" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Magnets/Search/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1479,7 +1506,7 @@ export def "tv-showsearch-get" [
   if ($tv_show | is-empty) { error make --unspanned { msg: "path parameter 'TVShow' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), tv_show: (encode-path-segment $tv_show)} | format pattern "/Magnets/TVShow/{access_token}/{tv_show}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1517,7 +1544,7 @@ export def "movie-id-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Movie/ByID/{accesstoken}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1556,7 +1583,7 @@ export def "movie-search-get-async" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Movie/Search/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1595,7 +1622,7 @@ export def "music-album-art-get" [
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Albums/Art/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1634,7 +1661,7 @@ export def "music-cd-covers-get" [
   if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'MBID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/CoverArt/{access_token}/{mbid}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1673,7 +1700,7 @@ export def "music-by-music-brainz-get" [
   if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'MBID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), mbid: (encode-path-segment $mbid)} | format pattern "/Music/Albums/MusicBrainzID/{access_token}/{mbid}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1712,7 +1739,7 @@ export def "music-albums-get" [
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Albums/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1751,7 +1778,7 @@ export def "music-cover-art-get" [
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Artist/Art/ID/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1790,7 +1817,7 @@ export def "music-cover-art-by-name-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Art/Name/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1829,7 +1856,7 @@ export def "music-artist-extended-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/Extended/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1868,7 +1895,7 @@ export def "music-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Artist/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1907,7 +1934,7 @@ export def "music-lyricsby-album-id-get" [
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Lyrics/AlbumID/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1946,7 +1973,7 @@ export def "music-lyrics-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Music/Lyrics/ByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1985,7 +2012,7 @@ export def "music-lyrics-by-song-get" [
   if ($song | is-empty) { error make --unspanned { msg: "path parameter 'Song' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), song: (encode-path-segment $song)} | format pattern "/Music/Lyrics/BySong/{access_token}/{song}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2024,7 +2051,7 @@ export def "music-tracks-get" [
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'AlbumID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), album_id: (encode-path-segment $album_id)} | format pattern "/Music/Tracks/{access_token}/{album_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2063,7 +2090,7 @@ export def "musi-videos-get" [
   if ($artist_id | is-empty) { error make --unspanned { msg: "path parameter 'ArtistID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), artist_id: (encode-path-segment $artist_id)} | format pattern "/Music/Videos/{access_token}/{artist_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2102,7 +2129,7 @@ export def "rating-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Rating/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2140,7 +2167,7 @@ export def "rating-by-name-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Rating/ByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2179,7 +2206,7 @@ export def "show-status-get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/Status/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2221,7 +2248,7 @@ export def "tv-show-id-get" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({accesstoken: (encode-path-segment $accesstoken), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/TV/ByID/{accesstoken}/{imdb_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2260,7 +2287,7 @@ export def "tv-show-by-name-get" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'Query' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), query: (encode-path-segment $query)} | format pattern "/TV/ByName/{access_token}/{query}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2299,7 +2326,7 @@ export def "trailersby-id-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/ByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2338,7 +2365,7 @@ export def "trailer-count-by-id-get" [
   if ($imdb_id | is-empty) { error make --unspanned { msg: "path parameter 'imdbID' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), imdb_id: (encode-path-segment $imdb_id)} | format pattern "/Trailers/CountByID/{access_token}/{imdb_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2377,7 +2404,7 @@ export def "trailer-count-by-name-get" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'Name' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), name: (encode-path-segment $name)} | format pattern "/Trailers/CountByName/{access_token}/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2416,7 +2443,7 @@ export def "trailer-search-get" [
   if ($phrase | is-empty) { error make --unspanned { msg: "path parameter 'Phrase' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token), phrase: (encode-path-segment $phrase)} | format pattern "/Trailers/Search/{access_token}/{phrase}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

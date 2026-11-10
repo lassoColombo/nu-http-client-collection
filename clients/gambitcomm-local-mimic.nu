@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -186,7 +213,7 @@ export def "access-add" [
   if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), agents: (encode-path-segment $agents), mask: (encode-path-segment $mask)} | format pattern "/mimic/access/add/{user}/{agents}/{mask}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -222,7 +249,7 @@ export def "access-del" [
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/mimic/access/del/{user}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -256,7 +283,7 @@ export def "access-get-acldb" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/acldb" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -290,7 +317,7 @@ export def "access-get-admindir" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/admindir" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -324,7 +351,7 @@ export def "access-get-adminuser" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/adminuser" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -358,7 +385,7 @@ export def "access-get-enabled" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/enabled" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -392,7 +419,7 @@ export def "access-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -428,7 +455,7 @@ export def "access-load" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mimic/access/load/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -464,7 +491,7 @@ export def "access-save" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mimic/access/save/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -500,7 +527,7 @@ export def "access-set-acldb" [
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mimic/access/set/acldb/{database_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -536,7 +563,7 @@ export def "access-set-enabled" [
   if ($enabled_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enabledOrNot' must be non-empty" } }
   let full_url = (build-url $base ({enabled_or_not: (encode-path-segment $enabled_or_not)} | format pattern "/mimic/access/set/enabled/{enabled_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -576,9 +603,9 @@ export def "new" [
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip)} | format pattern "/mimic/agent/{agent_num}/add/{ip}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -618,7 +645,7 @@ export def "from-add" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/from/add/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -658,7 +685,7 @@ export def "from-del" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/from/delete/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -694,7 +721,7 @@ export def "from-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/from/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -730,7 +757,7 @@ export def "get-changed" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/changed") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -766,7 +793,7 @@ export def "get-config-changed" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/config_changed") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -802,7 +829,7 @@ export def "get-delay" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/delay") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -838,7 +865,7 @@ export def "get-drops" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/drops") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -874,7 +901,7 @@ export def "get-host" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/host") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -910,7 +937,7 @@ export def "get-inform-timeout" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/inform_timeout") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -946,7 +973,7 @@ export def "get-interface" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/interface") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -982,7 +1009,7 @@ export def "get-mask" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/mask") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1018,7 +1045,7 @@ export def "get-mibs" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/mibs") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1054,7 +1081,7 @@ export def "get-number-starts" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/num_starts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1090,7 +1117,7 @@ export def "get-oiddir" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/oiddir") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,7 +1153,7 @@ export def "get-owner" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/owner") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1162,7 +1189,7 @@ export def "get-pdusize" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/pdusize") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1198,7 +1225,7 @@ export def "get-port" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/port") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1234,7 +1261,7 @@ export def "get-privdir" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/privdir") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1270,7 +1297,7 @@ export def "get-protocols" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/protocol") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1306,7 +1333,7 @@ export def "get-read-community" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/read") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1342,7 +1369,7 @@ export def "get-scen" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/scen") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1378,7 +1405,7 @@ export def "get-sim" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/sim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1414,7 +1441,7 @@ export def "get-starttime" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1450,7 +1477,7 @@ export def "get-agent-state" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1486,7 +1513,7 @@ export def "get-state-changed" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/state_changed") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1522,7 +1549,7 @@ export def "get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1558,7 +1585,7 @@ export def "get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1594,7 +1621,7 @@ export def "get-validate" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/validate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1630,7 +1657,7 @@ export def "get-write-community" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/write") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1666,7 +1693,7 @@ export def "halt" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/halt") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1710,7 +1737,7 @@ export def "add-ipalias" [
   if ($interface | is-empty) { error make --unspanned { msg: "path parameter 'interface' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port), mask: (encode-path-segment $mask), interface: (encode-path-segment $interface)} | format pattern "/mimic/agent/{agent_num}/ipalias/add/{ip}/{port}/{mask}/{interface}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1750,7 +1777,7 @@ export def "del-ipalias" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/delete/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1786,7 +1813,7 @@ export def "list-ipaliases" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/ipalias/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1826,7 +1853,7 @@ export def "start-ipalias" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/start/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1866,7 +1893,7 @@ export def "status-ipalias" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/status/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1906,7 +1933,7 @@ export def "stop-ipalias" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/stop/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1942,7 +1969,7 @@ export def "pause-now" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/pause") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1978,7 +2005,7 @@ export def "protocol-coap-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2014,7 +2041,7 @@ export def "protocol-coap-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2050,7 +2077,7 @@ export def "protocol-coap-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2086,7 +2113,7 @@ export def "protocol-coap-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2126,7 +2153,7 @@ export def "protocol-coap-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2164,7 +2191,7 @@ export def "protocol-coap-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2200,7 +2227,7 @@ export def "protocol-dhcp-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2236,7 +2263,7 @@ export def "protocol-dhcp-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2272,7 +2299,7 @@ export def "protocol-dhcp-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2308,7 +2335,7 @@ export def "protocol-dhcp-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2344,7 +2371,7 @@ export def "protocol-dhcp-params" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/params") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2384,7 +2411,7 @@ export def "protocol-dhcp-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2422,7 +2449,7 @@ export def "protocol-dhcp-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2458,7 +2485,7 @@ export def "protocol-ipmi-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2494,7 +2521,7 @@ export def "protocol-ipmi-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2530,7 +2557,7 @@ export def "protocol-ipmi-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2566,7 +2593,7 @@ export def "protocol-ipmi-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2604,7 +2631,7 @@ export def "protocol-ipmi-get-attr" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/{attr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2644,7 +2671,7 @@ export def "protocol-ipmi-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2682,7 +2709,7 @@ export def "protocol-ipmi-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2722,7 +2749,7 @@ export def "protocol-ipmi-set-attr" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/{attr}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2758,7 +2785,7 @@ export def "protocol-mqtt-client-get-protstate" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/protstate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2794,7 +2821,7 @@ export def "protocol-mqtt-client-get-state" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2830,7 +2857,7 @@ export def "protocol-mqtt-client-message-card" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/card") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2870,7 +2897,7 @@ export def "protocol-mqtt-client-message-get" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg_num: (encode-path-segment $msg_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/get/{msg_num}/{attr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2912,7 +2939,7 @@ export def "protocol-mqtt-client-message-set" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg_num: (encode-path-segment $msg_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/set/{msg_num}/{attr}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2950,7 +2977,7 @@ export def "protocol-mqtt-client-resubscribe" [
   if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/resubscribe/{sub_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2986,7 +3013,7 @@ export def "protocol-mqtt-client-runtime-abort" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/abort") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3022,7 +3049,7 @@ export def "protocol-mqtt-client-runtime-connect" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/connect") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3058,7 +3085,7 @@ export def "protocol-mqtt-client-runtime-disconnect" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/disconnect") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3096,7 +3123,7 @@ export def "protocol-mqtt-client-set-broker" [
   if ($broker_addr | is-empty) { error make --unspanned { msg: "path parameter 'brokerAddr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), broker_addr: (encode-path-segment $broker_addr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/broker/{broker_addr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3134,7 +3161,7 @@ export def "protocol-mqtt-client-set-cleansession" [
   if ($clean_or_not | is-empty) { error make --unspanned { msg: "path parameter 'cleanOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), clean_or_not: (encode-path-segment $clean_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/cleansession/{clean_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3172,7 +3199,7 @@ export def "protocol-mqtt-client-set-clientid" [
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), client_id: (encode-path-segment $client_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/clientid/{client_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3210,7 +3237,7 @@ export def "protocol-mqtt-client-set-keepalive" [
   if ($alive_time | is-empty) { error make --unspanned { msg: "path parameter 'aliveTime' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), alive_time: (encode-path-segment $alive_time)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/keepalive/{alive_time}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3248,7 +3275,7 @@ export def "protocol-mqtt-client-set-on-disconnect" [
   if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), action: (encode-path-segment $action)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/on_disconnect/{action}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3286,7 +3313,7 @@ export def "protocol-mqtt-client-set-password" [
   if ($password | is-empty) { error make --unspanned { msg: "path parameter 'password' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), password: (encode-path-segment $password)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/password/{password}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3324,7 +3351,7 @@ export def "protocol-mqtt-client-set-port" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/port/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3362,7 +3389,7 @@ export def "protocol-mqtt-client-set-username" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), username: (encode-path-segment $username)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/username/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3400,7 +3427,7 @@ export def "protocol-mqtt-client-set-willmsg" [
   if ($msg | is-empty) { error make --unspanned { msg: "path parameter 'msg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg: (encode-path-segment $msg)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willmsg/{msg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3438,7 +3465,7 @@ export def "protocol-mqtt-client-set-willqos" [
   if ($qos | is-empty) { error make --unspanned { msg: "path parameter 'qos' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), qos: (encode-path-segment $qos)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willqos/{qos}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3476,7 +3503,7 @@ export def "protocol-mqtt-client-set-willretain" [
   if ($retain | is-empty) { error make --unspanned { msg: "path parameter 'retain' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), retain: (encode-path-segment $retain)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willretain/{retain}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3514,7 +3541,7 @@ export def "protocol-mqtt-client-set-willtopic" [
   if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), topic: (encode-path-segment $topic)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willtopic/{topic}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3550,7 +3577,7 @@ export def "protocol-mqtt-client-subscribe-card" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/card") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3590,7 +3617,7 @@ export def "protocol-mqtt-client-subscribe-get" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/get/{sub_num}/{attr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3632,7 +3659,7 @@ export def "protocol-mqtt-client-subscribe-set" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/set/{sub_num}/{attr}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3670,7 +3697,7 @@ export def "protocol-mqtt-client-unsubscribe" [
   if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/unsubscribe/{sub_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3706,7 +3733,7 @@ export def "protocol-mqtt-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3742,7 +3769,7 @@ export def "protocol-mqtt-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3778,7 +3805,7 @@ export def "protocol-mqtt-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3814,7 +3841,7 @@ export def "protocol-mqtt-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3854,7 +3881,7 @@ export def "protocol-mqtt-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3892,7 +3919,7 @@ export def "protocol-mqtt-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3930,7 +3957,7 @@ export def "protocol-netflow-change-dfs" [
   if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interval: (encode-path-segment $interval)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/dfs_interval/{interval}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3968,7 +3995,7 @@ export def "protocol-netflow-change-tfs" [
   if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interval: (encode-path-segment $interval)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/tfs_interval/{interval}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4012,7 +4039,7 @@ export def "protocol-netflow-change-attr" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), flowset_uid: (encode-path-segment $flowset_uid), field_num: (encode-path-segment $field_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/{flowset_uid}/{field_num}/{attr}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4048,7 +4075,7 @@ export def "protocol-netflow-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4084,7 +4111,7 @@ export def "protocol-netflow-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4120,7 +4147,7 @@ export def "protocol-netflow-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4156,7 +4183,7 @@ export def "protocol-netflow-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4192,7 +4219,7 @@ export def "protocol-netflow-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4228,7 +4255,7 @@ export def "protocol-netflow-halt" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/halt") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4264,7 +4291,7 @@ export def "protocol-netflow-reload" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/reload") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4300,7 +4327,7 @@ export def "protocol-netflow-resume" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/resume") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4338,7 +4365,7 @@ export def "protocol-netflow-set-collector" [
   if ($collector_ip | is-empty) { error make --unspanned { msg: "path parameter 'collectorIP' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), collector_ip: (encode-path-segment $collector_ip)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/collector/{collector_ip}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4378,7 +4405,7 @@ export def "protocol-netflow-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4416,7 +4443,7 @@ export def "protocol-netflow-set-file-name" [
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), file_name: (encode-path-segment $file_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/filename/{file_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4454,7 +4481,7 @@ export def "protocol-netflow-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4490,7 +4517,7 @@ export def "protocol-proxy-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4526,7 +4553,7 @@ export def "protocol-proxy-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4562,7 +4589,7 @@ export def "protocol-proxy-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4598,7 +4625,7 @@ export def "protocol-proxy-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4640,7 +4667,7 @@ export def "protocol-proxy-port-add" [
   if ($target_port | is-empty) { error make --unspanned { msg: "path parameter 'targetPort' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port), target: (encode-path-segment $target), target_port: (encode-path-segment $target_port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/add/{port}/{target}/{target_port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4678,7 +4705,7 @@ export def "protocol-proxy-port-isstarted" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/isStarted/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4714,7 +4741,7 @@ export def "protocol-proxy-port-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4752,7 +4779,7 @@ export def "protocol-proxy-port-remove" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/remove/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4790,7 +4817,7 @@ export def "protocol-proxy-port-start" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/start/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4828,7 +4855,7 @@ export def "protocol-proxy-port-stop" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/stop/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4868,7 +4895,7 @@ export def "protocol-proxy-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4906,7 +4933,7 @@ export def "protocol-proxy-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4942,7 +4969,7 @@ export def "protocol-sflow-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4978,7 +5005,7 @@ export def "protocol-sflow-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5014,7 +5041,7 @@ export def "protocol-sflow-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5050,7 +5077,7 @@ export def "protocol-sflow-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5086,7 +5113,7 @@ export def "protocol-sflow-halt" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/halt") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5122,7 +5149,7 @@ export def "protocol-sflow-reload" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/reload") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5158,7 +5185,7 @@ export def "protocol-sflow-resume" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/resume") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5198,7 +5225,7 @@ export def "protocol-sflow-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5236,7 +5263,7 @@ export def "protocol-sflow-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5272,7 +5299,7 @@ export def "protocol-snmptcp-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5308,7 +5335,7 @@ export def "protocol-snmptcp-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5344,7 +5371,7 @@ export def "protocol-snmptcp-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5380,7 +5407,7 @@ export def "protocol-snmptcp-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5420,7 +5447,7 @@ export def "protocol-snmptcp-ipalias-disable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/disable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5460,7 +5487,7 @@ export def "protocol-snmptcp-ipalias-enable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/enable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5500,7 +5527,7 @@ export def "protocol-snmptcp-ipalias-isenabled" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/isenabled/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5536,7 +5563,7 @@ export def "protocol-snmptcp-ipalias-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5576,7 +5603,7 @@ export def "protocol-snmptcp-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5614,7 +5641,7 @@ export def "protocol-snmptcp-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5666,7 +5693,7 @@ export def "protocol-snmpv3-access-add" [
   if ($notify_view | is-empty) { error make --unspanned { msg: "path parameter 'notifyView' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name), prefix: (encode-path-segment $prefix), security_model: (encode-path-segment $security_model), security_level: (encode-path-segment $security_level), context_match: (encode-path-segment $context_match), read_view: (encode-path-segment $read_view), write_view: (encode-path-segment $write_view), notify_view: (encode-path-segment $notify_view)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/add/{group_name}/{prefix}/{security_model}/{security_level}/{context_match}/{read_view}/{write_view}/{notify_view}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5702,7 +5729,7 @@ export def "protocol-snmpv3-access-clear" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/clear") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5740,7 +5767,7 @@ export def "protocol-snmpv3-access-del" [
   if ($access_name | is-empty) { error make --unspanned { msg: "path parameter 'accessName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), access_name: (encode-path-segment $access_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/del/{access_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5776,7 +5803,7 @@ export def "protocol-snmpv3-access-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5812,7 +5839,7 @@ export def "protocol-snmpv3-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5848,7 +5875,7 @@ export def "protocol-snmpv3-get-context-engineid" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/context_engineid") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5884,7 +5911,7 @@ export def "protocol-snmpv3-get-engineboots" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineboots") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5920,7 +5947,7 @@ export def "protocol-snmpv3-get-engineid" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineid") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5956,7 +5983,7 @@ export def "protocol-snmpv3-get-enginetime" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/enginetime") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5998,7 +6025,7 @@ export def "protocol-snmpv3-group-add" [
   if ($security_name | is-empty) { error make --unspanned { msg: "path parameter 'securityName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name), security_model: (encode-path-segment $security_model), security_name: (encode-path-segment $security_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/add/{group_name}/{security_model}/{security_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6034,7 +6061,7 @@ export def "protocol-snmpv3-group-clear" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/clear") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6072,7 +6099,7 @@ export def "protocol-snmpv3-group-del" [
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/del/{group_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6108,7 +6135,7 @@ export def "protocol-snmpv3-group-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6148,7 +6175,7 @@ export def "protocol-snmpv3-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), parameter: (encode-path-segment $parameter), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/set/config/{parameter}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6196,7 +6223,7 @@ export def "protocol-snmpv3-user-add" [
   if ($priv_key | is-empty) { error make --unspanned { msg: "path parameter 'privKey' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), user_name: (encode-path-segment $user_name), security_name: (encode-path-segment $security_name), auth_protocol: (encode-path-segment $auth_protocol), auth_key: (encode-path-segment $auth_key), priv_protocol: (encode-path-segment $priv_protocol), priv_key: (encode-path-segment $priv_key)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/add/{user_name}/{security_name}/{auth_protocol}/{auth_key}/{priv_protocol}/{priv_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6232,7 +6259,7 @@ export def "protocol-snmpv3-user-clear" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/clear") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6270,7 +6297,7 @@ export def "protocol-snmpv3-user-del" [
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), user_name: (encode-path-segment $user_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/del/{user_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6306,7 +6333,7 @@ export def "protocol-snmpv3-user-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6342,7 +6369,7 @@ export def "protocol-snmpv3-usm-save" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/save") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6380,7 +6407,7 @@ export def "protocol-snmpv3-usm-saveas" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), filename: (encode-path-segment $filename)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/saveas/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6416,7 +6443,7 @@ export def "protocol-snmpv3-vacm-save" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/save") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6454,7 +6481,7 @@ export def "protocol-snmpv3-vacm-saveas" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), filename: (encode-path-segment $filename)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/saveas/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6498,7 +6525,7 @@ export def "protocol-snmpv3-view-add" [
   if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), view_name: (encode-path-segment $view_name), view_type: (encode-path-segment $view_type), subtree: (encode-path-segment $subtree), mask: (encode-path-segment $mask)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/add/{view_name}/{view_type}/{subtree}/{mask}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6534,7 +6561,7 @@ export def "protocol-snmpv3-view-clear" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/clear") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6572,7 +6599,7 @@ export def "protocol-snmpv3-view-del" [
   if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), view_name: (encode-path-segment $view_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/del/{view_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6608,7 +6635,7 @@ export def "protocol-snmpv3-view-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6644,7 +6671,7 @@ export def "protocol-ssh-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6680,7 +6707,7 @@ export def "protocol-ssh-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6716,7 +6743,7 @@ export def "protocol-ssh-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6752,7 +6779,7 @@ export def "protocol-ssh-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6792,7 +6819,7 @@ export def "protocol-ssh-ipalias-disable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/disable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6832,7 +6859,7 @@ export def "protocol-ssh-ipalias-enable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/enable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6872,7 +6899,7 @@ export def "protocol-ssh-ipalias-isenabled" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/isenabled/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6908,7 +6935,7 @@ export def "protocol-ssh-ipalias-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6948,7 +6975,7 @@ export def "protocol-ssh-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6986,7 +7013,7 @@ export def "protocol-ssh-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7022,7 +7049,7 @@ export def "protocol-syslog-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7058,7 +7085,7 @@ export def "protocol-syslog-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7094,7 +7121,7 @@ export def "protocol-syslog-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7130,7 +7157,7 @@ export def "protocol-syslog-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7168,7 +7195,7 @@ export def "protocol-syslog-get-attr" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/{attr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7212,9 +7239,9 @@ export def "protocol-syslog-send" [
   if ($pri | is-empty) { error make --unspanned { msg: "path parameter 'pri' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), pri: (encode-path-segment $pri)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/send/{pri}") $auth.query)
   let req_body = {"hostname": $hostname, "message": $message, "separator": $separator, "sequence": $sequence, "timestamp": $timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7254,7 +7281,7 @@ export def "protocol-syslog-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7292,7 +7319,7 @@ export def "protocol-syslog-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7332,7 +7359,7 @@ export def "protocol-syslog-set-attr" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/{attr}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7374,7 +7401,7 @@ export def "protocol-telnet-connection-logon" [
   if ($password | is-empty) { error make --unspanned { msg: "path parameter 'password' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), user: (encode-path-segment $user), password: (encode-path-segment $password)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/logon/{connection_id}/{user}/{password}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7414,7 +7441,7 @@ export def "protocol-telnet-connection-request" [
   if ($command | is-empty) { error make --unspanned { msg: "path parameter 'command' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), command: (encode-path-segment $command)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/request/{connection_id}/{command}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7454,7 +7481,7 @@ export def "protocol-telnet-connection-signal" [
   if ($signal_name | is-empty) { error make --unspanned { msg: "path parameter 'signalName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), signal_name: (encode-path-segment $signal_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/signal/{connection_id}/{signal_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7490,7 +7517,7 @@ export def "protocol-telnet-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7526,7 +7553,7 @@ export def "protocol-telnet-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7562,7 +7589,7 @@ export def "protocol-telnet-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7598,7 +7625,7 @@ export def "protocol-telnet-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7638,7 +7665,7 @@ export def "protocol-telnet-ipalias-disable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/disable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7678,7 +7705,7 @@ export def "protocol-telnet-ipalias-enable" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/enable/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7718,7 +7745,7 @@ export def "protocol-telnet-ipalias-isenabled" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/isenabled/{ipaddress}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7754,7 +7781,7 @@ export def "protocol-telnet-ipalias-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7790,7 +7817,7 @@ export def "protocol-telnet-server-get-connections" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/connections") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7826,7 +7853,7 @@ export def "protocol-telnet-server-get-keymap" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/keymap") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7862,7 +7889,7 @@ export def "protocol-telnet-server-get-rulesdb" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/rulesdb") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7898,7 +7925,7 @@ export def "protocol-telnet-server-get-state" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7934,7 +7961,7 @@ export def "protocol-telnet-server-get-userdb" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/userdb") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7970,7 +7997,7 @@ export def "protocol-telnet-server-get-users" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8010,7 +8037,7 @@ export def "protocol-telnet-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8048,7 +8075,7 @@ export def "protocol-telnet-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8084,7 +8111,7 @@ export def "protocol-tftp-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8120,7 +8147,7 @@ export def "protocol-tftp-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8156,7 +8183,7 @@ export def "protocol-tftp-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8192,7 +8219,7 @@ export def "protocol-tftp-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8230,7 +8257,7 @@ export def "protocol-tftp-session-read" [
   if ($srcfile | is-empty) { error make --unspanned { msg: "path parameter 'srcfile' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), srcfile: (encode-path-segment $srcfile)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/read/server/{srcfile}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8268,7 +8295,7 @@ export def "protocol-tftp-session-write" [
   if ($srcfile | is-empty) { error make --unspanned { msg: "path parameter 'srcfile' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), srcfile: (encode-path-segment $srcfile)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/write/server/{srcfile}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8308,7 +8335,7 @@ export def "protocol-tftp-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8346,7 +8373,7 @@ export def "protocol-tftp-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8386,7 +8413,7 @@ export def "protocol-tftp-session-get-parameter" [
   if ($parameter | is-empty) { error make --unspanned { msg: "path parameter 'parameter' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id), parameter: (encode-path-segment $parameter)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/get/{parameter}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8428,7 +8455,7 @@ export def "protocol-tftp-session-set-parameter" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id), parameter: (encode-path-segment $parameter), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/set/{parameter}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8466,7 +8493,7 @@ export def "protocol-tftp-session-start" [
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8504,7 +8531,7 @@ export def "protocol-tftp-session-status" [
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8542,7 +8569,7 @@ export def "protocol-tftp-session-stop" [
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/stop") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8578,7 +8605,7 @@ export def "protocol-tod-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8614,7 +8641,7 @@ export def "protocol-tod-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8650,7 +8677,7 @@ export def "protocol-tod-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8686,7 +8713,7 @@ export def "protocol-tod-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8732,7 +8759,7 @@ export def "protocol-tod-gettime" [
   if ($num_retries | is-empty) { error make --unspanned { msg: "path parameter 'numRetries' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), server_addr: (encode-path-segment $server_addr), port_num: (encode-path-segment $port_num), script_name: (encode-path-segment $script_name), time_sec: (encode-path-segment $time_sec), num_retries: (encode-path-segment $num_retries)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/gettime/server/{server_addr}/port/{port_num}/script/{script_name}/timeout/{time_sec}/retries/{num_retries}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8772,7 +8799,7 @@ export def "protocol-tod-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8810,7 +8837,7 @@ export def "protocol-tod-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8846,7 +8873,7 @@ export def "protocol-web-get-args" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/args") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8882,7 +8909,7 @@ export def "protocol-web-get-config" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8918,7 +8945,7 @@ export def "protocol-web-get-statistics" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8954,7 +8981,7 @@ export def "protocol-web-get-trace" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8992,7 +9019,7 @@ export def "protocol-web-port-add" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/add/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9030,7 +9057,7 @@ export def "protocol-web-port-exists" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/exists/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9068,7 +9095,7 @@ export def "protocol-web-port-remove" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/remove/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9110,7 +9137,7 @@ export def "protocol-web-port-set" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port), protocol: (encode-path-segment $protocol), version: (encode-path-segment $version)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/set/{port}/{protocol}/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9148,7 +9175,7 @@ export def "protocol-web-port-start" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/start/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9186,7 +9213,7 @@ export def "protocol-web-port-stop" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/stop/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9226,7 +9253,7 @@ export def "protocol-web-set-config" [
   if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/config/{argument}/{value}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9264,7 +9291,7 @@ export def "protocol-web-set-trace" [
   if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/trace/{enable_or_not}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9302,7 +9329,7 @@ export def "protocol-get-config" [
   if ($prot | is-empty) { error make --unspanned { msg: "path parameter 'prot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), prot: (encode-path-segment $prot)} | format pattern "/mimic/agent/{agent_num}/protocol/{prot}/get/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9338,7 +9365,7 @@ export def "reload" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/reload") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9374,7 +9401,7 @@ export def "agent-remove" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/remove") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9410,7 +9437,7 @@ export def "resume" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/resume") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9446,7 +9473,7 @@ export def "put-mimic-agent-agent-num-save" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/save") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9484,7 +9511,7 @@ export def "set-delay" [
   if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), delay: (encode-path-segment $delay)} | format pattern "/mimic/agent/{agent_num}/set/delay/{delay}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9522,7 +9549,7 @@ export def "set-drops" [
   if ($drops | is-empty) { error make --unspanned { msg: "path parameter 'drops' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), drops: (encode-path-segment $drops)} | format pattern "/mimic/agent/{agent_num}/set/drops/{drops}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9560,7 +9587,7 @@ export def "set-host" [
   if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), host: (encode-path-segment $host)} | format pattern "/mimic/agent/{agent_num}/set/host/{host}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9598,7 +9625,7 @@ export def "set-inform-timeout" [
   if ($inform_timeout | is-empty) { error make --unspanned { msg: "path parameter 'inform_timeout' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), inform_timeout: (encode-path-segment $inform_timeout)} | format pattern "/mimic/agent/{agent_num}/set/inform_timeout/{inform_timeout}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9636,7 +9663,7 @@ export def "set-interface" [
   if ($interface | is-empty) { error make --unspanned { msg: "path parameter 'interface' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interface: (encode-path-segment $interface)} | format pattern "/mimic/agent/{agent_num}/set/interface/{interface}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9674,7 +9701,7 @@ export def "set-mask" [
   if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), mask: (encode-path-segment $mask)} | format pattern "/mimic/agent/{agent_num}/set/mask/{mask}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9712,9 +9739,9 @@ export def "set-mibs" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/set/mibs") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9752,7 +9779,7 @@ export def "set-oiddir" [
   if ($oiddir | is-empty) { error make --unspanned { msg: "path parameter 'oiddir' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oiddir: (encode-path-segment $oiddir)} | format pattern "/mimic/agent/{agent_num}/set/oiddir/{oiddir}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9790,7 +9817,7 @@ export def "set-owner" [
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), owner: (encode-path-segment $owner)} | format pattern "/mimic/agent/{agent_num}/set/owner/{owner}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9828,7 +9855,7 @@ export def "set-pdusize" [
   if ($pdusize | is-empty) { error make --unspanned { msg: "path parameter 'pdusize' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), pdusize: (encode-path-segment $pdusize)} | format pattern "/mimic/agent/{agent_num}/set/pdusize/{pdusize}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9866,7 +9893,7 @@ export def "set-port" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/set/port/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9904,7 +9931,7 @@ export def "set-privdir" [
   if ($privdir | is-empty) { error make --unspanned { msg: "path parameter 'privdir' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), privdir: (encode-path-segment $privdir)} | format pattern "/mimic/agent/{agent_num}/set/privdir/{privdir}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9942,9 +9969,9 @@ export def "set-protocols" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/set/protocol") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9982,7 +10009,7 @@ export def "set-read-community" [
   if ($read | is-empty) { error make --unspanned { msg: "path parameter 'read' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), read: (encode-path-segment $read)} | format pattern "/mimic/agent/{agent_num}/set/read/{read}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10020,7 +10047,7 @@ export def "set-starttime" [
   if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), start: (encode-path-segment $start)} | format pattern "/mimic/agent/{agent_num}/set/start/{start}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10058,7 +10085,7 @@ export def "set-trace" [
   if ($trace | is-empty) { error make --unspanned { msg: "path parameter 'trace' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), trace: (encode-path-segment $trace)} | format pattern "/mimic/agent/{agent_num}/set/trace/{trace}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10096,7 +10123,7 @@ export def "set-validate" [
   if ($validate | is-empty) { error make --unspanned { msg: "path parameter 'validate' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), validate: (encode-path-segment $validate)} | format pattern "/mimic/agent/{agent_num}/set/validate/{validate}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10134,7 +10161,7 @@ export def "set-write-community" [
   if ($write | is-empty) { error make --unspanned { msg: "path parameter 'write' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), write: (encode-path-segment $write)} | format pattern "/mimic/agent/{agent_num}/set/write/{write}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10170,7 +10197,7 @@ export def "put-mimic-agent-agent-num-start" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10206,7 +10233,7 @@ export def "stop" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/stop") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10244,7 +10271,7 @@ export def "agent-store-copy" [
   if ($other_agent | is-empty) { error make --unspanned { msg: "path parameter 'otherAgent' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), other_agent: (encode-path-segment $other_agent)} | format pattern "/mimic/agent/{agent_num}/store/copy/{other_agent}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10282,7 +10309,7 @@ export def "agent-store-exists" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/exists/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10320,7 +10347,7 @@ export def "agent-store-get" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/get/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10356,7 +10383,7 @@ export def "agent-store-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/store/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10398,9 +10425,9 @@ export def "agent-store-lreplace" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var), index: (encode-path-segment $index)} | format pattern "/mimic/agent/{agent_num}/store/lreplace/{var}/{index}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10438,7 +10465,7 @@ export def "agent-store-persists" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/persists/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10480,9 +10507,9 @@ export def "agent-store-set" [
   if ($persist | is-empty) { error make --unspanned { msg: "path parameter 'persist' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var), persist: (encode-path-segment $persist)} | format pattern "/mimic/agent/{agent_num}/store/set/{var}/{persist}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10520,7 +10547,7 @@ export def "agent-store-unset" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/unset/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10562,7 +10589,7 @@ export def "add-timer-script" [
   if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/agent/{agent_num}/timer/script/add/{script}/{interval}/{arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10604,7 +10631,7 @@ export def "del-timer-script" [
   if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/agent/{agent_num}/timer/script/delete/{script}/{interval}/{arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10640,7 +10667,7 @@ export def "list-timer-scripts" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/timer/script/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10680,7 +10707,7 @@ export def "trap-config-add" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/trap/config/add/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10720,7 +10747,7 @@ export def "trap-config-del" [
   if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/trap/config/delete/{ip}/{port}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10756,7 +10783,7 @@ export def "trap-config-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/trap/config/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10792,7 +10819,7 @@ export def "trap-list" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/trap/list") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10832,7 +10859,7 @@ export def "add" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/add/{object}/{instance}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10872,7 +10899,7 @@ export def "eval-value" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/eval/{object}/{instance}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10914,7 +10941,7 @@ export def "get-value" [
   if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/get/{object}/{instance}/{variable}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10952,7 +10979,7 @@ export def "get-info" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/info/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10990,7 +11017,7 @@ export def "get-instances" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/instances/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11028,7 +11055,7 @@ export def "get-objects" [
   if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/list/{oid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11066,7 +11093,7 @@ export def "meval-value" [
   if ($obj_ins_array | is-empty) { error make --unspanned { msg: "path parameter 'objInsArray' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), obj_ins_array: (encode-path-array $obj_ins_array)} | format pattern "/mimic/agent/{agent_num}/value/meval/{obj_ins_array}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11104,7 +11131,7 @@ export def "mget-value" [
   if ($obj_ins_var_array | is-empty) { error make --unspanned { msg: "path parameter 'objInsVarArray' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), obj_ins_var_array: (encode-path-array $obj_ins_var_array)} | format pattern "/mimic/agent/{agent_num}/value/mget/{obj_ins_var_array}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11142,7 +11169,7 @@ export def "get-mib" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/mib/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11180,9 +11207,9 @@ export def "mset-value" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/value/mset") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11220,9 +11247,9 @@ export def "munset-value" [
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/value/munset") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11260,7 +11287,7 @@ export def "get-name" [
   if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/name/{oid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11298,7 +11325,7 @@ export def "get-oid" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/oid/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11338,7 +11365,7 @@ export def "remove" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/remove/{object}/{instance}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11382,9 +11409,9 @@ export def "set-value" [
   if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/set/{object}/{instance}/{variable}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11422,7 +11449,7 @@ export def "split-oid" [
   if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/split/{oid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11460,7 +11487,7 @@ export def "get-state" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/state/get/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11500,7 +11527,7 @@ export def "set-state" [
   if ($state | is-empty) { error make --unspanned { msg: "path parameter 'state' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), state: (encode-path-segment $state)} | format pattern "/mimic/agent/{agent_num}/value/state/set/{object}/{state}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11542,7 +11569,7 @@ export def "unset-value" [
   if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/unset/{object}/{instance}/{variable}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11582,7 +11609,7 @@ export def "get-variables" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/variables/{object}/{instance}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11620,7 +11647,7 @@ export def "cfg-new" [
   if ($last_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'lastAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num)} | format pattern "/mimic/clear/{first_agent_num}/{last_agent_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11654,7 +11681,7 @@ export def "get-active-data-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/active_data_list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11688,7 +11715,7 @@ export def "get-active-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/active_list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11722,7 +11749,7 @@ export def "get-cfgfile" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/cfgfile" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11756,7 +11783,7 @@ export def "get-cfg-file-changed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/cfgfile_changed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11790,7 +11817,7 @@ export def "get-changed-config-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/changed_config_list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11824,7 +11851,7 @@ export def "get-changed-state-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/changed_state_list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11858,7 +11885,7 @@ export def "get-clients" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/clients" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11892,7 +11919,7 @@ export def "get-configured-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/configured_list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11926,7 +11953,7 @@ export def "get-interfaces" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/interfaces" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11960,7 +11987,7 @@ export def "get-last" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/last" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11994,7 +12021,7 @@ export def "get-log" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/log" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12028,7 +12055,7 @@ export def "get-max" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/max" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12062,7 +12089,7 @@ export def "get-netaddr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/netaddr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12096,7 +12123,7 @@ export def "get-netdev" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/netdev" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12130,7 +12157,7 @@ export def "get-product" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/product" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12164,7 +12191,7 @@ export def "get-daemon-protocols" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/protocols" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12198,7 +12225,7 @@ export def "get-return" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/return" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12232,7 +12259,7 @@ export def "get-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/version" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12274,7 +12301,7 @@ export def "cfg-load" [
   if ($start_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'startAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({cfg_file: (encode-path-segment $cfg_file), first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num), start_agent_num: (encode-path-segment $start_agent_num)} | format pattern "/mimic/load/{cfg_file}/{first_agent_num}/{last_agent_num}/{start_agent_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12310,7 +12337,7 @@ export def "mget-info" [
   if ($info_array | is-empty) { error make --unspanned { msg: "path parameter 'infoArray' must be non-empty" } }
   let full_url = (build-url $base ({info_array: (encode-path-array $info_array)} | format pattern "/mimic/mget/{info_array}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12344,7 +12371,7 @@ export def "protocol-coap-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/coap/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12378,7 +12405,7 @@ export def "protocol-dhcp-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/dhcp/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12412,7 +12439,7 @@ export def "protocol-ipmi-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/ipmi/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12446,7 +12473,7 @@ export def "protocol-mqtt-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/mqtt/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12480,7 +12507,7 @@ export def "protocol-netflow-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/netflow/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12514,7 +12541,7 @@ export def "protocol-proxy-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/proxy/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12548,7 +12575,7 @@ export def "protocol-sflow-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/sflow/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12582,7 +12609,7 @@ export def "protocol-snmptcp-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/snmptcp/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12616,7 +12643,7 @@ export def "protocol-ssh-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/ssh/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12650,7 +12677,7 @@ export def "protocol-syslog-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/syslog/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12684,7 +12711,7 @@ export def "protocol-telnet-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/telnet/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12718,7 +12745,7 @@ export def "protocol-tftp-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/tftp/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12752,7 +12779,7 @@ export def "protocol-tod-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/tod/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12786,7 +12813,7 @@ export def "protocol-web-get-stats-hdr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/protocol/msg/web/get/stats_hdr" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12820,7 +12847,7 @@ export def "cfg-save" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/save" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12860,7 +12887,7 @@ export def "cfg-saveas" [
   if ($last_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'lastAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({cfg_file: (encode-path-segment $cfg_file), first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num)} | format pattern "/mimic/saveas/{cfg_file}/{first_agent_num}/{last_agent_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12896,9 +12923,9 @@ export def "set-log" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/set/log" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12932,7 +12959,7 @@ export def "set-netdev" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/set/netdev" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12966,7 +12993,7 @@ export def "store-save" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/set/persistent" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13000,7 +13027,7 @@ export def "start-all-agents" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/start" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13034,7 +13061,7 @@ export def "stop-all-agents" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/stop" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13070,7 +13097,7 @@ export def "store-exists" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/exists/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13106,7 +13133,7 @@ export def "store-get" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/get/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13140,7 +13167,7 @@ export def "store-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/store/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13180,9 +13207,9 @@ export def "store-lreplace" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var), index: (encode-path-segment $index)} | format pattern "/mimic/store/lreplace/{var}/{index}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13218,7 +13245,7 @@ export def "store-persists" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/persists/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13258,9 +13285,9 @@ export def "store-set" [
   if ($persist | is-empty) { error make --unspanned { msg: "path parameter 'persist' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var), persist: (encode-path-segment $persist)} | format pattern "/mimic/store/set/{var}/{persist}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13296,7 +13323,7 @@ export def "store-unset" [
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/unset/{var}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13330,7 +13357,7 @@ export def "terminate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/terminate" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13370,7 +13397,7 @@ export def "add-daemon-timer-script" [
   if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/timer/script/add/{script}/{interval}/{arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13410,7 +13437,7 @@ export def "del-daemon-timer-script" [
   if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/timer/script/delete/{script}/{interval}/{arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13444,7 +13471,7 @@ export def "list-daemon-timer-scripts" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/timer/script/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

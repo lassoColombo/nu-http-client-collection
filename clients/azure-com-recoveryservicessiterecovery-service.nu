@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,7 +221,7 @@ export def "replication-eligibility-results-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -237,7 +264,7 @@ export def "replication-eligibility-results-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), virtual_machine_name: (encode-path-segment $virtual_machine_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -278,7 +305,7 @@ export def "operations-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/operations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -321,7 +348,7 @@ export def "replication-alert-settings-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -366,7 +393,7 @@ export def "replication-alert-settings-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), alert_setting_name: (encode-path-segment $alert_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -413,9 +440,9 @@ export def "replication-alert-settings-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), alert_setting_name: (encode-path-segment $alert_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -459,7 +486,7 @@ export def "replication-events-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -504,7 +531,7 @@ export def "replication-events-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), event_name: (encode-path-segment $event_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents/{event_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -547,7 +574,7 @@ export def "replication-fabrics-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -592,7 +619,7 @@ export def "replication-fabrics-purge" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -637,7 +664,7 @@ export def "replication-fabrics-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -684,9 +711,9 @@ export def "replication-fabrics-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -731,7 +758,7 @@ export def "replication-fabrics-check-consistency" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/checkConsistency") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -776,7 +803,7 @@ export def "replication-fabrics-migrate-to-aad" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/migratetoaad") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -823,9 +850,9 @@ export def "replication-fabrics-reassociate-gateway" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/reassociateGateway") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -870,7 +897,7 @@ export def "replication-fabrics-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -917,9 +944,9 @@ export def "replication-fabrics-renew-certificate" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/renewCertificate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -964,7 +991,7 @@ export def "replication-logical-networks-list-by-replication-fabrics" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1011,7 +1038,7 @@ export def "replication-logical-networks-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), logical_network_name: (encode-path-segment $logical_network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks/{logical_network_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1056,7 +1083,7 @@ export def "replication-networks-list-by-replication-fabrics" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1103,7 +1130,7 @@ export def "replication-networks-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1150,7 +1177,7 @@ export def "replication-network-mappings-list-by-replication-networks" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1199,7 +1226,7 @@ export def "replication-network-mappings-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1248,7 +1275,7 @@ export def "replication-network-mappings-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1299,9 +1326,9 @@ export def "replication-network-mappings-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1352,9 +1379,9 @@ export def "replication-network-mappings-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), network_name: (encode-path-segment $network_name), network_mapping_name: (encode-path-segment $network_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1399,7 +1426,7 @@ export def "replication-protection-containers-list-by-replication-fabrics" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1446,7 +1473,7 @@ export def "replication-protection-containers-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1495,9 +1522,9 @@ export def "replication-protection-containers-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1546,9 +1573,9 @@ export def "replication-protection-containers-discover-protectable-item" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/discoverProtectableItem") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1595,7 +1622,7 @@ export def "replication-protection-containers-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1642,7 +1669,7 @@ export def "replication-migration-items-list-by-replication-protection-container
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1692,7 +1719,7 @@ export def "replication-migration-items-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteOption" $delete_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1741,7 +1768,7 @@ export def "replication-migration-items-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1792,9 +1819,9 @@ export def "replication-migration-items-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1845,9 +1872,9 @@ export def "replication-migration-items-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1898,9 +1925,9 @@ export def "replication-migration-items-migrate" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1949,7 +1976,7 @@ export def "migration-recovery-points-list-by-replication-migration-items" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2000,7 +2027,7 @@ export def "migration-recovery-points-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name), migration_recovery_point_name: (encode-path-segment $migration_recovery_point_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints/{migration_recovery_point_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2051,9 +2078,9 @@ export def "replication-migration-items-test-migrate" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrate") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2104,9 +2131,9 @@ export def "replication-migration-items-test-migrate-cleanup" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), migration_item_name: (encode-path-segment $migration_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrateCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2154,7 +2181,7 @@ export def "replication-protectable-items-list-by-replication-protection-contain
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2203,7 +2230,7 @@ export def "replication-protectable-items-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), protectable_item_name: (encode-path-segment $protectable_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems/{protectable_item_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2250,7 +2277,7 @@ export def "replication-protected-items-list-by-replication-protection-container
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2299,7 +2326,7 @@ export def "replication-protected-items-purge" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2348,7 +2375,7 @@ export def "replication-protected-items-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2399,9 +2426,9 @@ export def "replication-protected-items-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2452,9 +2479,9 @@ export def "replication-protected-items-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2505,9 +2532,9 @@ export def "replication-protected-items-resolve-health-errors" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/ResolveHealthErrors") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2558,9 +2585,9 @@ export def "replication-protected-items-add-disks" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/addDisks") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2611,9 +2638,9 @@ export def "replication-protected-items-apply-recovery-point" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/applyRecoveryPoint") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2662,7 +2689,7 @@ export def "replication-protected-items-failover-commit" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/failoverCommit") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2713,9 +2740,9 @@ export def "replication-protected-items-planned-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/plannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2766,9 +2793,9 @@ export def "replication-protected-items-reprotect" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/reProtect") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2817,7 +2844,7 @@ export def "recovery-points-list-by-replication-protected-items" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2868,7 +2895,7 @@ export def "recovery-points-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name), recovery_point_name: (encode-path-segment $recovery_point_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints/{recovery_point_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2919,9 +2946,9 @@ export def "replication-protected-items-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/remove") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2972,9 +2999,9 @@ export def "replication-protected-items-remove-disks" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/removeDisks") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3023,7 +3050,7 @@ export def "replication-protected-items-repair-replication" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/repairReplication") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3072,7 +3099,7 @@ export def "target-compute-sizes-list-by-replication-protected-items" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/targetComputeSizes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3123,9 +3150,9 @@ export def "replication-protected-items-test-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3176,9 +3203,9 @@ export def "replication-protected-items-test-failover-cleanup" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailoverCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3229,9 +3256,9 @@ export def "replication-protected-items-unplanned-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replicated_protected_item_name: (encode-path-segment $replicated_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/unplannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3282,9 +3309,9 @@ export def "replication-protected-items-update-mobility-service" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), replication_protected_item_name: (encode-path-segment $replication_protected_item_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replication_protected_item_name}/updateMobilityService") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3331,7 +3358,7 @@ export def "replication-protection-container-mappings-list-by-replication-protec
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3380,7 +3407,7 @@ export def "replication-protection-container-mappings-purge" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3429,7 +3456,7 @@ export def "replication-protection-container-mappings-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3480,9 +3507,9 @@ export def "replication-protection-container-mappings-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3533,9 +3560,9 @@ export def "replication-protection-container-mappings-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3586,9 +3613,9 @@ export def "replication-protection-container-mappings-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name), mapping_name: (encode-path-segment $mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}/remove") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3637,9 +3664,9 @@ export def "replication-protection-containers-switch-protection" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), protection_container_name: (encode-path-segment $protection_container_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/switchprotection") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3684,7 +3711,7 @@ export def "replication-recovery-services-providers-list-by-replication-fabrics"
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3731,7 +3758,7 @@ export def "replication-recovery-services-providers-purge" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3778,7 +3805,7 @@ export def "replication-recovery-services-providers-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3827,9 +3854,9 @@ export def "replication-recovery-services-providers-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3876,7 +3903,7 @@ export def "replication-recovery-services-providers-refresh-provider" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/refreshProvider") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3923,7 +3950,7 @@ export def "replication-recovery-services-providers-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), provider_name: (encode-path-segment $provider_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/remove") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3968,7 +3995,7 @@ export def "replication-storage-classifications-list-by-replication-fabrics" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4015,7 +4042,7 @@ export def "replication-storage-classifications-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4062,7 +4089,7 @@ export def "replication-storage-classification-mappings-list-by-replication-stor
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4111,7 +4138,7 @@ export def "replication-storage-classification-mappings-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4160,7 +4187,7 @@ export def "replication-storage-classification-mappings-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4211,9 +4238,9 @@ export def "replication-storage-classification-mappings-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), storage_classification_name: (encode-path-segment $storage_classification_name), storage_classification_mapping_name: (encode-path-segment $storage_classification_mapping_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4258,7 +4285,7 @@ export def "replicationv-centers-list-by-replication-fabrics" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4305,7 +4332,7 @@ export def "replicationv-centers-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4352,7 +4379,7 @@ export def "replicationv-centers-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4401,9 +4428,9 @@ export def "replicationv-centers-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4452,9 +4479,9 @@ export def "replicationv-centers-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), fabric_name: (encode-path-segment $fabric_name), v_center_name: (encode-path-segment $v_center_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4498,7 +4525,7 @@ export def "replication-jobs-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4547,9 +4574,9 @@ export def "replication-jobs-export" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/export") $qp $auth.query)
   let req_body = {"affectedObjectTypes": $affected_object_types, "endTime": $end_time, "fabricId": $fabric_id, "jobStatus": $job_status, "startTime": $start_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4594,7 +4621,7 @@ export def "replication-jobs-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4639,7 +4666,7 @@ export def "replication-jobs-cancel" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/cancel") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4684,7 +4711,7 @@ export def "replication-jobs-restart" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/restart") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4731,9 +4758,9 @@ export def "replication-jobs-resume" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), job_name: (encode-path-segment $job_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/resume") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4778,7 +4805,7 @@ export def "replication-migration-items-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationMigrationItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4821,7 +4848,7 @@ export def "replication-network-mappings-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworkMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4864,7 +4891,7 @@ export def "replication-networks-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4907,7 +4934,7 @@ export def "replication-policies-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4952,7 +4979,7 @@ export def "replication-policies-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4997,7 +5024,7 @@ export def "replication-policies-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5044,9 +5071,9 @@ export def "replication-policies-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5093,9 +5120,9 @@ export def "replication-policies-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), policy_name: (encode-path-segment $policy_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5140,7 +5167,7 @@ export def "replication-protected-items-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectedItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5183,7 +5210,7 @@ export def "replication-protection-container-mappings-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainerMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5226,7 +5253,7 @@ export def "replication-protection-containers-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5269,7 +5296,7 @@ export def "replication-recovery-plans-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5314,7 +5341,7 @@ export def "replication-recovery-plans-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5359,7 +5386,7 @@ export def "replication-recovery-plans-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5406,9 +5433,9 @@ export def "replication-recovery-plans-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5455,9 +5482,9 @@ export def "replication-recovery-plans-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5502,7 +5529,7 @@ export def "replication-recovery-plans-failover-commit" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/failoverCommit") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5549,9 +5576,9 @@ export def "replication-recovery-plans-planned-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/plannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5596,7 +5623,7 @@ export def "replication-recovery-plans-reprotect" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/reProtect") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5643,9 +5670,9 @@ export def "replication-recovery-plans-test-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5692,9 +5719,9 @@ export def "replication-recovery-plans-test-failover-cleanup" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailoverCleanup") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5741,9 +5768,9 @@ export def "replication-recovery-plans-unplanned-failover" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), recovery_plan_name: (encode-path-segment $recovery_plan_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/unplannedFailover") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5786,7 +5813,7 @@ export def "replication-recovery-services-providers-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryServicesProviders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5829,7 +5856,7 @@ export def "replication-storage-classification-mappings-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassificationMappings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5872,7 +5899,7 @@ export def "replication-storage-classifications-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassifications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5915,7 +5942,7 @@ export def "supported-operating-systems-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationSupportedOperatingSystems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5958,7 +5985,7 @@ export def "replication-vault-health-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6001,7 +6028,7 @@ export def "replication-vault-health-refresh" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth/default/refresh") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6044,7 +6071,7 @@ export def "replication-vault-setting-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6089,7 +6116,7 @@ export def "replication-vault-setting-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), vault_setting_name: (encode-path-segment $vault_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6136,9 +6163,9 @@ export def "replication-vault-setting-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name), vault_setting_name: (encode-path-segment $vault_setting_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6181,7 +6208,7 @@ export def "replicationv-centers-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), resource_name: (encode-path-segment $resource_name)} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationvCenters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

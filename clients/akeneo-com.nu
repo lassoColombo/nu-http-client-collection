@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -192,13 +219,13 @@ export def "post-token" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/api/oauth/v1/token" $auth.query)
   let req_body = {"grant_type": $grant_type, "password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type, "Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -232,7 +259,7 @@ export def "get-endpoints" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -270,7 +297,7 @@ export def "get-asset-categories" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/asset-categories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -308,9 +335,9 @@ export def "patch-asset-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-categories" $auth.query)
   let req_body = {"code": $code, "labels": $labels, "parent": $parent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -348,9 +375,9 @@ export def "post-asset-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-categories" $auth.query)
   let req_body = {"code": $code, "labels": $labels, "parent": $parent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -386,7 +413,7 @@ export def "get-asset-categories-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-categories/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -416,7 +443,7 @@ export def "patch-asset-categories-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # PAM asset category code
+  --body-code: string # PAM asset category code (spec name: code)
   --labels: record # PAM asset category labels for each locale (default: {}) — shape: {localeCode?: string}
   --parent: string # PAM ssset category code of the parent's asset category (default: null)
 ]: any -> any {
@@ -426,10 +453,10 @@ export def "patch-asset-categories-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-categories/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "parent": $parent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -465,7 +492,7 @@ export def "get-asset-families" [
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/asset-families" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -506,7 +533,7 @@ export def "get-assets" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -544,9 +571,9 @@ export def "patch-assets" [
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -584,7 +611,7 @@ export def "delete-assets-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -622,7 +649,7 @@ export def "get-assets-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -653,7 +680,7 @@ export def "patch-asset-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Code of the asset
+  --body-code: string # Code of the asset (spec name: code)
   --created: string # Date of creation (format: dateTime)
   --updated: string # Date of the last update (format: dateTime)
   --values: record # Asset attributes values, see the Focus on the asset values section for more details. — shape: {attributeCode?: list}
@@ -665,10 +692,10 @@ export def "patch-asset-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/assets/{code}") $auth.query)
   let req_body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -704,7 +731,7 @@ export def "get-asset-families-code-attributes" [
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -742,7 +769,7 @@ export def "get-asset-family-attributes-attribute-code-options" [
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), attribute_code: (encode-path-segment $attribute_code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -782,7 +809,7 @@ export def "get-asset-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -814,7 +841,7 @@ export def "patch-asset-attributes-attribute-code-options-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Attribute's option code
+  --body-code: string # Attribute's option code (spec name: code)
   --labels: record # Attribute labels for each locale (default: {}) — shape: {localeCode?: string}
 ]: any -> any {
   let input = $in
@@ -825,10 +852,10 @@ export def "patch-asset-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -866,7 +893,7 @@ export def "get-asset-family-attributes-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -898,7 +925,7 @@ export def "patch-asset-family-attributes-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-extensions: list<string> # Extensions allowed when the attribute type is `media_file` (default: [])
-  --body-code: string # Attribute code
+  --body-code: string # Attribute code (spec name: code)
   --decimals-allowed: oneof<nothing, bool> # Whether decimals are allowed when the attribute type is `number` (default: false)
   --is-read-only: oneof<nothing, bool> # Whether the attribute should be in read only mode only in the UI, but you can still update it with the API (default: false)
   --is-required-for-completeness: oneof<nothing, bool> # Whether the attribute should be part of the record's completeness calculation (default: false)
@@ -925,10 +952,10 @@ export def "patch-asset-family-attributes-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({asset_family_code: (encode-path-segment $asset_family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{asset_family_code}/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_read_only": $is_read_only, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "media_type": $media_type, "min_value": $min_value, "prefix": $prefix, "suffix": $suffix, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -964,7 +991,7 @@ export def "get-asset-family-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -995,7 +1022,7 @@ export def "patch-asset-family-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attribute-as-main-media: string # Attribute code that is used as the main media of the asset family. (default: First media file or media link attribute that was created)
-  --body-code: string # Asset family code
+  --body-code: string # Asset family code (spec name: code)
   --labels: record # Asset family labels for each locale (default: {}) — shape: {localeCode?: string}
   --naming-convention: record # The naming convention ran over the asset code or the main media filename upon each asset creation, in order to automatically set several values in asset attributes. To learn more and see the format of this property, take a look at here. (default: {}) — shape: {abort_asset_creation_on_error?: bool, pattern?: string, source?: record}
   --product-link-rules: list # The rules that will be run after the asset creation, in order to automatically link the assets of this family to a set of products. To understand the format of this property, see here. (default: []) — item shape: {assign_assets_to?: list, product_selections?: list}
@@ -1007,10 +1034,10 @@ export def "patch-asset-family-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-families/{code}") $auth.query)
   let req_body = {"attribute_as_main_media": $attribute_as_main_media, "code": $body_code, "labels": $labels, "naming_convention": $naming_convention, "product_link_rules": $product_link_rules, "transformations": $transformations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1047,13 +1074,13 @@ export def "post-asset-media-files" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/asset-media-files" $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1089,7 +1116,7 @@ export def "get-asset-media-files-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-media-files/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1127,7 +1154,7 @@ export def "get-asset-tags" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/asset-tags" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1163,7 +1190,7 @@ export def "get-asset-tags-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-tags/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1193,7 +1220,7 @@ export def "patch-asset-tags-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # PAM asset tag code
+  --body-code: string # PAM asset tag code (spec name: code)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1201,10 +1228,10 @@ export def "patch-asset-tags-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/asset-tags/{code}") $auth.query)
   let req_body = {"code": $body_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1244,7 +1271,7 @@ export def "get-pam-assets" [
   let qp = [(serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/assets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1287,9 +1314,9 @@ export def "patch-pam-assets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/assets" $auth.query)
   let req_body = {"categories": $categories, "code": $code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1332,9 +1359,9 @@ export def "post-pam-assets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/assets" $auth.query)
   let req_body = {"categories": $categories, "code": $code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1372,7 +1399,7 @@ export def "get-reference-files-locale-code" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1413,13 +1440,13 @@ export def "post-reference-files-locale-code" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1457,7 +1484,7 @@ export def "get-reference-files-channel-code-locale-code-download" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/reference-files/{locale_code}/download") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1497,7 +1524,7 @@ export def "get-variation-files-channel-code-locale-code" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), channel_code: (encode-path-segment $channel_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1540,13 +1567,13 @@ export def "post-variation-files-channel-code-locale-code" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), channel_code: (encode-path-segment $channel_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1586,7 +1613,7 @@ export def "get-variation-files-channel-code-locale-code-download" [
   if ($locale_code | is-empty) { error make --unspanned { msg: "path parameter 'locale_code' must be non-empty" } }
   let full_url = (build-url $base ({asset_code: (encode-path-segment $asset_code), channel_code: (encode-path-segment $channel_code), locale_code: (encode-path-segment $locale_code)} | format pattern "/api/rest/v1/assets/{asset_code}/variation-files/{channel_code}/{locale_code}/download") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1622,7 +1649,7 @@ export def "get-pam-assets-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/assets/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1653,7 +1680,7 @@ export def "patch-pam-assets-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --categories: list<string> # Codes of the PAM asset categories in which the asset is classified (default: [])
-  --body-code: string # PAM asset code
+  --body-code: string # PAM asset code (spec name: code)
   --description: string # Description of the PAM asset
   --end-of-use: string # Date on which the PAM asset expire (format: dateTime)
   --localizable: oneof<nothing, bool> # Whether the asset is localized or not, meaning if you want to have different reference files for each of your locale (default: false)
@@ -1667,10 +1694,10 @@ export def "patch-pam-assets-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/assets/{code}") $auth.query)
   let req_body = {"categories": $categories, "code": $body_code, "description": $description, "end_of_use": $end_of_use, "localizable": $localizable, "reference_files": $reference_files, "tags": $tags, "variation_files": $variation_files} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1708,7 +1735,7 @@ export def "association-types-get-list" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/association-types" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1747,9 +1774,9 @@ export def "several-association-types-patch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/association-types" $auth.query)
   let req_body = {"code": $code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1788,9 +1815,9 @@ export def "association-types-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/association-types" $auth.query)
   let req_body = {"code": $code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1826,7 +1853,7 @@ export def "association-types-get" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/association-types/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1856,7 +1883,7 @@ export def "association-types-patch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Association type code
+  --body-code: string # Association type code (spec name: code)
   --is-quantified: oneof<nothing, bool> # When true, the association is a quantified association (Only available in the PIM Serenity version.) (default: false)
   --is-two-way: oneof<nothing, bool> # When true, the association is a two-way association (Only available in the PIM Serenity version.) (default: false)
   --labels: record # Association type labels for each locale (default: {}) — shape: {localeCode?: string}
@@ -1867,10 +1894,10 @@ export def "association-types-patch" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/association-types/{code}") $auth.query)
   let req_body = {"code": $body_code, "is_quantified": $is_quantified, "is_two_way": $is_two_way, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1909,7 +1936,7 @@ export def "attribute-groups-get-list" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/attribute-groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1948,9 +1975,9 @@ export def "several-attribute-groups-patch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attribute-groups" $auth.query)
   let req_body = {"attributes": $attributes, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1989,9 +2016,9 @@ export def "attribute-groups-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attribute-groups" $auth.query)
   let req_body = {"attributes": $attributes, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2027,7 +2054,7 @@ export def "attribute-groups-get" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attribute-groups/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2058,7 +2085,7 @@ export def "attribute-groups-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: list<string> # Attribute codes that compose the attribute group (default: [])
-  --body-code: string # Attribute group code
+  --body-code: string # Attribute group code (spec name: code)
   --labels: record # Attribute group labels for each locale (default: {}) — shape: {localeCode?: string}
   --sort-order: int # Attribute group order among other attribute groups (default: 0)
 ]: any -> any {
@@ -2068,10 +2095,10 @@ export def "attribute-groups-patch" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attribute-groups/{code}") $auth.query)
   let req_body = {"attributes": $attributes, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2111,7 +2138,7 @@ export def "get-attributes" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_table_select_options" $with_table_select_options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/attributes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2174,9 +2201,9 @@ export def "patch-attributes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attributes" $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2239,9 +2266,9 @@ export def "post-attributes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/attributes" $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2281,7 +2308,7 @@ export def "get-attributes-attribute-code-options" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2322,9 +2349,9 @@ export def "patch-attributes-attribute-code-options" [
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options") $auth.query)
   let req_body = {"attribute": $attribute, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2365,9 +2392,9 @@ export def "post-attributes-attribute-code-options" [
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options") $auth.query)
   let req_body = {"attribute": $attribute, "code": $code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2405,7 +2432,7 @@ export def "get-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2437,7 +2464,7 @@ export def "patch-attributes-attribute-code-options-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attribute: string # Code of attribute related to the attribute option
-  --body-code: string # Code of option
+  --body-code: string # Code of option (spec name: code)
   --labels: record # Attribute option labels for each locale (default: {}) — shape: {localeCode?: string}
   --sort-order: int # Order of attribute option
 ]: any -> any {
@@ -2448,10 +2475,10 @@ export def "patch-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"attribute": $attribute, "code": $body_code, "labels": $labels, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2489,7 +2516,7 @@ export def "get-attributes-code" [
   let qp = [(serialize-qp "with_table_select_options" $with_table_select_options "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2521,7 +2548,7 @@ export def "patch-attributes-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-extensions: list<string> # Extensions allowed when the attribute type is `pim_catalog_file` or `pim_catalog_image`
   --available-locales: list<string> # To make the attribute locale specfic, specify here for which locales it is specific
-  --body-code: string # Attribute code
+  --body-code: string # Attribute code (spec name: code)
   --date-max: string # Maximum date allowed when the attribute type is `pim_catalog_date` (format: date-time)
   --date-min: string # Minimum date allowed when the attribute type is `pim_catalog_date` (format: date-time)
   --decimals-allowed: oneof<nothing, bool> # Whether decimals are allowed when the attribute type is `pim_catalog_metric`, `pim_catalog_price` or `pim_catalog_number`
@@ -2554,10 +2581,10 @@ export def "patch-attributes-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "available_locales": $available_locales, "code": $body_code, "date_max": $date_max, "date_min": $date_min, "decimals_allowed": $decimals_allowed, "default_metric_unit": $default_metric_unit, "default_value": $default_value, "group": $group, "group_labels": $group_labels, "labels": $labels, "localizable": $localizable, "max_characters": $max_characters, "max_file_size": $max_file_size, "metric_family": $metric_family, "negative_allowed": $negative_allowed, "number_max": $number_max, "number_min": $number_min, "reference_data_name": $reference_data_name, "scopable": $scopable, "sort_order": $sort_order, "table_configuration": $table_configuration, "type": $type, "unique": $unique, "useable_as_grid_filter": $useable_as_grid_filter, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "wysiwyg_enabled": $wysiwyg_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2594,7 +2621,7 @@ export def "get-app-catalogs" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/catalogs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2630,9 +2657,9 @@ export def "post-app-catalog" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/catalogs" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2668,7 +2695,7 @@ export def "delete-app-catalog" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/rest/v1/catalogs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2704,7 +2731,7 @@ export def "get-app-catalog" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/rest/v1/catalogs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2742,9 +2769,9 @@ export def "patch-app-catalog" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/rest/v1/catalogs/{id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2785,7 +2812,7 @@ export def "get-app-catalog-product-uuids" [
   let qp = [(serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "updated_before" $updated_before "scalar") (serialize-qp "updated_after" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/rest/v1/catalogs/{id}/product-uuids") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2826,7 +2853,7 @@ export def "get-app-catalog-products" [
   let qp = [(serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "updated_before" $updated_before "scalar") (serialize-qp "updated_after" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/rest/v1/catalogs/{id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2864,7 +2891,7 @@ export def "get-app-catalog-products-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/catalogs/{id}/products/{uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2905,7 +2932,7 @@ export def "get-categories" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_position" $with_position "scalar") (serialize-qp "with_enriched_attributes" $with_enriched_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/categories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2946,9 +2973,9 @@ export def "patch-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/categories" $auth.query)
   let req_body = {"code": $code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2989,9 +3016,9 @@ export def "post-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/categories" $auth.query)
   let req_body = {"code": $code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3030,7 +3057,7 @@ export def "get-categories-code" [
   let qp = [(serialize-qp "with_position" $with_position "scalar") (serialize-qp "with_enriched_attributes" $with_enriched_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/categories/{code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3060,7 +3087,7 @@ export def "patch-categories-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Category code
+  --body-code: string # Category code (spec name: code)
   --labels: record # Category labels for each locale (default: {}) — shape: {localeCode?: string}
   --parent: string # Category code of the parent's category (default: null)
   --position: int # Position of the category in its level, start from 1 (only available since the 7.0 version and when query parameter "with_position" is set to "true")
@@ -3073,10 +3100,10 @@ export def "patch-categories-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/categories/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "parent": $parent, "position": $position, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3112,7 +3139,7 @@ export def "get-category-media-files-code-download" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/category-media-files/{code}/download") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3150,7 +3177,7 @@ export def "get-channels" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3191,9 +3218,9 @@ export def "several-channels-patch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/channels" $auth.query)
   let req_body = {"category_tree": $category_tree, "code": $code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3234,9 +3261,9 @@ export def "channels-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/channels" $auth.query)
   let req_body = {"category_tree": $category_tree, "code": $code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3272,7 +3299,7 @@ export def "get-channels-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/channels/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3303,7 +3330,7 @@ export def "channels-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   category_tree: string # Code of the category tree linked to the channel
-  --body-code: string # Channel code
+  --body-code: string # Channel code (spec name: code)
   --conversion-units: record # Units to which the given metric attributes should be converted when exporting products — shape: {attributeCode?: string}
   currencies: list<string> # Codes of activated currencies for the channel
   --labels: record # Channel labels for each locale (default: {}) — shape: {localeCode?: string}
@@ -3315,10 +3342,10 @@ export def "channels-patch" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/channels/{code}") $auth.query)
   let req_body = {"category_tree": $category_tree, "code": $body_code, "conversion_units": $conversion_units, "currencies": $currencies, "labels": $labels, "locales": $locales} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3356,7 +3383,7 @@ export def "currencies-get-list" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/currencies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3392,7 +3419,7 @@ export def "currencies-get" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/currencies/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3431,7 +3458,7 @@ export def "get-families" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/families" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3472,9 +3499,9 @@ export def "patch-families" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/families" $auth.query)
   let req_body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $code, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3515,9 +3542,9 @@ export def "post-families" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/families" $auth.query)
   let req_body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $code, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3553,7 +3580,7 @@ export def "get-families-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3587,7 +3614,7 @@ export def "patch-families-code" [
   attribute_as_label: string # Attribute code used as label
   --attribute-requirements: record # Attributes codes of the family that are required for the completeness calculation for each channel — shape: {channelCode?: list<string>}
   --attributes: list<string> # Attributes codes that compose the family (default: [])
-  --body-code: string # Family code
+  --body-code: string # Family code (spec name: code)
   --labels: record # Family labels for each locale (default: {}) — shape: {localeCode?: string}
 ]: any -> any {
   let input = $in
@@ -3596,10 +3623,10 @@ export def "patch-families-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{code}") $auth.query)
   let req_body = {"attribute_as_image": $attribute_as_image, "attribute_as_label": $attribute_as_label, "attribute_requirements": $attribute_requirements, "attributes": $attributes, "code": $body_code, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3639,7 +3666,7 @@ export def "get-families-family-code-variants" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code)} | format pattern "/api/rest/v1/families/{family_code}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3679,9 +3706,9 @@ export def "patch-families-family-code-variants" [
   if ($family_code | is-empty) { error make --unspanned { msg: "path parameter 'family_code' must be non-empty" } }
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code)} | format pattern "/api/rest/v1/families/{family_code}/variants") $auth.query)
   let req_body = {"code": $code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3721,9 +3748,9 @@ export def "post-families-family-code-variants" [
   if ($family_code | is-empty) { error make --unspanned { msg: "path parameter 'family_code' must be non-empty" } }
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code)} | format pattern "/api/rest/v1/families/{family_code}/variants") $auth.query)
   let req_body = {"code": $code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3761,7 +3788,7 @@ export def "get-families-family-code-variants-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{family_code}/variants/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3792,7 +3819,7 @@ export def "patch-families-family-code-variants-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Family variant code
+  --body-code: string # Family variant code (spec name: code)
   --labels: record # Family variant labels for each locale (default: {}) — shape: {localeCode?: string}
   variant_attribute_sets: list # Attributes distribution according to the enrichment level — item shape: {attributes?: list<string>, axes: list<string>, level: int}
 ]: any -> any {
@@ -3803,10 +3830,10 @@ export def "patch-families-family-code-variants-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({family_code: (encode-path-segment $family_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/families/{family_code}/variants/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels, "variant_attribute_sets": $variant_attribute_sets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3845,7 +3872,7 @@ export def "get-locales" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/locales" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3881,7 +3908,7 @@ export def "get-locales-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/locales/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3915,7 +3942,7 @@ export def "measure-families-get-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measure-families" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3951,7 +3978,7 @@ export def "measure-families-get" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/measure-families/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3985,7 +4012,7 @@ export def "measurement-families-get-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measurement-families" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4021,9 +4048,9 @@ export def "patch-measurement-families" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measurement-families" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4061,7 +4088,7 @@ export def "get-media-files" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/media-files" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4100,13 +4127,13 @@ export def "post-media-files" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/media-files" $auth.query)
   let req_body = {"file": $file, "product": $product, "product_model": $product_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4142,7 +4169,7 @@ export def "get-media-files-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/media-files/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4178,7 +4205,7 @@ export def "get-media-files-code-download" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/media-files/{code}/download") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4223,7 +4250,7 @@ export def "get-product-models" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/product-models" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4270,9 +4297,9 @@ export def "patch-product-models" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/product-models" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "code": $code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4319,9 +4346,9 @@ export def "post-product-models" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/product-models" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "code": $code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4357,7 +4384,7 @@ export def "delete-product-models-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4395,7 +4422,7 @@ export def "get-product-models-code" [
   let qp = [(serialize-qp "with_quality_scores" $with_quality_scores "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4427,7 +4454,7 @@ export def "patch-product-models-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --associations: record # Several associations related to groups, product and/or other product models, grouped by association types — shape: {associationTypeCode?: record}
   --categories: list<string> # Codes of the categories in which the product model is categorized (default: [])
-  --body-code: string # Product model code
+  --body-code: string # Product model code (spec name: code)
   --created: string # Date of creation (format: dateTime)
   --family: string # Family code from which the product inherits its attributes and attributes requirements (since the 3.2)
   family_variant: string # Family variant code from which the product model inherits its attributes and variant attributes
@@ -4444,10 +4471,10 @@ export def "patch-product-models-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}") $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "code": $body_code, "created": $created, "family": $family, "family_variant": $family_variant, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4483,7 +4510,7 @@ export def "get-product-model-draft-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}/draft") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4519,7 +4546,7 @@ export def "post-product-model-proposal" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/product-models/{code}/proposal") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4566,7 +4593,7 @@ export def "get-products" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/products" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4616,9 +4643,9 @@ export def "patch-products" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4668,9 +4695,9 @@ export def "post-products" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4717,7 +4744,7 @@ export def "get-products-uuid" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/products-uuid" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4766,9 +4793,9 @@ export def "patch-products-uuid" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products-uuid" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4817,9 +4844,9 @@ export def "post-products-uuid" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/products-uuid" $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4855,7 +4882,7 @@ export def "delete-products-uuid-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/products-uuid/{uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4895,7 +4922,7 @@ export def "get-products-uuid-uuid" [
   let qp = [(serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/products-uuid/{uuid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4937,7 +4964,7 @@ export def "patch-products-uuid-uuid" [
   --quality-scores: record # Product quality scores for each channel/locale combination (only available since the 5.0 and when the "with_quality_scores" query parameter is set to "true")
   --quantified-associations: record # Several quantified associations related to products and/or product models, grouped by quantified association types (only available since the 5.0) — shape: {quantifiedAssociationTypeCode?: record}
   --updated: string # Date of the last update (format: dateTime)
-  --body-uuid: string # Product uuid
+  --body-uuid: string # Product uuid (spec name: uuid)
   --values: record # Product attributes values, see Product values section for more details — shape: {attributeCode?: list}
 ]: any -> any {
   let input = $in
@@ -4946,9 +4973,9 @@ export def "patch-products-uuid-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/products-uuid/{uuid}") $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $body_uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4984,7 +5011,7 @@ export def "get-draft-uuid-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/products-uuid/{uuid}/draft") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5020,7 +5047,7 @@ export def "post-proposal-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api/rest/v1/products-uuid/{uuid}/proposal") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5056,7 +5083,7 @@ export def "delete-products-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/products/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5096,7 +5123,7 @@ export def "get-products-code" [
   let qp = [(serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/products/{code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5148,9 +5175,9 @@ export def "patch-products-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/products/{code}") $auth.query)
   let req_body = {"associations": $associations, "categories": $categories, "completenesses": $completenesses, "created": $created, "enabled": $enabled, "family": $family, "groups": $groups, "identifier": $identifier, "metadata": $metadata, "parent": $parent, "quality_scores": $quality_scores, "quantified_associations": $quantified_associations, "updated": $updated, "uuid": $uuid, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5186,7 +5213,7 @@ export def "get-draft-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/products/{code}/draft") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5222,7 +5249,7 @@ export def "post-proposal" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/products/{code}/proposal") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5266,7 +5293,7 @@ export def "get-published-products" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/published-products" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5302,7 +5329,7 @@ export def "get-published-products-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/published-products/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5338,7 +5365,7 @@ export def "get-reference-entities" [
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/reference-entities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5375,13 +5402,13 @@ export def "post-reference-entity-media-files" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/reference-entities-media-files" $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5417,7 +5444,7 @@ export def "get-reference-entity-media-files-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities-media-files/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5453,7 +5480,7 @@ export def "get-reference-entities-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5483,7 +5510,7 @@ export def "patch-reference-entity-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Reference entity code
+  --body-code: string # Reference entity code (spec name: code)
   --image: string # Code of the reference entity image
   --labels: record # Reference entity labels for each locale (default: {}) — shape: {localeCode?: string}
 ]: any -> any {
@@ -5493,10 +5520,10 @@ export def "patch-reference-entity-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{code}") $auth.query)
   let req_body = {"code": $body_code, "image": $image, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5532,7 +5559,7 @@ export def "get-reference-entities-code-attributes" [
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5570,7 +5597,7 @@ export def "get-reference-entity-attributes-attribute-code-options" [
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), attribute_code: (encode-path-segment $attribute_code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5610,7 +5637,7 @@ export def "get-reference-entity-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5642,7 +5669,7 @@ export def "patch-reference-entity-attributes-attribute-code-options-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Attribute's option code
+  --body-code: string # Attribute's option code (spec name: code)
   --labels: record # Attribute labels for each locale (default: {}) — shape: {localeCode?: string}
 ]: any -> any {
   let input = $in
@@ -5653,10 +5680,10 @@ export def "patch-reference-entity-attributes-attribute-code-options-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), attribute_code: (encode-path-segment $attribute_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}") $auth.query)
   let req_body = {"code": $body_code, "labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5694,7 +5721,7 @@ export def "get-reference-entity-attributes-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5726,7 +5753,7 @@ export def "patch-reference-entity-attributes-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-extensions: list<string> # Extensions allowed when the attribute type is `image` (default: [])
-  --body-code: string # Attribute code
+  --body-code: string # Attribute code (spec name: code)
   --decimals-allowed: oneof<nothing, bool> # Whether decimals are allowed when the attribute type is `number` (default: false)
   --is-required-for-completeness: oneof<nothing, bool> # Whether the attribute should be part of the record's completeness calculation (default: false)
   --is-rich-text-editor: oneof<nothing, bool> # Whether the UI should display a rich text editor instead of a simple text area when the attribute type is `text`
@@ -5736,7 +5763,7 @@ export def "patch-reference-entity-attributes-code" [
   --max-file-size: string # Max file size in MB when the attribute type is `image`
   --max-value: string # Maximum value allowed when the attribute type is `number`
   --min-value: string # Minimum value allowed when the attribute type is `number`
-  --body-reference-entity-code: string # Code of the linked reference entity when the attribute type is `reference_entity_single_link` or `reference_entity_multiple_links`
+  --body-reference-entity-code: string # Code of the linked reference entity when the attribute type is `reference_entity_single_link` or `reference_entity_multiple_links` (spec name: reference_entity_code)
   type: string@type-completer-2 # Attribute type. See type section for more details.
   --validation-regexp: string # Regexp expression used to validate the attribute value when the attribute type is `text`
   --validation-rule: string@validation-rule-completer # Validation rule type used to validate the attribute value when the attribute type is `text` (default: none)
@@ -5750,10 +5777,10 @@ export def "patch-reference-entity-attributes-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}") $auth.query)
   let req_body = {"allowed_extensions": $allowed_extensions, "code": $body_code, "decimals_allowed": $decimals_allowed, "is_required_for_completeness": $is_required_for_completeness, "is_rich_text_editor": $is_rich_text_editor, "is_textarea": $is_textarea, "labels": $labels, "max_characters": $max_characters, "max_file_size": $max_file_size, "max_value": $max_value, "min_value": $min_value, "reference_entity_code": $body_reference_entity_code, "type": $type, "validation_regexp": $validation_regexp, "validation_rule": $validation_rule, "value_per_channel": $value_per_channel, "value_per_locale": $value_per_locale} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5794,7 +5821,7 @@ export def "get-reference-entity-records" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5832,9 +5859,9 @@ export def "patch-reference-entity-records" [
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5872,7 +5899,7 @@ export def "get-reference-entity-records-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records/{code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5903,7 +5930,7 @@ export def "patch-reference-entity-records-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-code: string # Code of the record
+  --body-code: string # Code of the record (spec name: code)
   --created: string # Date of creation. (format: dateTime)
   --updated: string # Date of the last update. (format: dateTime)
   --values: record # Record attributes values, see Reference entity record values section for more details — shape: {attributeCode?: list}
@@ -5915,10 +5942,10 @@ export def "patch-reference-entity-records-code" [
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({reference_entity_code: (encode-path-segment $reference_entity_code), code: (encode-path-segment $code)} | format pattern "/api/rest/v1/reference-entities/{reference_entity_code}/records/{code}") $auth.query)
   let req_body = {"code": $body_code, "created": $created, "updated": $updated, "values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "code") == null) { error make --unspanned { msg: "required body field 'code' missing: pass --body-code or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5952,7 +5979,7 @@ export def "get-system-information" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/system-information" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

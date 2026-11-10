@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -164,9 +191,9 @@ export def "get-district-events" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -203,9 +230,9 @@ export def "get-district-events-keys" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -242,9 +269,9 @@ export def "get-district-events-simple" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/events/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -281,9 +308,9 @@ export def "get-district-rankings" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/rankings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -320,9 +347,9 @@ export def "get-district-teams" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -359,9 +386,9 @@ export def "get-district-teams-keys" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -398,9 +425,9 @@ export def "get-district-teams-simple" [
   if ($district_key | is-empty) { error make --unspanned { msg: "path parameter 'district_key' must be non-empty" } }
   let full_url = (build-url $base ({district_key: (encode-path-segment $district_key)} | format pattern "/district/{district_key}/teams/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -437,9 +464,9 @@ export def "get-districts-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/districts/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -476,9 +503,9 @@ export def "get-event" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -515,9 +542,9 @@ export def "get-event-alliances" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/alliances") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -554,9 +581,9 @@ export def "get-event-awards" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/awards") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -593,9 +620,9 @@ export def "get-event-district-points" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/district_points") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -632,9 +659,9 @@ export def "get-event-insights" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/insights") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -671,9 +698,9 @@ export def "get-event-matches" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -710,9 +737,9 @@ export def "get-event-matches-keys" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -749,9 +776,9 @@ export def "get-event-matches-simple" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -788,9 +815,9 @@ export def "get-event-match-timeseries" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/matches/timeseries") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -827,9 +854,9 @@ export def "get-event-op-rs" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/oprs") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -866,9 +893,9 @@ export def "get-event-predictions" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/predictions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -905,9 +932,9 @@ export def "get-event-rankings" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/rankings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -944,9 +971,9 @@ export def "get-event-simple" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -983,9 +1010,9 @@ export def "get-event-teams" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1022,9 +1049,9 @@ export def "get-event-teams-keys" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1061,9 +1088,9 @@ export def "get-event-teams-simple" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1100,9 +1127,9 @@ export def "get-event-teams-statuses" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({event_key: (encode-path-segment $event_key)} | format pattern "/event/{event_key}/teams/statuses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1139,9 +1166,9 @@ export def "get-events-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,9 +1205,9 @@ export def "get-events-by-year-keys" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1217,9 +1244,9 @@ export def "get-events-by-year-simple" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/events/{year}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1256,9 +1283,9 @@ export def "get-match" [
   if ($match_key | is-empty) { error make --unspanned { msg: "path parameter 'match_key' must be non-empty" } }
   let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1295,9 +1322,9 @@ export def "get-match-simple" [
   if ($match_key | is-empty) { error make --unspanned { msg: "path parameter 'match_key' must be non-empty" } }
   let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1334,9 +1361,9 @@ export def "get-match-timeseries" [
   if ($match_key | is-empty) { error make --unspanned { msg: "path parameter 'match_key' must be non-empty" } }
   let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/timeseries") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1373,9 +1400,9 @@ export def "get-match-zebra" [
   if ($match_key | is-empty) { error make --unspanned { msg: "path parameter 'match_key' must be non-empty" } }
   let full_url = (build-url $base ({match_key: (encode-path-segment $match_key)} | format pattern "/match/{match_key}/zebra_motionworks") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1410,9 +1437,9 @@ export def "get-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1449,9 +1476,9 @@ export def "get-team" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1488,9 +1515,9 @@ export def "get-team-awards" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/awards") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1529,9 +1556,9 @@ export def "get-team-awards-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/awards/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1568,9 +1595,9 @@ export def "get-team-districts" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/districts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "get-team-event-awards" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/awards") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1650,9 +1677,9 @@ export def "get-team-event-matches" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1691,9 +1718,9 @@ export def "get-team-event-matches-keys" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1732,9 +1759,9 @@ export def "get-team-event-matches-simple" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/matches/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1773,9 +1800,9 @@ export def "get-team-event-status" [
   if ($event_key | is-empty) { error make --unspanned { msg: "path parameter 'event_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), event_key: (encode-path-segment $event_key)} | format pattern "/team/{team_key}/event/{event_key}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1812,9 +1839,9 @@ export def "get-team-events" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1851,9 +1878,9 @@ export def "get-team-events-keys" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1890,9 +1917,9 @@ export def "get-team-events-simple" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/events/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1931,9 +1958,9 @@ export def "get-team-events-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1972,9 +1999,9 @@ export def "get-team-events-by-year-keys" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2013,9 +2040,9 @@ export def "get-team-events-by-year-simple" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2054,9 +2081,9 @@ export def "get-team-events-statuses-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/events/{year}/statuses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2095,9 +2122,9 @@ export def "get-team-matches-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2136,9 +2163,9 @@ export def "get-team-matches-by-year-keys" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2177,9 +2204,9 @@ export def "get-team-matches-by-year-simple" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/matches/{year}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2218,9 +2245,9 @@ export def "get-team-media-by-tag" [
   if ($media_tag | is-empty) { error make --unspanned { msg: "path parameter 'media_tag' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), media_tag: (encode-path-segment $media_tag)} | format pattern "/team/{team_key}/media/tag/{media_tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2261,9 +2288,9 @@ export def "get-team-media-by-tag-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), media_tag: (encode-path-segment $media_tag), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/media/tag/{media_tag}/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2302,9 +2329,9 @@ export def "get-team-media-by-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key), year: (encode-path-segment $year)} | format pattern "/team/{team_key}/media/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2341,9 +2368,9 @@ export def "get-team-robots" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/robots") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2380,9 +2407,9 @@ export def "get-team-simple" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2419,9 +2446,9 @@ export def "get-team-social-media" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/social_media") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2458,9 +2485,9 @@ export def "get-team-years-participated" [
   if ($team_key | is-empty) { error make --unspanned { msg: "path parameter 'team_key' must be non-empty" } }
   let full_url = (build-url $base ({team_key: (encode-path-segment $team_key)} | format pattern "/team/{team_key}/years_participated") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2497,9 +2524,9 @@ export def "get-teams" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2536,9 +2563,9 @@ export def "get-teams-keys" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2575,9 +2602,9 @@ export def "get-teams-simple" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({page_num: (encode-path-segment $page_num)} | format pattern "/teams/{page_num}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2616,9 +2643,9 @@ export def "get-teams-by-year" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2657,9 +2684,9 @@ export def "get-teams-by-year-keys" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2698,9 +2725,9 @@ export def "get-teams-by-year-simple" [
   if ($page_num | is-empty) { error make --unspanned { msg: "path parameter 'page_num' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year), page_num: (encode-path-segment $page_num)} | format pattern "/teams/{year}/{page_num}/simple") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

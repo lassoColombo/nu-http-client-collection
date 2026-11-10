@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -270,11 +297,11 @@ export def "accept-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.AcceptEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -319,11 +346,11 @@ export def "cancel-component-deployment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CancelComponentDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"componentName": $component_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -368,11 +395,11 @@ export def "cancel-environment-deployment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CancelEnvironmentDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"environmentName": $environment_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -418,11 +445,11 @@ export def "cancel-service-instance-deployment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CancelServiceInstanceDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -467,11 +494,11 @@ export def "cancel-service-pipeline-deployment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CancelServicePipelineDeployment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -525,11 +552,11 @@ export def "create-component" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "description": $description, "environmentName": $environment_name, "manifest": $manifest, "name": $name, "serviceInstanceName": $service_instance_name, "serviceName": $service_name, "serviceSpec": $service_spec, "tags": $tags, "templateFile": $template_file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -585,11 +612,11 @@ export def "create-environment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "description": $description, "environmentAccountConnectionId": $environment_account_connection_id, "name": $name, "protonServiceRoleArn": $proton_service_role_arn, "provisioningRepository": $provisioning_repository, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -640,11 +667,11 @@ export def "create-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "environmentName": $environment_name, "managementAccountId": $management_account_id, "roleArn": $role_arn, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -694,11 +721,11 @@ export def "create-environment-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateEnvironmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "encryptionKey": $encryption_key, "name": $name, "provisioning": $provisioning, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -748,11 +775,11 @@ export def "create-environment-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateEnvironmentTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "description": $description, "majorVersion": $major_version, "source": $source, "tags": $tags, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -801,11 +828,11 @@ export def "create-repository" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateRepository")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"connectionArn": $connection_arn, "encryptionKey": $encryption_key, "name": $name, "provider": $provider, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -859,11 +886,11 @@ export def "create-service" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branchName": $branch_name, "description": $description, "name": $name, "repositoryConnectionArn": $repository_connection_arn, "repositoryId": $repository_id, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -914,11 +941,11 @@ export def "create-service-instance" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateServiceInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "name": $name, "serviceName": $service_name, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -967,11 +994,11 @@ export def "create-service-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateServiceSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branch": $branch, "filePath": $file_path, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1021,11 +1048,11 @@ export def "create-service-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateServiceTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "encryptionKey": $encryption_key, "name": $name, "pipelineProvisioning": $pipeline_provisioning, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1077,11 +1104,11 @@ export def "create-service-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateServiceTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "compatibleEnvironmentTemplates": $compatible_environment_templates, "description": $description, "majorVersion": $major_version, "source": $source, "supportedComponentSources": $supported_component_sources, "tags": $tags, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1131,11 +1158,11 @@ export def "create-template-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.CreateTemplateSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "subdirectory": $subdirectory, "templateName": $template_name, "templateType": $template_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1180,11 +1207,11 @@ export def "delete-component" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1229,11 +1256,11 @@ export def "delete-environment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1278,11 +1305,11 @@ export def "delete-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1327,11 +1354,11 @@ export def "delete-environment-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteEnvironmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1378,11 +1405,11 @@ export def "delete-environment-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteEnvironmentTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1428,11 +1455,11 @@ export def "delete-repository" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteRepository")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "provider": $provider} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1477,11 +1504,11 @@ export def "delete-service" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1526,11 +1553,11 @@ export def "delete-service-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteServiceSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1575,11 +1602,11 @@ export def "delete-service-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteServiceTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1626,11 +1653,11 @@ export def "delete-service-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteServiceTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1676,11 +1703,11 @@ export def "delete-template-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.DeleteTemplateSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"templateName": $template_name, "templateType": $template_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1725,11 +1752,11 @@ export def "get-account-settings" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetAccountSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1774,11 +1801,11 @@ export def "get-component" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1823,11 +1850,11 @@ export def "get-environment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1872,11 +1899,11 @@ export def "get-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1921,11 +1948,11 @@ export def "get-environment-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetEnvironmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1972,11 +1999,11 @@ export def "get-environment-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetEnvironmentTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2022,11 +2049,11 @@ export def "get-repository" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetRepository")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "provider": $provider} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2074,11 +2101,11 @@ export def "get-repository-sync-status" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetRepositorySyncStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "syncType": $sync_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2123,11 +2150,11 @@ export def "get-resources-summary" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetResourcesSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2172,11 +2199,11 @@ export def "get-service" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2222,11 +2249,11 @@ export def "get-service-instance" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2272,11 +2299,11 @@ export def "get-service-instance-sync-status" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceInstanceSyncStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2322,11 +2349,11 @@ export def "get-service-sync-blocker-summary" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceSyncBlockerSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2371,11 +2398,11 @@ export def "get-service-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2420,11 +2447,11 @@ export def "get-service-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2471,11 +2498,11 @@ export def "get-service-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetServiceTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2521,11 +2548,11 @@ export def "get-template-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetTemplateSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"templateName": $template_name, "templateType": $template_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2572,11 +2599,11 @@ export def "get-template-sync-status" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.GetTemplateSyncStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"templateName": $template_name, "templateType": $template_type, "templateVersion": $template_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2615,7 +2642,7 @@ export def "list-component-outputs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   component_name: string # The name of the component whose outputs you want.
-  --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2623,12 +2650,12 @@ export def "list-component-outputs" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListComponentOutputs")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"componentName": $component_name, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"componentName": $component_name, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2667,7 +2694,7 @@ export def "list-component-provisioned-resources" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-47 # required
   component_name: string # The name of the component whose provisioned resources you want.
-  --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2675,12 +2702,12 @@ export def "list-component-provisioned-resources" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListComponentProvisionedResources")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"componentName": $component_name, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"componentName": $component_name, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2720,8 +2747,8 @@ export def "list-components" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   --environment-name: string # The name of an environment for result list filtering. Proton returns components associated with the environment or attached to service instances running in it.
-  --max-results-body: int # The maximum number of components to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next component in the array of components, after the list of components that was previously requested. (body field)
+  --body-max-results: int # The maximum number of components to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next component in the array of components, after the list of components that was previously requested. (spec name: nextToken)
   --service-instance-name: string # The name of a service instance for result list filtering. Proton returns the component attached to the service instance, if any.
   --service-name: string # The name of a service for result list filtering. Proton returns components attached to service instances of the service.
 ]: any -> oneof<record<components: table<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string>, nextToken: string>, string, nothing> {
@@ -2731,12 +2758,12 @@ export def "list-components" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListComponents")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"environmentName": $environment_name, "maxResults": $max_results_body, "nextToken": $next_token_body, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"environmentName": $environment_name, "maxResults": $body_max_results, "nextToken": $body_next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2776,8 +2803,8 @@ export def "list-environment-account-connections" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-49 # required
   --environment-name: string # The environment name that's associated with each listed environment account connection.
-  --max-results-body: int # The maximum number of environment account connections to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next environment account connection in the array of environment account connections, after the list of environment account connections that was previously requested. (body field)
+  --body-max-results: int # The maximum number of environment account connections to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next environment account connection in the array of environment account connections, after the list of environment account connections that was previously requested. (spec name: nextToken)
   requested_by: string@requested-by-completer # The type of account making the ListEnvironmentAccountConnections request.
   --statuses: list<string> # The status details for each listed environment account connection.
 ]: any -> oneof<record<environmentAccountConnections: table<arn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>, nextToken: string>, string, nothing> {
@@ -2787,12 +2814,12 @@ export def "list-environment-account-connections" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironmentAccountConnections")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"environmentName": $environment_name, "maxResults": $max_results_body, "nextToken": $next_token_body, "requestedBy": $requested_by, "statuses": $statuses} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"environmentName": $environment_name, "maxResults": $body_max_results, "nextToken": $body_next_token, "requestedBy": $requested_by, "statuses": $statuses} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2831,7 +2858,7 @@ export def "list-environment-outputs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
   environment_name: string # The environment name.
-  --next-token-body: string # A token that indicates the location of the next environment output in the array of environment outputs, after the list of environment outputs that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next environment output in the array of environment outputs, after the list of environment outputs that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2839,12 +2866,12 @@ export def "list-environment-outputs" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironmentOutputs")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"environmentName": $environment_name, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"environmentName": $environment_name, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2883,7 +2910,7 @@ export def "list-environment-provisioned-resources" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-51 # required
   environment_name: string # The environment name.
-  --next-token-body: string # A token that indicates the location of the next environment provisioned resource in the array of environment provisioned resources, after the list of environment provisioned resources that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next environment provisioned resource in the array of environment provisioned resources, after the list of environment provisioned resources that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2891,12 +2918,12 @@ export def "list-environment-provisioned-resources" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironmentProvisionedResources")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"environmentName": $environment_name, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"environmentName": $environment_name, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2936,8 +2963,8 @@ export def "list-environment-template-versions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-52 # required
   --major-version: string # To view a list of minor of versions under a major version of an environment template, include major Version. To view a list of major versions of an environment template, exclude major Version.
-  --max-results-body: int # The maximum number of major or minor versions of an environment template to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of an environment template, after the list of major or minor versions that was previously requested. (body field)
+  --body-max-results: int # The maximum number of major or minor versions of an environment template to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of an environment template, after the list of major or minor versions that was previously requested. (spec name: nextToken)
   template_name: string # The name of the environment template.
 ]: any -> oneof<record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
@@ -2946,12 +2973,12 @@ export def "list-environment-template-versions" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironmentTemplateVersions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"majorVersion": $major_version, "maxResults": $max_results_body, "nextToken": $next_token_body, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"majorVersion": $major_version, "maxResults": $body_max_results, "nextToken": $body_next_token, "templateName": $template_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2990,8 +3017,8 @@ export def "list-environment-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
-  --max-results-body: int # The maximum number of environment templates to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next environment template in the array of environment templates, after the list of environment templates that was previously requested. (body field)
+  --body-max-results: int # The maximum number of environment templates to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next environment template in the array of environment templates, after the list of environment templates that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2999,12 +3026,12 @@ export def "list-environment-templates" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironmentTemplates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3044,8 +3071,8 @@ export def "list-environments" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   --environment-templates: list # An array of the versions of the environment template. — item shape: {majorVersion: string, templateName: string}
-  --max-results-body: int # The maximum number of environments to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next environment in the array of environments, after the list of environments that was previously requested. (body field)
+  --body-max-results: int # The maximum number of environments to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next environment in the array of environments, after the list of environments that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<environments: table<arn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3053,12 +3080,12 @@ export def "list-environments" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListEnvironments")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"environmentTemplates": $environment_templates, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"environmentTemplates": $environment_templates, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3097,8 +3124,8 @@ export def "list-repositories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-55 # required
-  --max-results-body: int # The maximum number of repositories to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next repository in the array of repositories, after the list of repositories previously requested. (body field)
+  --body-max-results: int # The maximum number of repositories to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next repository in the array of repositories, after the list of repositories previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, repositories: table<arn: string, connectionArn: string, name: string, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3106,12 +3133,12 @@ export def "list-repositories" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListRepositories")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3149,7 +3176,7 @@ export def "list-repository-sync-definitions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
-  --next-token-body: string # A token that indicates the location of the next repository sync definition in the array of repository sync definitions, after the list of repository sync definitions previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next repository sync definition in the array of repository sync definitions, after the list of repository sync definitions previously requested. (spec name: nextToken)
   repository_name: string # The repository name.
   repository_provider: string@repository-provider-completer # The repository provider.
   sync_type: string@sync-type-completer # The sync type. The only supported value is TEMPLATE_SYNC.
@@ -3160,12 +3187,12 @@ export def "list-repository-sync-definitions" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListRepositorySyncDefinitions")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "syncType": $sync_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "syncType": $sync_type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3203,7 +3230,7 @@ export def "list-service-instance-outputs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-57 # required
-  --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (spec name: nextToken)
   service_instance_name: string # The name of the service instance whose outputs you want.
   service_name: string # The name of the service that serviceInstanceName is associated to.
 ]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
@@ -3213,12 +3240,12 @@ export def "list-service-instance-outputs" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServiceInstanceOutputs")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3256,7 +3283,7 @@ export def "list-service-instance-provisioned-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
-  --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (spec name: nextToken)
   service_instance_name: string # The name of the service instance whose provisioned resources you want.
   service_name: string # The name of the service that serviceInstanceName is associated to.
 ]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
@@ -3266,12 +3293,12 @@ export def "list-service-instance-provisioned-resources" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServiceInstanceProvisionedResources")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3311,8 +3338,8 @@ export def "list-service-instances" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   --filters: list # An array of filtering criteria that scope down the result list. By default, all service instances in the Amazon Web Services account are returned. — item shape: {key?: "name"|"deploymentStatus"|"templateName"|"serviceName"|"deployedTemplateVersionStatus"|"environmentName"|"lastDeploymentAttemptedAtBefore"|"lastDeploymentAttemptedAtAfter"|"createdAtBefore"|"createdAtAfter", value?: string}
-  --max-results-body: int # The maximum number of service instances to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next service in the array of service instances, after the list of service instances that was previously requested. (body field)
+  --body-max-results: int # The maximum number of service instances to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next service in the array of service instances, after the list of service instances that was previously requested. (spec name: nextToken)
   --service-name: string # The name of the service that the service instance belongs to.
   --sort-by: string@sort-by-completer # The field that the result list is sorted by. When you choose to sort by serviceName, service instances within each service are sorted by service instance name. Default: serviceName
   --sort-order: string@sort-order-completer # Result list sort order. Default: ASCENDING
@@ -3323,12 +3350,12 @@ export def "list-service-instances" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServiceInstances")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body, "serviceName": $service_name, "sortBy": $sort_by, "sortOrder": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token, "serviceName": $service_name, "sortBy": $sort_by, "sortOrder": $sort_order} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3366,7 +3393,7 @@ export def "list-service-pipeline-outputs" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-60 # required
-  --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (spec name: nextToken)
   service_name: string # The name of the service whose pipeline's outputs you want.
 ]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
@@ -3375,12 +3402,12 @@ export def "list-service-pipeline-outputs" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServicePipelineOutputs")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "serviceName": $service_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3418,7 +3445,7 @@ export def "list-service-pipeline-provisioned-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-61 # required
-  --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
+  --body-next-token: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (spec name: nextToken)
   service_name: string # The name of the service whose pipeline's provisioned resources you want.
 ]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
@@ -3427,12 +3454,12 @@ export def "list-service-pipeline-provisioned-resources" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServicePipelineProvisionedResources")
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "serviceName": $service_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3472,8 +3499,8 @@ export def "list-service-template-versions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-62 # required
   --major-version: string # To view a list of minor of versions under a major version of a service template, include major Version. To view a list of major versions of a service template, exclude major Version.
-  --max-results-body: int # The maximum number of major or minor versions of a service template to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of a service template, after the list of major or minor versions that was previously requested. (body field)
+  --body-max-results: int # The maximum number of major or minor versions of a service template to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of a service template, after the list of major or minor versions that was previously requested. (spec name: nextToken)
   template_name: string # The name of the service template.
 ]: any -> oneof<record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
@@ -3482,12 +3509,12 @@ export def "list-service-template-versions" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServiceTemplateVersions")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"majorVersion": $major_version, "maxResults": $max_results_body, "nextToken": $next_token_body, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"majorVersion": $major_version, "maxResults": $body_max_results, "nextToken": $body_next_token, "templateName": $template_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3526,8 +3553,8 @@ export def "list-service-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-63 # required
-  --max-results-body: int # The maximum number of service templates to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next service template in the array of service templates, after the list of service templates previously requested. (body field)
+  --body-max-results: int # The maximum number of service templates to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next service template in the array of service templates, after the list of service templates previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3535,12 +3562,12 @@ export def "list-service-templates" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServiceTemplates")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3579,8 +3606,8 @@ export def "list-services" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-64 # required
-  --max-results-body: int # The maximum number of services to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next service in the array of services, after the list of services that was previously requested. (body field)
+  --body-max-results: int # The maximum number of services to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next service in the array of services, after the list of services that was previously requested. (spec name: nextToken)
 ]: any -> oneof<record<nextToken: string, services: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, name: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3588,12 +3615,12 @@ export def "list-services" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListServices")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3632,8 +3659,8 @@ export def "list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-65 # required
-  --max-results-body: int # The maximum number of tags to list. (body field)
-  --next-token-body: string # A token that indicates the location of the next resource tag in the array of resource tags, after the list of resource tags that was previously requested. (body field)
+  --body-max-results: int # The maximum number of tags to list. (spec name: maxResults)
+  --body-next-token: string # A token that indicates the location of the next resource tag in the array of resource tags, after the list of resource tags that was previously requested. (spec name: nextToken)
   resource_arn: string # The Amazon Resource Name (ARN) of the resource for the listed tags.
 ]: any -> oneof<record<nextToken: string, tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
@@ -3642,12 +3669,12 @@ export def "list-tags-for-resource" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.ListTagsForResource")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body, "resourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token, "resourceArn": $resource_arn} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3696,11 +3723,11 @@ export def "notify-resource-deployment-status-change" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.NotifyResourceDeploymentStatusChange")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentId": $deployment_id, "outputs": $outputs, "resourceArn": $resource_arn, "status": $status, "statusMessage": $status_message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3745,11 +3772,11 @@ export def "reject-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.RejectEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3795,11 +3822,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3845,11 +3872,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3897,11 +3924,11 @@ export def "update-account-settings" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateAccountSettings")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deletePipelineProvisioningRepository": $delete_pipeline_provisioning_repository, "pipelineCodebuildRoleArn": $pipeline_codebuild_role_arn, "pipelineProvisioningRepository": $pipeline_provisioning_repository, "pipelineServiceRoleArn": $pipeline_service_role_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3953,11 +3980,11 @@ export def "update-component" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateComponent")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "deploymentType": $deployment_type, "description": $description, "name": $name, "serviceInstanceName": $service_instance_name, "serviceName": $service_name, "serviceSpec": $service_spec, "templateFile": $template_file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4012,11 +4039,11 @@ export def "update-environment" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateEnvironment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "deploymentType": $deployment_type, "description": $description, "environmentAccountConnectionId": $environment_account_connection_id, "name": $name, "protonServiceRoleArn": $proton_service_role_arn, "provisioningRepository": $provisioning_repository, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4064,11 +4091,11 @@ export def "update-environment-account-connection" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateEnvironmentAccountConnection")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "id": $id, "roleArn": $role_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4115,11 +4142,11 @@ export def "update-environment-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateEnvironmentTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4168,11 +4195,11 @@ export def "update-environment-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateEnvironmentTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "majorVersion": $major_version, "minorVersion": $minor_version, "status": $status, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4219,11 +4246,11 @@ export def "update-service" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateService")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "name": $name, "spec": $spec} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4274,11 +4301,11 @@ export def "update-service-instance" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServiceInstance")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"clientToken": $client_token, "deploymentType": $deployment_type, "name": $name, "serviceName": $service_name, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4327,11 +4354,11 @@ export def "update-service-pipeline" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServicePipeline")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deploymentType": $deployment_type, "serviceName": $service_name, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4377,11 +4404,11 @@ export def "update-service-sync-blocker" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServiceSyncBlocker")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "resolvedReason": $resolved_reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4430,11 +4457,11 @@ export def "update-service-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServiceSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branch": $branch, "filePath": $file_path, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "serviceName": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4481,11 +4508,11 @@ export def "update-service-template" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServiceTemplate")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4536,11 +4563,11 @@ export def "update-service-template-version" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateServiceTemplateVersion")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"compatibleEnvironmentTemplates": $compatible_environment_templates, "description": $description, "majorVersion": $major_version, "minorVersion": $minor_version, "status": $status, "supportedComponentSources": $supported_component_sources, "templateName": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4590,11 +4617,11 @@ export def "update-template-sync-config" [
   let x_amz_target = ($x_amz_target | default "AwsProton20200720.UpdateTemplateSyncConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "subdirectory": $subdirectory, "templateName": $template_name, "templateType": $template_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

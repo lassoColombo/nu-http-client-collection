@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -195,7 +222,7 @@ export def "list-esim-profile" [
   let qp = [(serialize-qp "Eid" $eid "scalar") (serialize-qp "SimSid" $sim_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ESimProfiles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -234,9 +261,9 @@ export def "create-esim-profile" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/ESimProfiles" $auth.query)
   let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Eid": $eid, "GenerateMatchingId": $generate_matching_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -273,7 +300,7 @@ export def "fetch-esim-profile" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/ESimProfiles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -312,7 +339,7 @@ export def "list-fleet" [
   let qp = [(serialize-qp "NetworkAccessProfile" $network_access_profile "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Fleets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -356,9 +383,9 @@ export def "create-fleet" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/Fleets" $auth.query)
   let req_body = {"DataEnabled": $data_enabled, "DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsEnabled": $sms_commands_enabled, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -395,7 +422,7 @@ export def "fetch-fleet" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Fleets/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -439,9 +466,9 @@ export def "update-fleet" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Fleets/{sid}") $auth.query)
   let req_body = {"DataLimit": $data_limit, "IpCommandsMethod": $ip_commands_method, "IpCommandsUrl": $ip_commands_url, "NetworkAccessProfile": $network_access_profile, "SmsCommandsMethod": $sms_commands_method, "SmsCommandsUrl": $sms_commands_url, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -484,7 +511,7 @@ export def "list-ip-command" [
   let qp = [(serialize-qp "Sim" $sim "scalar") (serialize-qp "SimIccid" $sim_iccid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/IpCommands" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -525,9 +552,9 @@ export def "create-ip-command" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/IpCommands" $auth.query)
   let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "DevicePort": $device_port, "Payload": $payload, "PayloadType": $payload_type, "Sim": $sim} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -564,7 +591,7 @@ export def "fetch-ip-command" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/IpCommands/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -602,7 +629,7 @@ export def "list-network-access-profile" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/NetworkAccessProfiles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -639,9 +666,9 @@ export def "create-network-access-profile" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/NetworkAccessProfiles" $auth.query)
   let req_body = {"Networks": $networks, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -682,7 +709,7 @@ export def "list-network-access-profile-network" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -720,9 +747,9 @@ export def "create-network-access-profile-network" [
   if ($network_access_profile_sid | is-empty) { error make --unspanned { msg: "path parameter 'NetworkAccessProfileSid' must be non-empty" } }
   let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks") $auth.query)
   let req_body = {"Network": $network} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -761,7 +788,7 @@ export def "delete-network-access-profile-network" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -799,7 +826,7 @@ export def "fetch-network-access-profile-network" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({network_access_profile_sid: (encode-path-segment $network_access_profile_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{network_access_profile_sid}/Networks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -835,7 +862,7 @@ export def "fetch-network-access-profile" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -873,9 +900,9 @@ export def "update-network-access-profile" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/NetworkAccessProfiles/{sid}") $auth.query)
   let req_body = {"UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -917,7 +944,7 @@ export def "list-network" [
   let qp = [(serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "Mcc" $mcc "scalar") (serialize-qp "Mnc" $mnc "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Networks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -953,7 +980,7 @@ export def "fetch-network" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Networks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -993,7 +1020,7 @@ export def "list-settings-update" [
   let qp = [(serialize-qp "Sim" $sim "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/SettingsUpdates" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1034,7 +1061,7 @@ export def "list-sim" [
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "Fleet" $fleet "scalar") (serialize-qp "Iccid" $iccid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Sims" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1071,9 +1098,9 @@ export def "create-sim" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/Sims" $auth.query)
   let req_body = {"Iccid": $iccid, "RegistrationCode": $registration_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1110,7 +1137,7 @@ export def "fetch-sim" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1153,9 +1180,9 @@ export def "update-sim" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Sims/{sid}") $auth.query)
   let req_body = {"AccountSid": $account_sid, "CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Fleet": $fleet, "Status": $status, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1196,7 +1223,7 @@ export def "list-billing-period" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/BillingPeriods") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1236,7 +1263,7 @@ export def "list-sim-ip-address" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sim_sid: (encode-path-segment $sim_sid)} | format pattern "/v1/Sims/{sim_sid}/IpAddresses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "list-sms-command" [
   let qp = [(serialize-qp "Sim" $sim "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/SmsCommands" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1316,9 +1343,9 @@ export def "create-sms-command" [
   let base = ($base_url | default "https://supersim.twilio.com")
   let full_url = (build-url $base "/v1/SmsCommands" $auth.query)
   let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "Payload": $payload, "Sim": $sim} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1355,7 +1382,7 @@ export def "fetch-sms-command" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/SmsCommands/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1401,7 +1428,7 @@ export def "list-usage-record" [
   let qp = [(serialize-qp "Sim" $sim "scalar") (serialize-qp "Fleet" $fleet "scalar") (serialize-qp "Network" $network "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "Group" $group "scalar") (serialize-qp "Granularity" $granularity "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/UsageRecords" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

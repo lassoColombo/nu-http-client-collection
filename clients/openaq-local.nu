@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -165,7 +192,7 @@ export def "favico-favicon-ico-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/favicon.ico" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -199,7 +226,7 @@ export def "pong-ping-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -243,7 +270,7 @@ export def "cities-getv1-v1-cities-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/cities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -285,7 +312,7 @@ export def "countries-getv1-v1-countries-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -328,7 +355,7 @@ export def "countries-get-v1-countries-country-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/v1/countries/{country_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -387,7 +414,7 @@ export def "latest-v1-get-v1-latest-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/latest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -447,7 +474,7 @@ export def "latest-v1-get-v1-latest-location-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/latest/{location_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -506,7 +533,7 @@ export def "locationsv1-get-v1-locations-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/locations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -566,7 +593,7 @@ export def "locationsv1-get-v1-locations-location-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/locations/{location_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "measurements-get-v1-v1-measurements-get" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/measurements" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -671,7 +698,7 @@ export def "parameters-getv1-v1-parameters-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/parameters" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -712,7 +739,7 @@ export def "sources-v1-get-v1-sources-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/sources" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -766,7 +793,7 @@ export def "averages-v2-get-v2-averages-get" [
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "temporal" $temporal "scalar") (serialize-qp "location" $location "multi") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/averages" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -810,7 +837,7 @@ export def "cities-get-v2-cities-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -852,7 +879,7 @@ export def "countries-get-v2-countries-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -895,7 +922,7 @@ export def "countries-get-v2-countries-country-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/v2/countries/{country_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -954,7 +981,7 @@ export def "latest-get-v2-latest-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/latest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1014,7 +1041,7 @@ export def "latest-get-v2-latest-location-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/latest/{location_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1073,7 +1100,7 @@ export def "locations-get-v2-locations-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/locations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1107,7 +1134,7 @@ export def "mobilegentilejson-v2-locations-tiles-mobile-generalized-tiles-json-g
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/mobile-generalized/tiles.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,7 +1182,7 @@ export def "get-mobilegentile-v2-locations-tiles-mobile-generalized-z-x-y-pbf-ge
   let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf") $qp $auth.query)
   let accept_val = "application/x-protobuf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1189,7 +1216,7 @@ export def "mobiletilejson-v2-locations-tiles-mobile-tiles-json-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/mobile/tiles.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1241,7 +1268,7 @@ export def "get-mobiletile-v2-locations-tiles-mobile-z-x-y-pbf-get" [
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/mobile/{z}/{x}/{y}.pbf") $qp $auth.query)
   let accept_val = "application/x-protobuf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1275,7 +1302,7 @@ export def "tilejson-v2-locations-tiles-tiles-json-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/tiles.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1309,7 +1336,7 @@ export def "demo-v2-locations-tiles-viewer-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/locations/tiles/viewer" $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1357,7 +1384,7 @@ export def "get-tile-v2-locations-tiles-z-x-y-pbf-get" [
   let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $last_updated_from "scalar") (serialize-qp "lastUpdatedTo" $last_updated_to "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({z: (encode-path-segment $z), x: (encode-path-segment $x), y: (encode-path-segment $y)} | format pattern "/v2/locations/tiles/{z}/{x}/{y}.pbf") $qp $auth.query)
   let accept_val = "application/x-protobuf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1417,7 +1444,7 @@ export def "locations-get-v2-locations-location-id-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "modelName" $model_name "multi") (serialize-qp "manufacturerName" $manufacturer_name "multi") (serialize-qp "dumpRaw" $dump_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1451,7 +1478,7 @@ export def "mfr-get-v2-manufacturers-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/manufacturers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1513,7 +1540,7 @@ export def "measurements-get-v2-measurements-get" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/measurements" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1547,7 +1574,7 @@ export def "model-get-v2-models-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/models" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1590,7 +1617,7 @@ export def "parameters-get-v2-parameters-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/parameters" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1642,7 +1669,7 @@ export def "projects-get-v2-projects-get" [
   let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/projects" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1695,7 +1722,7 @@ export def "projects-get-v2-projects-project-id-get" [
   let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $is_mobile "scalar") (serialize-qp "isAnalysis" $is_analysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensor_type "scalar") (serialize-qp "sourceName" $source_name "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1738,7 +1765,7 @@ export def "sources-get-v2-sources-get" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sourceName" $source_name "multi") (serialize-qp "sourceId" $source_id "multi") (serialize-qp "sourceSlug" $source_slug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sources" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1774,7 +1801,7 @@ export def "readme-get-v2-sources-readme-slug-get" [
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/v2/sources/readme/{slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1808,7 +1835,7 @@ export def "summary-get-v2-summary-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/summary" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -170,7 +197,7 @@ export def "markets-get" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/markets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -208,7 +235,7 @@ export def "market-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -249,7 +276,7 @@ export def "bodies-get" [
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/bodies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -289,7 +316,7 @@ export def "body-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), body_id: (encode-path-segment $body_id)} | format pattern "/markets/{market_id}/bodies/{body_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -330,7 +357,7 @@ export def "classes-get" [
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/classes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -370,7 +397,7 @@ export def "class-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), class_id: (encode-path-segment $class_id)} | format pattern "/markets/{market_id}/classes/{class_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -414,7 +441,7 @@ export def "models-get" [
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "baumuster4prefix" $baumuster4prefix "scalar") (serialize-qp "baumuster" $baumuster "scalar") (serialize-qp "nationalSalesType" $national_sales_type "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -454,7 +481,7 @@ export def "model-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id)} | format pattern "/markets/{market_id}/models/{model_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -494,7 +521,7 @@ export def "model-configurations-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/initial") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -536,7 +563,7 @@ export def "model-configuration-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -580,7 +607,7 @@ export def "model-configuration-alternatives-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id), component_list: (encode-path-segment $component_list)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/alternatives/{component_list}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -620,7 +647,7 @@ export def "image-components-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -660,7 +687,7 @@ export def "image-components-engine-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/engine") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -700,7 +727,7 @@ export def "image-components-equipments-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -742,7 +769,7 @@ export def "image-components-equipments-by-code-get" [
   if ($component_code | is-empty) { error make --unspanned { msg: "path parameter 'componentCode' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id), component_code: (encode-path-segment $component_code)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments/{component_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -782,7 +809,7 @@ export def "image-components-paint-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/paint") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -822,7 +849,7 @@ export def "image-components-rim-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/rim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -862,7 +889,7 @@ export def "image-components-trim-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/trim") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -902,7 +929,7 @@ export def "image-components-upholstery-get" [
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/upholstery") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -946,7 +973,7 @@ export def "image-vehicle-get" [
   let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roof_open "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/vehicle") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -989,7 +1016,7 @@ export def "model-configuration-selectables-get" [
   let qp = [(serialize-qp "componentTypes" $component_types "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/selectables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1028,9 +1055,9 @@ export def "online-code-post" [
   if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/onlinecode") $auth.query)
   let req_body = {"configurationId": $configuration_id, "modelId": $model_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1070,7 +1097,7 @@ export def "online-code-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), online_code: (encode-path-segment $online_code)} | format pattern "/markets/{market_id}/onlinecode/{online_code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1108,7 +1135,7 @@ export def "product-groups-get" [
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/productgroups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

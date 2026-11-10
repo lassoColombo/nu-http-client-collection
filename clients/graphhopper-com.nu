@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -174,9 +201,9 @@ export def "solve-clustering-problem" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster" $auth.query)
   let req_body = {"configuration": $configuration, "customers": $customers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -213,9 +240,9 @@ export def "async-clustering-problem" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster/calculate" $auth.query)
   let req_body = {"configuration": $configuration, "customers": $customers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -251,7 +278,7 @@ export def "get-cluster-solution" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/cluster/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -293,7 +320,7 @@ export def "get-geocode" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reverse" $reverse "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "point" $point "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -336,7 +363,7 @@ export def "get-isochrone" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "time_limit" $time_limit "scalar") (serialize-qp "distance_limit" $distance_limit "scalar") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "buckets" $buckets "scalar") (serialize-qp "reverse_flow" $reverse_flow "scalar") (serialize-qp "weighting" $weighting "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/isochrone" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -373,7 +400,7 @@ export def "post-gpx" [
   let qp = [(serialize-qp "gps_accuracy" $gps_accuracy "scalar") (serialize-qp "vehicle" $vehicle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/match" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -422,7 +449,7 @@ export def "get-matrix" [
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "from_point" $from_point "multi") (serialize-qp "to_point" $to_point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "from_point_hint" $from_point_hint "multi") (serialize-qp "to_point_hint" $to_point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "curbside" $curbside "multi") (serialize-qp "from_curbside" $from_curbside "multi") (serialize-qp "to_curbside" $to_curbside "multi") (serialize-qp "out_array" $out_array "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "fail_fast" $fail_fast "scalar") (serialize-qp "turn_costs" $turn_costs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matrix" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -471,9 +498,9 @@ export def "post-matrix" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/matrix" $auth.query)
   let req_body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -522,9 +549,9 @@ export def "calculate-matrix" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/matrix/calculate" $auth.query)
   let req_body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -560,7 +587,7 @@ export def "get-matrix-solution" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/matrix/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -623,7 +650,7 @@ export def "get-route" [
   let qp = [(serialize-qp "point" $point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "curbside" $curbside "multi") (serialize-qp "turn_costs" $turn_costs "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "details" $details "multi") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "instructions" $instructions "scalar") (serialize-qp "calc_points" $calc_points "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "points_encoded" $points_encoded "scalar") (serialize-qp "ch.disable" $ch_disable "scalar") (serialize-qp "weighting" $weighting "scalar") (serialize-qp "heading" $heading "multi") (serialize-qp "heading_penalty" $heading_penalty "scalar") (serialize-qp "pass_through" $pass_through "scalar") (serialize-qp "block_area" $block_area "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "algorithm" $algorithm "scalar") (serialize-qp "round_trip.distance" $round_trip_distance "scalar") (serialize-qp "round_trip.seed" $round_trip_seed "scalar") (serialize-qp "alternative_route.max_paths" $alternative_route_max_paths "scalar") (serialize-qp "alternative_route.max_weight_factor" $alternative_route_max_weight_factor "scalar") (serialize-qp "alternative_route.max_share_factor" $alternative_route_max_share_factor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -684,9 +711,9 @@ export def "post-route" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route" $auth.query)
   let req_body = {"algorithm": $algorithm, "alternative_route.max_paths": $alternative_route_max_paths, "alternative_route.max_share_factor": $alternative_route_max_share_factor, "alternative_route.max_weight_factor": $alternative_route_max_weight_factor, "avoid": $avoid, "block_area": $block_area, "calc_points": $calc_points, "ch.disable": $ch_disable, "curbsides": $curbsides, "debug": $debug, "details": $details, "elevation": $elevation, "heading_penalty": $heading_penalty, "headings": $headings, "instructions": $instructions, "locale": $locale, "optimize": $optimize, "pass_through": $pass_through, "point_hints": $point_hints, "points": $points, "points_encoded": $points_encoded, "round_trip.distance": $round_trip_distance, "round_trip.seed": $round_trip_seed, "snap_preventions": $snap_preventions, "vehicle": $vehicle, "weighting": $weighting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -719,7 +746,7 @@ export def "get-route-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route/info" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -764,9 +791,9 @@ export def "solve-vrp" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vrp" $auth.query)
   let req_body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -811,9 +838,9 @@ export def "async-vrp" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vrp/optimize" $auth.query)
   let req_body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -849,7 +876,7 @@ export def "get-solution" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/vrp/solution/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

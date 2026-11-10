@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -263,11 +290,11 @@ export def "batch-detect-dominant-language" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectDominantLanguage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -313,11 +340,11 @@ export def "batch-detect-entities" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -363,11 +390,11 @@ export def "batch-detect-key-phrases" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectKeyPhrases")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -413,11 +440,11 @@ export def "batch-detect-sentiment" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectSentiment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -463,11 +490,11 @@ export def "batch-detect-syntax" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectSyntax")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -513,11 +540,11 @@ export def "batch-detect-targeted-sentiment" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.BatchDetectTargetedSentiment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TextList": $text_list, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -565,11 +592,11 @@ export def "classify-document" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ClassifyDocument")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "EndpointArn": $endpoint_arn, "Bytes": $bytes, "DocumentReaderConfig": $document_reader_config} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -615,11 +642,11 @@ export def "contains-pii-entities" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ContainsPiiEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -670,11 +697,11 @@ export def "create-dataset" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.CreateDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn, "DatasetName": $dataset_name, "DatasetType": $dataset_type, "Description": $description, "InputDataConfig": $input_data_config, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -731,11 +758,11 @@ export def "create-document-classifier" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.CreateDocumentClassifier")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentClassifierName": $document_classifier_name, "VersionName": $version_name, "DataAccessRoleArn": $data_access_role_arn, "Tags": $tags, "InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "ClientRequestToken": $client_request_token, "LanguageCode": $language_code, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Mode": $mode, "ModelKmsKeyId": $model_kms_key_id, "ModelPolicy": $model_policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -786,11 +813,11 @@ export def "create-endpoint" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.CreateEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EndpointName": $endpoint_name, "ModelArn": $model_arn, "DesiredInferenceUnits": $desired_inference_units, "ClientRequestToken": $client_request_token, "Tags": $tags, "DataAccessRoleArn": $data_access_role_arn, "FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -845,11 +872,11 @@ export def "create-entity-recognizer" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.CreateEntityRecognizer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RecognizerName": $recognizer_name, "VersionName": $version_name, "DataAccessRoleArn": $data_access_role_arn, "Tags": $tags, "InputDataConfig": $input_data_config, "ClientRequestToken": $client_request_token, "LanguageCode": $language_code, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "ModelKmsKeyId": $model_kms_key_id, "ModelPolicy": $model_policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -902,11 +929,11 @@ export def "create-flywheel" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.CreateFlywheel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelName": $flywheel_name, "ActiveModelArn": $active_model_arn, "DataAccessRoleArn": $data_access_role_arn, "TaskConfig": $task_config, "ModelType": $model_type, "DataLakeS3Uri": $data_lake_s3_uri, "DataSecurityConfig": $data_security_config, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -951,11 +978,11 @@ export def "delete-document-classifier" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DeleteDocumentClassifier")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentClassifierArn": $document_classifier_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1000,11 +1027,11 @@ export def "delete-endpoint" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DeleteEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EndpointArn": $endpoint_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1049,11 +1076,11 @@ export def "delete-entity-recognizer" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DeleteEntityRecognizer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EntityRecognizerArn": $entity_recognizer_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1098,11 +1125,11 @@ export def "delete-flywheel" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DeleteFlywheel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1148,11 +1175,11 @@ export def "delete-resource-policy" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DeleteResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "PolicyRevisionId": $policy_revision_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1197,11 +1224,11 @@ export def "describe-dataset" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetArn": $dataset_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1246,11 +1273,11 @@ export def "describe-document-classification-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeDocumentClassificationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1295,11 +1322,11 @@ export def "describe-document-classifier" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeDocumentClassifier")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentClassifierArn": $document_classifier_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1344,11 +1371,11 @@ export def "describe-dominant-language-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeDominantLanguageDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1393,11 +1420,11 @@ export def "describe-endpoint" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EndpointArn": $endpoint_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1442,11 +1469,11 @@ export def "describe-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1491,11 +1518,11 @@ export def "describe-entity-recognizer" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeEntityRecognizer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EntityRecognizerArn": $entity_recognizer_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1540,11 +1567,11 @@ export def "describe-events-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeEventsDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1589,11 +1616,11 @@ export def "describe-flywheel" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeFlywheel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1639,11 +1666,11 @@ export def "describe-flywheel-iteration" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeFlywheelIteration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn, "FlywheelIterationId": $flywheel_iteration_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1688,11 +1715,11 @@ export def "describe-key-phrases-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeKeyPhrasesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1737,11 +1764,11 @@ export def "describe-pii-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribePiiEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1786,11 +1813,11 @@ export def "describe-resource-policy" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1835,11 +1862,11 @@ export def "describe-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1884,11 +1911,11 @@ export def "describe-targeted-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeTargetedSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1933,11 +1960,11 @@ export def "describe-topics-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DescribeTopicsDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1982,11 +2009,11 @@ export def "detect-dominant-language" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectDominantLanguage")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2035,11 +2062,11 @@ export def "detect-entities" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code, "EndpointArn": $endpoint_arn, "Bytes": $bytes, "DocumentReaderConfig": $document_reader_config} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2085,11 +2112,11 @@ export def "detect-key-phrases" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectKeyPhrases")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2135,11 +2162,11 @@ export def "detect-pii-entities" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectPiiEntities")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2185,11 +2212,11 @@ export def "detect-sentiment" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectSentiment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2235,11 +2262,11 @@ export def "detect-syntax" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectSyntax")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2285,11 +2312,11 @@ export def "detect-targeted-sentiment" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.DetectTargetedSentiment")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Text": $text, "LanguageCode": $language_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2339,11 +2366,11 @@ export def "import-model" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ImportModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"SourceModelArn": $source_model_arn, "ModelName": $model_name, "VersionName": $version_name, "ModelKmsKeyId": $model_kms_key_id, "DataAccessRoleArn": $data_access_role_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2384,8 +2411,8 @@ export def "list-datasets" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   --flywheel-arn: string # The Amazon Resource Number (ARN) of the flywheel.
   --filter: record # Filter the datasets based on creation time or dataset status. — shape: {Status?: "CREATING"|"COMPLETED"|"FAILED", DatasetType?: "TRAIN"|"TEST", CreationTimeAfter?: string, CreationTimeBefore?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # Maximum number of results to return in a response. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # Maximum number of results to return in a response. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<DatasetPropertiesList: table<DatasetArn: string, DatasetName: string, DatasetType: string, DatasetS3Uri: string, Description: string, Status: string, Message: string, NumberOfDocuments: int, CreationTime: string, EndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2393,12 +2420,12 @@ export def "list-datasets" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListDatasets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FlywheelArn": $flywheel_arn, "Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FlywheelArn": $flywheel_arn, "Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2438,8 +2465,8 @@ export def "list-document-classification-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   --filter: record # Provides information for filtering a list of document classification jobs. For more information, see the operation. You can provide only one filter parameter in each request. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<DocumentClassificationJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, DocumentClassifierArn: string, InputDataConfig: record, OutputDataConfig: record, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record, FlywheelArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2447,12 +2474,12 @@ export def "list-document-classification-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListDocumentClassificationJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2491,8 +2518,8 @@ export def "list-document-classifier-summaries" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return on each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return on each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<DocumentClassifierSummariesList: table<DocumentClassifierName: string, NumberOfVersions: int, LatestVersionCreatedAt: string, LatestVersionName: string, LatestVersionStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2500,12 +2527,12 @@ export def "list-document-classifier-summaries" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListDocumentClassifierSummaries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2545,8 +2572,8 @@ export def "list-document-classifiers" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-45 # required
   --filter: record # Provides information for filtering a list of document classifiers. You can only specify one filtering parameter in a request. For more information, see the ListDocumentClassifiers operation. — shape: {Status?: "SUBMITTED"|"TRAINING"|"DELETING"|"STOP_REQUESTED"|"STOPPED"|"IN_ERROR"|"TRAINED"|"TRAINED_WITH_WARNING", DocumentClassifierName?: string, SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<DocumentClassifierPropertiesList: table<DocumentClassifierArn: string, LanguageCode: string, Status: string, Message: string, SubmitTime: string, EndTime: string, TrainingStartTime: string, TrainingEndTime: string, InputDataConfig: record, OutputDataConfig: record, ClassifierMetadata: record, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record, Mode: string, ModelKmsKeyId: string, VersionName: string, SourceModelArn: string, FlywheelArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2554,12 +2581,12 @@ export def "list-document-classifiers" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListDocumentClassifiers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2599,8 +2626,8 @@ export def "list-dominant-language-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   --filter: record # Provides information for filtering a list of dominant language detection jobs. For more information, see the operation. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<DominantLanguageDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2608,12 +2635,12 @@ export def "list-dominant-language-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListDominantLanguageDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2653,8 +2680,8 @@ export def "list-endpoints" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-47 # required
   --filter: record # The filter used to determine which endpoints are returned. You can filter jobs on their name, model, status, or the date and time that they were created. You can only set one filter at a time. — shape: {ModelArn?: string, Status?: "CREATING"|"DELETING"|"FAILED"|"IN_SERVICE"|"UPDATING", CreationTimeBefore?: string, CreationTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<EndpointPropertiesList: table<EndpointArn: string, Status: string, Message: string, ModelArn: string, DesiredModelArn: string, DesiredInferenceUnits: int, CurrentInferenceUnits: int, CreationTime: string, LastModifiedTime: string, DataAccessRoleArn: string, DesiredDataAccessRoleArn: string, FlywheelArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2662,12 +2689,12 @@ export def "list-endpoints" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListEndpoints")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2707,8 +2734,8 @@ export def "list-entities-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   --filter: record # Provides information for filtering a list of dominant language detection jobs. For more information, see the operation. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<EntitiesDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, EntityRecognizerArn: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record, FlywheelArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2716,12 +2743,12 @@ export def "list-entities-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListEntitiesDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2760,8 +2787,8 @@ export def "list-entity-recognizer-summaries" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-49 # required
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return on each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return on each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<EntityRecognizerSummariesList: table<RecognizerName: string, NumberOfVersions: int, LatestVersionCreatedAt: string, LatestVersionName: string, LatestVersionStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2769,12 +2796,12 @@ export def "list-entity-recognizer-summaries" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListEntityRecognizerSummaries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2814,8 +2841,8 @@ export def "list-entity-recognizers" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
   --filter: record # Provides information for filtering a list of entity recognizers. You can only specify one filtering parameter in a request. For more information, see the ListEntityRecognizers operation./> — shape: {Status?: "SUBMITTED"|"TRAINING"|"DELETING"|"STOP_REQUESTED"|"STOPPED"|"IN_ERROR"|"TRAINED"|"TRAINED_WITH_WARNING", RecognizerName?: string, SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return on each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return on each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<EntityRecognizerPropertiesList: table<EntityRecognizerArn: string, LanguageCode: string, Status: string, Message: string, SubmitTime: string, EndTime: string, TrainingStartTime: string, TrainingEndTime: string, InputDataConfig: record, RecognizerMetadata: record, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record, ModelKmsKeyId: string, VersionName: string, SourceModelArn: string, FlywheelArn: string, OutputDataConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2823,12 +2850,12 @@ export def "list-entity-recognizers" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListEntityRecognizers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2868,8 +2895,8 @@ export def "list-events-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-51 # required
   --filter: record # Provides information for filtering a list of event detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. (spec name: MaxResults)
 ]: any -> oneof<record<EventsDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, TargetEventTypes: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2877,12 +2904,12 @@ export def "list-events-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListEventsDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2923,8 +2950,8 @@ export def "list-flywheel-iteration-history" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   flywheel_arn: string # The ARN of the flywheel.
   --filter: record # Filter the flywheel iterations based on creation time. — shape: {CreationTimeAfter?: string, CreationTimeBefore?: string}
-  --next-token-body: string # Next token (body field)
-  --max-results-body: int # Maximum number of iteration history results to return (body field)
+  --body-next-token: string # Next token (spec name: NextToken)
+  --body-max-results: int # Maximum number of iteration history results to return (spec name: MaxResults)
 ]: any -> oneof<record<FlywheelIterationPropertiesList: table<FlywheelArn: string, FlywheelIterationId: string, CreationTime: string, EndTime: string, Status: string, Message: string, EvaluatedModelArn: string, EvaluatedModelMetrics: record, TrainedModelArn: string, TrainedModelMetrics: record, EvaluationManifestS3Prefix: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2932,12 +2959,12 @@ export def "list-flywheel-iteration-history" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListFlywheelIterationHistory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FlywheelArn": $flywheel_arn, "Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FlywheelArn": $flywheel_arn, "Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2977,8 +3004,8 @@ export def "list-flywheels" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   --filter: record # Filter the flywheels based on creation time or flywheel status. — shape: {Status?: "CREATING"|"ACTIVE"|"UPDATING"|"DELETING"|"FAILED", CreationTimeAfter?: string, CreationTimeBefore?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # Maximum number of results to return in a response. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # Maximum number of results to return in a response. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<FlywheelSummaryList: table<FlywheelArn: string, ActiveModelArn: string, DataLakeS3Uri: string, Status: string, ModelType: string, Message: string, CreationTime: string, LastModifiedTime: string, LatestFlywheelIteration: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2986,12 +3013,12 @@ export def "list-flywheels" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListFlywheels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3031,8 +3058,8 @@ export def "list-key-phrases-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-54 # required
   --filter: record # Provides information for filtering a list of dominant language detection jobs. For more information, see the operation. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<KeyPhrasesDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3040,12 +3067,12 @@ export def "list-key-phrases-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListKeyPhrasesDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3085,8 +3112,8 @@ export def "list-pii-entities-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-55 # required
   --filter: record # Provides information for filtering a list of PII entity detection jobs. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. (spec name: MaxResults)
 ]: any -> oneof<record<PiiEntitiesDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, RedactionConfig: record, LanguageCode: string, DataAccessRoleArn: string, Mode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3094,12 +3121,12 @@ export def "list-pii-entities-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListPiiEntitiesDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3139,8 +3166,8 @@ export def "list-sentiment-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-56 # required
   --filter: record # Provides information for filtering a list of dominant language detection jobs. For more information, see the operation. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<SentimentDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3148,12 +3175,12 @@ export def "list-sentiment-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListSentimentDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3198,11 +3225,11 @@ export def "list-tags-for-resource" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3242,8 +3269,8 @@ export def "list-targeted-sentiment-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-58 # required
   --filter: record # Provides information for filtering a list of dominant language detection jobs. For more information, see the ListTargetedSentimentDetectionJobs operation. — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<TargetedSentimentDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, LanguageCode: string, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3251,12 +3278,12 @@ export def "list-targeted-sentiment-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListTargetedSentimentDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3296,8 +3323,8 @@ export def "list-topics-detection-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   --filter: record # Provides information for filtering topic detection jobs. For more information, see . — shape: {JobName?: string, JobStatus?: "SUBMITTED"|"IN_PROGRESS"|"COMPLETED"|"FAILED"|"STOP_REQUESTED"|"STOPPED", SubmitTimeBefore?: string, SubmitTimeAfter?: string}
-  --next-token-body: string # Identifies the next page of results to return. (body field)
-  --max-results-body: int # The maximum number of results to return in each page. The default is 100. (body field)
+  --body-next-token: string # Identifies the next page of results to return. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to return in each page. The default is 100. (spec name: MaxResults)
 ]: any -> oneof<record<TopicsDetectionJobPropertiesList: table<JobId: string, JobArn: string, JobName: string, JobStatus: string, Message: string, SubmitTime: string, EndTime: string, InputDataConfig: record, OutputDataConfig: record, NumberOfTopics: int, DataAccessRoleArn: string, VolumeKmsKeyId: string, VpcConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3305,12 +3332,12 @@ export def "list-topics-detection-jobs" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.ListTopicsDetectionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filter": $filter, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filter": $filter, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3357,11 +3384,11 @@ export def "put-resource-policy" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.PutResourcePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "ResourcePolicy": $resource_policy, "PolicyRevisionId": $policy_revision_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3415,11 +3442,11 @@ export def "start-document-classification-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartDocumentClassificationJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobName": $job_name, "DocumentClassifierArn": $document_classifier_arn, "InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags, "FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3471,11 +3498,11 @@ export def "start-dominant-language-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartDominantLanguageDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3530,11 +3557,11 @@ export def "start-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "EntityRecognizerArn": $entity_recognizer_arn, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags, "FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3586,11 +3613,11 @@ export def "start-events-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartEventsDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "TargetEventTypes": $target_event_types, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3636,11 +3663,11 @@ export def "start-flywheel-iteration" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartFlywheelIteration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn, "ClientRequestToken": $client_request_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3693,11 +3720,11 @@ export def "start-key-phrases-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartKeyPhrasesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3750,11 +3777,11 @@ export def "start-pii-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartPiiEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "Mode": $mode, "RedactionConfig": $redaction_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3807,11 +3834,11 @@ export def "start-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3864,11 +3891,11 @@ export def "start-targeted-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartTargetedSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "LanguageCode": $language_code, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3921,11 +3948,11 @@ export def "start-topics-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StartTopicsDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InputDataConfig": $input_data_config, "OutputDataConfig": $output_data_config, "DataAccessRoleArn": $data_access_role_arn, "JobName": $job_name, "NumberOfTopics": $number_of_topics, "ClientRequestToken": $client_request_token, "VolumeKmsKeyId": $volume_kms_key_id, "VpcConfig": $vpc_config, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3970,11 +3997,11 @@ export def "stop-dominant-language-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopDominantLanguageDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4019,11 +4046,11 @@ export def "stop-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4068,11 +4095,11 @@ export def "stop-events-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopEventsDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4117,11 +4144,11 @@ export def "stop-key-phrases-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopKeyPhrasesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4166,11 +4193,11 @@ export def "stop-pii-entities-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopPiiEntitiesDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4215,11 +4242,11 @@ export def "stop-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4264,11 +4291,11 @@ export def "stop-targeted-sentiment-detection-job" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopTargetedSentimentDetectionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4313,11 +4340,11 @@ export def "stop-training-document-classifier" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopTrainingDocumentClassifier")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DocumentClassifierArn": $document_classifier_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4362,11 +4389,11 @@ export def "stop-training-entity-recognizer" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.StopTrainingEntityRecognizer")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EntityRecognizerArn": $entity_recognizer_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4412,11 +4439,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4462,11 +4489,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4515,11 +4542,11 @@ export def "update-endpoint" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.UpdateEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EndpointArn": $endpoint_arn, "DesiredModelArn": $desired_model_arn, "DesiredInferenceUnits": $desired_inference_units, "DesiredDataAccessRoleArn": $desired_data_access_role_arn, "FlywheelArn": $flywheel_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4567,11 +4594,11 @@ export def "update-flywheel" [
   let x_amz_target = ($x_amz_target | default "Comprehend_20171127.UpdateFlywheel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"FlywheelArn": $flywheel_arn, "ActiveModelArn": $active_model_arn, "DataAccessRoleArn": $data_access_role_arn, "DataSecurityConfig": $data_security_config} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

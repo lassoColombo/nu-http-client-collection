@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -185,7 +212,7 @@ export def "groups-settings-groups-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -292,9 +319,9 @@ export def "groups-settings-groups-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let req_body = {"allowExternalMembers": $allow_external_members, "allowGoogleCommunication": $allow_google_communication, "allowWebPosting": $allow_web_posting, "archiveOnly": $archive_only, "customFooterText": $custom_footer_text, "customReplyTo": $custom_reply_to, "customRolesEnabledForSettingsToBeMerged": $custom_roles_enabled_for_settings_to_be_merged, "defaultMessageDenyNotificationText": $default_message_deny_notification_text, "default_sender": $default_sender, "description": $description, "email": $email, "enableCollaborativeInbox": $enable_collaborative_inbox, "favoriteRepliesOnTop": $favorite_replies_on_top, "includeCustomFooter": $include_custom_footer, "includeInGlobalAddressList": $include_in_global_address_list, "isArchived": $is_archived, "kind": $kind, "maxMessageBytes": $max_message_bytes, "membersCanPostAsTheGroup": $members_can_post_as_the_group, "messageDisplayFont": $message_display_font, "messageModerationLevel": $message_moderation_level, "name": $name, "primaryLanguage": $primary_language, "replyTo": $reply_to, "sendMessageDenyNotification": $send_message_deny_notification, "showInGroupDirectory": $show_in_group_directory, "spamModerationLevel": $spam_moderation_level, "whoCanAdd": $who_can_add, "whoCanAddReferences": $who_can_add_references, "whoCanApproveMembers": $who_can_approve_members, "whoCanApproveMessages": $who_can_approve_messages, "whoCanAssignTopics": $who_can_assign_topics, "whoCanAssistContent": $who_can_assist_content, "whoCanBanUsers": $who_can_ban_users, "whoCanContactOwner": $who_can_contact_owner, "whoCanDeleteAnyPost": $who_can_delete_any_post, "whoCanDeleteTopics": $who_can_delete_topics, "whoCanDiscoverGroup": $who_can_discover_group, "whoCanEnterFreeFormTags": $who_can_enter_free_form_tags, "whoCanHideAbuse": $who_can_hide_abuse, "whoCanInvite": $who_can_invite, "whoCanJoin": $who_can_join, "whoCanLeaveGroup": $who_can_leave_group, "whoCanLockTopics": $who_can_lock_topics, "whoCanMakeTopicsSticky": $who_can_make_topics_sticky, "whoCanMarkDuplicate": $who_can_mark_duplicate, "whoCanMarkFavoriteReplyOnAnyTopic": $who_can_mark_favorite_reply_on_any_topic, "whoCanMarkFavoriteReplyOnOwnTopic": $who_can_mark_favorite_reply_on_own_topic, "whoCanMarkNoResponseNeeded": $who_can_mark_no_response_needed, "whoCanModerateContent": $who_can_moderate_content, "whoCanModerateMembers": $who_can_moderate_members, "whoCanModifyMembers": $who_can_modify_members, "whoCanModifyTagsAndCategories": $who_can_modify_tags_and_categories, "whoCanMoveTopicsIn": $who_can_move_topics_in, "whoCanMoveTopicsOut": $who_can_move_topics_out, "whoCanPostAnnouncements": $who_can_post_announcements, "whoCanPostMessage": $who_can_post_message, "whoCanTakeTopics": $who_can_take_topics, "whoCanUnassignTopic": $who_can_unassign_topic, "whoCanUnmarkFavoriteReplyOnAnyTopic": $who_can_unmark_favorite_reply_on_any_topic, "whoCanViewGroup": $who_can_view_group, "whoCanViewMembership": $who_can_view_membership} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -401,9 +428,9 @@ export def "groups-settings-groups-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_unique_id: (encode-path-segment $group_unique_id)} | format pattern "/{group_unique_id}") $qp $auth.query)
   let req_body = {"allowExternalMembers": $allow_external_members, "allowGoogleCommunication": $allow_google_communication, "allowWebPosting": $allow_web_posting, "archiveOnly": $archive_only, "customFooterText": $custom_footer_text, "customReplyTo": $custom_reply_to, "customRolesEnabledForSettingsToBeMerged": $custom_roles_enabled_for_settings_to_be_merged, "defaultMessageDenyNotificationText": $default_message_deny_notification_text, "default_sender": $default_sender, "description": $description, "email": $email, "enableCollaborativeInbox": $enable_collaborative_inbox, "favoriteRepliesOnTop": $favorite_replies_on_top, "includeCustomFooter": $include_custom_footer, "includeInGlobalAddressList": $include_in_global_address_list, "isArchived": $is_archived, "kind": $kind, "maxMessageBytes": $max_message_bytes, "membersCanPostAsTheGroup": $members_can_post_as_the_group, "messageDisplayFont": $message_display_font, "messageModerationLevel": $message_moderation_level, "name": $name, "primaryLanguage": $primary_language, "replyTo": $reply_to, "sendMessageDenyNotification": $send_message_deny_notification, "showInGroupDirectory": $show_in_group_directory, "spamModerationLevel": $spam_moderation_level, "whoCanAdd": $who_can_add, "whoCanAddReferences": $who_can_add_references, "whoCanApproveMembers": $who_can_approve_members, "whoCanApproveMessages": $who_can_approve_messages, "whoCanAssignTopics": $who_can_assign_topics, "whoCanAssistContent": $who_can_assist_content, "whoCanBanUsers": $who_can_ban_users, "whoCanContactOwner": $who_can_contact_owner, "whoCanDeleteAnyPost": $who_can_delete_any_post, "whoCanDeleteTopics": $who_can_delete_topics, "whoCanDiscoverGroup": $who_can_discover_group, "whoCanEnterFreeFormTags": $who_can_enter_free_form_tags, "whoCanHideAbuse": $who_can_hide_abuse, "whoCanInvite": $who_can_invite, "whoCanJoin": $who_can_join, "whoCanLeaveGroup": $who_can_leave_group, "whoCanLockTopics": $who_can_lock_topics, "whoCanMakeTopicsSticky": $who_can_make_topics_sticky, "whoCanMarkDuplicate": $who_can_mark_duplicate, "whoCanMarkFavoriteReplyOnAnyTopic": $who_can_mark_favorite_reply_on_any_topic, "whoCanMarkFavoriteReplyOnOwnTopic": $who_can_mark_favorite_reply_on_own_topic, "whoCanMarkNoResponseNeeded": $who_can_mark_no_response_needed, "whoCanModerateContent": $who_can_moderate_content, "whoCanModerateMembers": $who_can_moderate_members, "whoCanModifyMembers": $who_can_modify_members, "whoCanModifyTagsAndCategories": $who_can_modify_tags_and_categories, "whoCanMoveTopicsIn": $who_can_move_topics_in, "whoCanMoveTopicsOut": $who_can_move_topics_out, "whoCanPostAnnouncements": $who_can_post_announcements, "whoCanPostMessage": $who_can_post_message, "whoCanTakeTopics": $who_can_take_topics, "whoCanUnassignTopic": $who_can_unassign_topic, "whoCanUnmarkFavoriteReplyOnAnyTopic": $who_can_unmark_favorite_reply_on_any_topic, "whoCanViewGroup": $who_can_view_group, "whoCanViewMembership": $who_can_view_membership} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

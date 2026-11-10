@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -180,9 +207,9 @@ export def "post-adjust-authorisation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/adjustAuthorisation" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -270,9 +297,9 @@ export def "post-authorise" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorise" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "bankAccount": $bank_account, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "card": $card, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "entityType": $entity_type, "fraudOffset": $fraud_offset, "fundDestination": $fund_destination, "fundSource": $fund_source, "fundingSource": $funding_source, "installments": $installments, "localizedShopperStatement": $localized_shopper_statement, "mandate": $mandate, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "mpiData": $mpi_data, "nationality": $nationality, "orderReference": $order_reference, "platformChargebackLogic": $platform_chargeback_logic, "recurring": $recurring, "recurringProcessingModel": $recurring_processing_model, "reference": $reference, "selectedBrand": $selected_brand, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "sessionId": $session_id, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDSAuthenticationOnly": $three_ds_authentication_only, "totalsGroup": $totals_group, "trustedShopper": $trusted_shopper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -352,9 +379,9 @@ export def "post-authorise3d" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorise3d" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "fraudOffset": $fraud_offset, "installments": $installments, "localizedShopperStatement": $localized_shopper_statement, "mcc": $mcc, "md": $md, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "orderReference": $order_reference, "paResponse": $pa_response, "recurring": $recurring, "recurringProcessingModel": $recurring_processing_model, "reference": $reference, "selectedBrand": $selected_brand, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "sessionId": $session_id, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDSAuthenticationOnly": $three_ds_authentication_only, "totalsGroup": $totals_group, "trustedShopper": $trusted_shopper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -434,9 +461,9 @@ export def "post-authorise3ds2" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authorise3ds2" $auth.query)
   let req_body = {"accountInfo": $account_info, "additionalAmount": $additional_amount, "additionalData": $additional_data, "amount": $amount, "applicationInfo": $application_info, "billingAddress": $billing_address, "browserInfo": $browser_info, "captureDelayHours": $capture_delay_hours, "dateOfBirth": $date_of_birth, "dccQuote": $dcc_quote, "deliveryAddress": $delivery_address, "deliveryDate": $delivery_date, "deviceFingerprint": $device_fingerprint, "fraudOffset": $fraud_offset, "installments": $installments, "localizedShopperStatement": $localized_shopper_statement, "mcc": $mcc, "merchantAccount": $merchant_account, "merchantOrderReference": $merchant_order_reference, "merchantRiskIndicator": $merchant_risk_indicator, "metadata": $metadata, "orderReference": $order_reference, "recurring": $recurring, "recurringProcessingModel": $recurring_processing_model, "reference": $reference, "selectedBrand": $selected_brand, "selectedRecurringDetailReference": $selected_recurring_detail_reference, "sessionId": $session_id, "shopperEmail": $shopper_email, "shopperIP": $shopper_ip, "shopperInteraction": $shopper_interaction, "shopperLocale": $shopper_locale, "shopperName": $shopper_name, "shopperReference": $shopper_reference, "shopperStatement": $shopper_statement, "socialSecurityNumber": $social_security_number, "splits": $splits, "store": $store, "telephoneNumber": $telephone_number, "threeDS2RequestData": $three_ds2_request_data, "threeDS2Result": $three_ds2_result, "threeDS2Token": $three_ds2_token, "threeDSAuthenticationOnly": $three_ds_authentication_only, "totalsGroup": $totals_group, "trustedShopper": $trusted_shopper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -481,9 +508,9 @@ export def "post-cancel" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cancel" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -527,9 +554,9 @@ export def "post-cancel-or-refund" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cancelOrRefund" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -575,9 +602,9 @@ export def "post-capture" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/capture" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -618,9 +645,9 @@ export def "post-donate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/donate" $auth.query)
   let req_body = {"donationAccount": $donation_account, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -657,9 +684,9 @@ export def "post-get-authentication-result" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getAuthenticationResult" $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "pspReference": $psp_reference} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -705,9 +732,9 @@ export def "post-refund" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refund" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -744,9 +771,9 @@ export def "post-retrieve3ds2-result" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/retrieve3ds2Result" $auth.query)
   let req_body = {"merchantAccount": $merchant_account, "pspReference": $psp_reference} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -791,9 +818,9 @@ export def "post-technical-cancel" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/technicalCancel" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -839,9 +866,9 @@ export def "post-void-pending-refund" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voidPendingRefund" $auth.query)
   let req_body = {"additionalData": $additional_data, "merchantAccount": $merchant_account, "modificationAmount": $modification_amount, "mpiData": $mpi_data, "originalMerchantReference": $original_merchant_reference, "originalReference": $original_reference, "platformChargebackLogic": $platform_chargeback_logic, "reference": $reference, "splits": $splits, "tenderReference": $tender_reference, "uniqueTerminalId": $unique_terminal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

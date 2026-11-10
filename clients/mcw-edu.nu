@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -168,7 +195,7 @@ export def "get-affected-genomic-models-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/affectedGenomicModels/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -204,7 +231,7 @@ export def "get-alleles-for-taxon-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/alleles/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -240,7 +267,7 @@ export def "get-expression-for-taxon-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/expression/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -276,7 +303,7 @@ export def "get-phenotypes-for-taxon-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/phenotypes/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -312,7 +339,7 @@ export def "get-variants-for-taxon-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/variants/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -348,7 +375,7 @@ export def "get-genes-for-latest-assembly-using-get" [
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
   let full_url = (build-url $base ({taxon_id: (encode-path-segment $taxon_id)} | format pattern "/agr/{taxon_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -387,9 +414,9 @@ export def "get-annotations-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/annotations/" $auth.query)
   let req_body = {"evidenceCodes": $evidence_codes, "ids": $ids, "speciesTypeKeys": $species_type_keys, "termAcc": $term_acc} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -425,7 +452,7 @@ export def "get-term-acc-ids-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/accId/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "get-annotation-count-by-acc-id-using-get" [
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{include_children}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -503,7 +530,7 @@ export def "get-annotation-count-by-acc-id-and-species-using-get" [
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -545,7 +572,7 @@ export def "get-annotation-count-by-acc-id-and-object-type-using-get" [
   if ($object_type | is-empty) { error make --unspanned { msg: "path parameter 'objectType' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children), object_type: (encode-path-segment $object_type)} | format pattern "/annotations/count/{acc_id}/{species_type_key}/{include_children}/{object_type}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -581,7 +608,7 @@ export def "get-annots-by-refrerence-using-get" [
   if ($ref_rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'refRgdId' must be non-empty" } }
   let full_url = (build-url $base ({ref_rgd_id: (encode-path-segment $ref_rgd_id)} | format pattern "/annotations/reference/{ref_rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -617,7 +644,7 @@ export def "get-annotations-by-rgd-id-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/rgdId/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -655,7 +682,7 @@ export def "get-annotations-by-rgd-id-and-ontology-using-get" [
   if ($ontology_prefix | is-empty) { error make --unspanned { msg: "path parameter 'ontologyPrefix' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id), ontology_prefix: (encode-path-segment $ontology_prefix)} | format pattern "/annotations/rgdId/{rgd_id}/{ontology_prefix}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -693,7 +720,7 @@ export def "get-annotations-by-acc-id-and-rgd-id-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), rgd_id: (encode-path-segment $rgd_id)} | format pattern "/annotations/{acc_id}/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -733,7 +760,7 @@ export def "get-annotations-using-get" [
   if ($include_children | is-empty) { error make --unspanned { msg: "path parameter 'includeChildren' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key), include_children: (encode-path-segment $include_children)} | format pattern "/annotations/{acc_id}/{species_type_key}/{include_children}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -771,9 +798,9 @@ export def "get-enrichment-data-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment/annotatedGenes" $auth.query)
   let req_body = {"accId": $acc_id, "geneSymbols": $gene_symbols, "species": $species} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -811,9 +838,9 @@ export def "get-enrichment-data-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enrichment/data" $auth.query)
   let req_body = {"aspect": $aspect, "genes": $genes, "species": $species} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -851,7 +878,7 @@ export def "get-genes-by-affy-id-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({affy_id: (encode-path-segment $affy_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/affyId/{affy_id}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -889,7 +916,7 @@ export def "get-genes-by-alias-symbol-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({alias_symbol: (encode-path-segment $alias_symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/alias/{alias_symbol}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -925,7 +952,7 @@ export def "get-gene-alleles-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/allele/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -963,9 +990,9 @@ export def "get-annotated-genes-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/genes/annotation" $auth.query)
   let req_body = {"accId": $acc_id, "evidenceCodes": $evidence_codes, "speciesTypeKeys": $species_type_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1001,7 +1028,7 @@ export def "get-all-annotated-genes-using-get" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/genes/annotation/{acc_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1039,7 +1066,7 @@ export def "get-genes-annotated-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/annotation/{acc_id}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1077,7 +1104,7 @@ export def "get-genes-by-keyword-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({keyword: (encode-path-segment $keyword), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/keyword/{keyword}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1113,7 +1140,7 @@ export def "get-gene-by-map-key-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/genes/map/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,7 +1182,7 @@ export def "get-mapped-genes-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1192,9 +1219,9 @@ export def "get-orthologs-by-list-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/genes/orthologs" $auth.query)
   let req_body = {"rgdIds": $rgd_ids, "speciesTypeKeys": $species_type_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1230,7 +1257,7 @@ export def "get-gene-orthologs-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/orthologs/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1272,7 +1299,7 @@ export def "get-genes-in-region-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/region/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1308,7 +1335,7 @@ export def "get-genes-by-species-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/species/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1350,7 +1377,7 @@ export def "get-genes-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/genes/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1386,7 +1413,7 @@ export def "get-gene-by-rgd-id-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/genes/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1424,7 +1451,7 @@ export def "get-gene-by-symbol-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({symbol: (encode-path-segment $symbol), species_type_key: (encode-path-segment $species_type_key)} | format pattern "/genes/{symbol}/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1458,7 +1485,7 @@ export def "get-gene-types-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/geneTypes" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1494,9 +1521,9 @@ export def "get-ensembl-gene-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblGene" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1532,7 +1559,7 @@ export def "get-ensembl-gene-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblGene/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1568,9 +1595,9 @@ export def "get-ensembl-protein-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblProtein" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1606,7 +1633,7 @@ export def "get-ensembl-protein-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblProtein/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1642,9 +1669,9 @@ export def "get-ensembl-transcript-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/EnsemblTranscript" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1680,7 +1707,7 @@ export def "get-ensembl-transcript-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/EnsemblTranscript/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1716,9 +1743,9 @@ export def "get-gtex-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GTEx" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1754,7 +1781,7 @@ export def "get-gtex-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GTEx/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1790,9 +1817,9 @@ export def "get-gen-bank-nucleotide-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GenBankNucleotide" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1828,7 +1855,7 @@ export def "get-gen-bank-nucleotide-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankNucleotide/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1864,9 +1891,9 @@ export def "get-gen-bank-protein-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/GenBankProtein" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1902,7 +1929,7 @@ export def "get-gen-bank-protein-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/GenBankProtein/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1938,9 +1965,9 @@ export def "get-hgnc-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/HGNC" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1976,7 +2003,7 @@ export def "get-hgnc-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/HGNC/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2012,9 +2039,9 @@ export def "get-mgi-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/MGI" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2050,7 +2077,7 @@ export def "get-mgi-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/MGI/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2086,9 +2113,9 @@ export def "get-ncbi-gene-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/NCBIGene" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2124,7 +2151,7 @@ export def "get-ncbi-gene-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/NCBIGene/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2160,9 +2187,9 @@ export def "get-uni-prot-mapping-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/id/map/UniProt" $auth.query)
   let req_body = {"rgdIds": $rgd_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2198,7 +2225,7 @@ export def "get-uni-prot-mapping-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/lookup/id/map/UniProt/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2234,7 +2261,7 @@ export def "get-maps-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/lookup/maps/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2268,7 +2295,7 @@ export def "get-species-types-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/speciesTypeKeys" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2304,7 +2331,7 @@ export def "get-maps-using-get-1" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/lookup/standardUnit/{acc_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2342,7 +2369,7 @@ export def "get-chromosome-by-assembly-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chromosome: (encode-path-segment $chromosome), map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{chromosome}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2378,7 +2405,7 @@ export def "get-chromosomes-by-assembly-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({map_key: (encode-path-segment $map_key)} | format pattern "/maps/chr/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2414,7 +2441,7 @@ export def "get-maps-by-species-using-get" [
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key)} | format pattern "/maps/{species_type_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2450,7 +2477,7 @@ export def "get-ont-dags-using-get" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/ont/{acc_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2488,7 +2515,7 @@ export def "is-descendant-of-using-get" [
   if ($acc_id2 | is-empty) { error make --unspanned { msg: "path parameter 'accId2' must be non-empty" } }
   let full_url = (build-url $base ({acc_id1: (encode-path-segment $acc_id1), acc_id2: (encode-path-segment $acc_id2)} | format pattern "/ontology/term/{acc_id1}/{acc_id2}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2524,7 +2551,7 @@ export def "get-term-using-get" [
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id)} | format pattern "/ontology/term/{acc_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2560,7 +2587,7 @@ export def "search-pathways-using-get" [
   if ($search_string | is-empty) { error make --unspanned { msg: "path parameter 'searchString' must be non-empty" } }
   let full_url = (build-url $base ({search_string: (encode-path-segment $search_string)} | format pattern "/pathways/diagrams/search/{search_string}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2596,7 +2623,7 @@ export def "get-pathways-with-diagrams-for-category-using-get" [
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/pathways/diagramsForCategory/{category}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2636,7 +2663,7 @@ export def "get-chart-info-using-get" [
   if ($term_string | is-empty) { error make --unspanned { msg: "path parameter 'termString' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), ref_rgd_id: (encode-path-segment $ref_rgd_id), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{ref_rgd_id}/{term_string}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2674,7 +2701,7 @@ export def "get-chart-info-using-get-1" [
   if ($term_string | is-empty) { error make --unspanned { msg: "path parameter 'termString' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), term_string: (encode-path-segment $term_string)} | format pattern "/phenotype/phenominer/chart/{species_type_key}/{term_string}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2716,7 +2743,7 @@ export def "get-mapped-qtl-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2758,7 +2785,7 @@ export def "get-qtl-list-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/qtls/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2794,7 +2821,7 @@ export def "get-qtl-by-rgd-id-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/qtls/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2836,7 +2863,7 @@ export def "get-mapped-sslp-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/sslps/mapped/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2874,7 +2901,7 @@ export def "get-active-object-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/activeObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2912,7 +2939,7 @@ export def "get-gene-type-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/geneType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2950,7 +2977,7 @@ export def "get-object-status-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectStatus/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2988,7 +3015,7 @@ export def "get-objects-with-ref-seq-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithRefSeq/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3026,7 +3053,7 @@ export def "get-objects-with-reference-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithReference/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3066,7 +3093,7 @@ export def "get-objects-with-xd-bs-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/objectWithXdb/{species_type_key}/{object_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3104,7 +3131,7 @@ export def "get-protein-interaction-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/proteinInteraction/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3142,7 +3169,7 @@ export def "get-qtl-inheritance-type-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/qtlInheritanceType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3180,7 +3207,7 @@ export def "get-retired-object-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/retiredObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3218,7 +3245,7 @@ export def "get-strain-type-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/strainType/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3256,7 +3283,7 @@ export def "get-withdrawn-object-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/withdrawnObject/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3294,7 +3321,7 @@ export def "get-xdbs-count-using-get" [
   if ($date_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_yyyymmdd: (encode-path-segment $date_yyyymmdd)} | format pattern "/stats/count/xdb/{species_type_key}/{date_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3334,7 +3361,7 @@ export def "get-active-object-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/activeObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3374,7 +3401,7 @@ export def "get-gene-type-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/geneType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3414,7 +3441,7 @@ export def "get-object-status-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectStatus/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3454,7 +3481,7 @@ export def "get-objects-with-ref-seq-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithRefSeq/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3494,7 +3521,7 @@ export def "get-objects-with-reference-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithReference/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3536,7 +3563,7 @@ export def "get-objects-with-xd-bs-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), object_key: (encode-path-segment $object_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/objectWithXdb/{species_type_key}/{object_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3576,7 +3603,7 @@ export def "get-protein-interaction-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/proteinInteraction/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3616,7 +3643,7 @@ export def "get-qtl-inheritance-type-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/qtlInheritanceType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3656,7 +3683,7 @@ export def "get-retired-object-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/retiredObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3696,7 +3723,7 @@ export def "get-strain-type-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/strainType/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3736,7 +3763,7 @@ export def "get-withdrawn-object-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/withdrawnObject/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3776,7 +3803,7 @@ export def "get-xdbs-diff-using-get" [
   if ($date_to_yyyymmdd | is-empty) { error make --unspanned { msg: "path parameter 'dateToYYYYMMDD' must be non-empty" } }
   let full_url = (build-url $base ({species_type_key: (encode-path-segment $species_type_key), date_from_yyyymmdd: (encode-path-segment $date_from_yyyymmdd), date_to_yyyymmdd: (encode-path-segment $date_to_yyyymmdd)} | format pattern "/stats/diff/xdb/{species_type_key}/{date_from_yyyymmdd}/{date_to_yyyymmdd}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3814,7 +3841,7 @@ export def "get-term-stats-using-get" [
   if ($filter_acc_id | is-empty) { error make --unspanned { msg: "path parameter 'filterAccId' must be non-empty" } }
   let full_url = (build-url $base ({acc_id: (encode-path-segment $acc_id), filter_acc_id: (encode-path-segment $filter_acc_id)} | format pattern "/stats/term/{acc_id}/{filter_acc_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3848,7 +3875,7 @@ export def "get-all-strains-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/strains/all" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3890,7 +3917,7 @@ export def "get-strains-by-position-using-get" [
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
   let full_url = (build-url $base ({chr: (encode-path-segment $chr), start: (encode-path-segment $start), stop: (encode-path-segment $stop), map_key: (encode-path-segment $map_key)} | format pattern "/strains/{chr}/{start}/{stop}/{map_key}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3926,7 +3953,7 @@ export def "get-strain-by-rgd-id-using-get" [
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
   let full_url = (build-url $base ({rgd_id: (encode-path-segment $rgd_id)} | format pattern "/strains/{rgd_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

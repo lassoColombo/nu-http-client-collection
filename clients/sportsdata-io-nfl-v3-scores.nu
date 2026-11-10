@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -167,7 +194,7 @@ export def "teams-all" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/AllTeams") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -203,7 +230,7 @@ export def "are-games-in-progress" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/AreAnyGamesInProgress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -241,7 +268,7 @@ export def "bye-weeks" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Byes/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -277,7 +304,7 @@ export def "season-current" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/CurrentSeason") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -313,7 +340,7 @@ export def "week-current" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/CurrentWeek") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -349,7 +376,7 @@ export def "depth-charts" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/DepthCharts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -385,7 +412,7 @@ export def "player-details-by-free-agents" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/FreeAgents") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -423,7 +450,7 @@ export def "game-stats-by-season-deprecated-use-team-game-stats-instead" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/GameStats/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "game-stats-by-week-deprecated-use-team-game-stats-instead" [
   if ($week | is-empty) { error make --unspanned { msg: "path parameter 'week' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), week: (encode-path-segment $week)} | format pattern "/{format}/GameStatsByWeek/{season}/{week}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -499,7 +526,7 @@ export def "season-last-completed" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/LastCompletedSeason") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -535,7 +562,7 @@ export def "week-last-completed" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/LastCompletedWeek") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -571,7 +598,7 @@ export def "news" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/News") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -609,7 +636,7 @@ export def "news-by-date" [
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/NewsByDate/{date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -647,7 +674,7 @@ export def "news-by-player" [
   if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/NewsByPlayerID/{playerid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -685,7 +712,7 @@ export def "news-by-team" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), team: (encode-path-segment $team)} | format pattern "/{format}/NewsByTeam/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -723,7 +750,7 @@ export def "x-ping" [
   if ($seconds | is-empty) { error make --unspanned { msg: "path parameter 'seconds' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), seconds: (encode-path-segment $seconds)} | format pattern "/{format}/Ping/{seconds}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -761,7 +788,7 @@ export def "player-details-by-player" [
   if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/Player/{playerid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -797,7 +824,7 @@ export def "player-details-by-available" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Players") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -835,7 +862,7 @@ export def "player-details-by-team" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), team: (encode-path-segment $team)} | format pattern "/{format}/Players/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -871,7 +898,7 @@ export def "referees" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Referees") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -909,7 +936,7 @@ export def "player-details-by-rookie-draft-year" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Rookies/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -947,7 +974,7 @@ export def "schedule" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Schedules/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -985,7 +1012,7 @@ export def "scores-by-season" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Scores/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,7 +1050,7 @@ export def "scores-by-date" [
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/ScoresByDate/{date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1063,7 +1090,7 @@ export def "scores-by-week" [
   if ($week | is-empty) { error make --unspanned { msg: "path parameter 'week' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), week: (encode-path-segment $week)} | format pattern "/{format}/ScoresByWeek/{season}/{week}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1101,7 +1128,7 @@ export def "scores-by-week-simulation" [
   if ($numberofplays | is-empty) { error make --unspanned { msg: "path parameter 'numberofplays' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), numberofplays: (encode-path-segment $numberofplays)} | format pattern "/{format}/SimulatedScores/{numberofplays}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1137,7 +1164,7 @@ export def "stadiums" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Stadiums") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1175,7 +1202,7 @@ export def "standings" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Standings/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1215,7 +1242,7 @@ export def "team-game-stats" [
   if ($week | is-empty) { error make --unspanned { msg: "path parameter 'week' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), week: (encode-path-segment $week)} | format pattern "/{format}/TeamGameStats/{season}/{week}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1257,7 +1284,7 @@ export def "team-game-logs-by-season" [
   if ($numberofgames | is-empty) { error make --unspanned { msg: "path parameter 'numberofgames' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), teamid: (encode-path-segment $teamid), numberofgames: (encode-path-segment $numberofgames)} | format pattern "/{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1295,7 +1322,7 @@ export def "team-season-stats" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/TeamSeasonStats/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1331,7 +1358,7 @@ export def "teams-active" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Teams") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1369,7 +1396,7 @@ export def "teams-by-season" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Teams/{season}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1407,7 +1434,7 @@ export def "timeframes" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), type: (encode-path-segment $type)} | format pattern "/{format}/Timeframes/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1443,7 +1470,7 @@ export def "season-upcoming" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/UpcomingSeason") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1479,7 +1506,7 @@ export def "week-upcoming" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/UpcomingWeek") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

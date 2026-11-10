@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -186,9 +213,9 @@ export def "delete-session" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -227,7 +254,7 @@ export def "put-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --hdr-accept: string # The message that Amazon Lex returns in the response can be either text or speech based depending on the value of this field. If the value is text/plain; charset=utf-8, Amazon Lex returns text in the response. If the value begins with audio/, Amazon Lex returns speech in the response. Amazon Lex uses Amazon Polly to generate the speech in the configuration that you specify. For example, if you specify audio/mpeg as the value, Amazon Lex returns speech in the MPEG format. If the value is audio/pcm, the speech is returned as audio/pcm in 16-bit, little endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm audio/* (defaults to mpeg) text/plain; charset=utf-8
+  --hdr-accept: string # The message that Amazon Lex returns in the response can be either text or speech based depending on the value of this field. If the value is text/plain; charset=utf-8, Amazon Lex returns text in the response. If the value begins with audio/, Amazon Lex returns speech in the response. Amazon Lex uses Amazon Polly to generate the speech in the configuration that you specify. For example, if you specify audio/mpeg as the value, Amazon Lex returns speech in the MPEG format. If the value is audio/pcm, the speech is returned as audio/pcm in 16-bit, little endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm audio/* (defaults to mpeg) text/plain; charset=utf-8 (spec name: Accept)
   --session-attributes: record # Map of key/value pairs representing the session-specific context information. It contains application information passed between Amazon Lex and a client application.
   --dialog-action: record # Describes the next action that the bot should take in its interaction with the user and provides information about the context in which the action takes place. Use the DialogAction data type to set the interaction to a specific state, or to return the interaction to a previous state. — shape: {type?: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", intentName?: string, slots?: record, slotToElicit?: string, fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", message?: string, messageFormat?: "PlainText"|"CustomPayload"|"SSML"|"Composite"}
   --recent-intent-summary-view: list # A summary of the recent intents for the bot. You can use the intent summary view to set a checkpoint label on an intent and modify attributes of intents. You can also use it to remove or add intent summary objects to the list. An intent that you modify or add to the list must make sense for the bot. For example, the intent name must be valid for the bot. You must provide valid values for: intentName slot names slotToElict If you send the recentIntentSummaryView parameter in a PutSession request, the contents of the new summary view replaces the old summary view. For example, if a GetSession request returns three intents in the summary view and you call PutSession with one intent in the summary view, the next call to GetSession will only return one intent. — item shape: {intentName?: string, checkpointLabel?: string, slots?: record, confirmationStatus?: "None"|"Confirmed"|"Denied", dialogActionType: "ElicitIntent"|"ConfirmIntent"|"ElicitSlot"|"Close"|"Delegate", fulfillmentState?: "Fulfilled"|"Failed"|"ReadyForFulfillment", slotToElicit?: string}
@@ -241,11 +268,11 @@ export def "put-session" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session") $auth.query)
   let req_body = {"sessionAttributes": $session_attributes, "dialogAction": $dialog_action, "recentIntentSummaryView": $recent_intent_summary_view, "activeContexts": $active_contexts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -294,9 +321,9 @@ export def "get-session" [
   let qp = [(serialize-qp "checkpointLabelFilter" $checkpoint_label_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/session/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -338,7 +365,7 @@ export def "post-content" [
   --x-amz-lex-session-attributes: string # You pass this value as the x-amz-lex-session-attributes HTTP header. Application-specific information passed between Amazon Lex and a client application. The value must be a JSON serialized and base64 encoded map with string keys and values. The total size of the sessionAttributes and requestAttributes headers is limited to 12 KB. For more information, see Setting Session Attributes (https://docs.aws.amazon.com/lex/latest/dg/context-mgmt.html#context-mgmt-session-attribs). (format: password)
   --x-amz-lex-request-attributes: string # You pass this value as the x-amz-lex-request-attributes HTTP header. Request-specific information passed between Amazon Lex and a client application. The value must be a JSON serialized and base64 encoded map with string keys and values. The total size of the requestAttributes and sessionAttributes headers is limited to 12 KB. The namespace x-amz-lex: is reserved for special attributes. Don't create any request attributes with the prefix x-amz-lex:. For more information, see Setting Request Attributes (https://docs.aws.amazon.com/lex/latest/dg/context-mgmt.html#context-mgmt-request-attribs). (format: password)
   --content-type: string # You pass this value as the Content-Type HTTP header. Indicates the audio format or text. The header value must start with one of the following prefixes: PCM format, audio data must be in little-endian byte order. audio/l16; rate=16000; channels=1 audio/x-l16; sample-rate=16000; channel-count=1 audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false Opus format audio/x-cbr-opus-with-preamble; preamble-size=0; bit-rate=256000; frame-size-milliseconds=4 Text format text/plain; charset=utf-8 (required)
-  --hdr-accept: string # You pass this value as the Accept HTTP header. The message Amazon Lex returns in the response can be either text or speech based on the Accept HTTP header value in the request. If the value is text/plain; charset=utf-8, Amazon Lex returns text in the response. If the value begins with audio/, Amazon Lex returns speech in the response. Amazon Lex uses Amazon Polly to generate the speech (using the configuration you specified in the Accept header). For example, if you specify audio/mpeg as the value, Amazon Lex returns speech in the MPEG format. If the value is audio/pcm, the speech returned is audio/pcm in 16-bit, little endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm text/plain; charset=utf-8 audio/* (defaults to mpeg)
+  --hdr-accept: string # You pass this value as the Accept HTTP header. The message Amazon Lex returns in the response can be either text or speech based on the Accept HTTP header value in the request. If the value is text/plain; charset=utf-8, Amazon Lex returns text in the response. If the value begins with audio/, Amazon Lex returns speech in the response. Amazon Lex uses Amazon Polly to generate the speech (using the configuration you specified in the Accept header). For example, if you specify audio/mpeg as the value, Amazon Lex returns speech in the MPEG format. If the value is audio/pcm, the speech returned is audio/pcm in 16-bit, little endian format. The following are the accepted values: audio/mpeg audio/ogg audio/pcm text/plain; charset=utf-8 audio/* (defaults to mpeg) (spec name: Accept)
   --x-amz-lex-active-contexts: string # A list of contexts active for the request. A context can be activated when a previous intent is fulfilled, or by including the context in the request, If you don't specify a list of contexts, Amazon Lex will use the current list of contexts for the session. If you specify an empty list, all contexts for the session are cleared. (format: password)
   input_stream: string # User input in PCM or Opus audio format or text format as described in the Content-Type HTTP header. You can stream audio data to Amazon Lex or you can create a local buffer that captures all of the audio data before sending. In general, you get better performance if you stream audio data rather than buffering the data locally.
 ]: any -> oneof<record<audioStream: string>, string, nothing> {
@@ -350,13 +377,13 @@ export def "post-content" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/content") $auth.query)
   let req_body = {"inputStream": $input_stream} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-lex-session-attributes": $x_amz_lex_session_attributes, "x-amz-lex-request-attributes": $x_amz_lex_request_attributes, "Content-Type": $content_type, "Accept": $hdr_accept, "x-amz-lex-active-contexts": $x_amz_lex_active_contexts} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -408,11 +435,11 @@ export def "post-text" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({bot_name: (encode-path-segment $bot_name), bot_alias: (encode-path-segment $bot_alias), user_id: (encode-path-segment $user_id)} | format pattern "/bot/{bot_name}/alias/{bot_alias}/user/{user_id}/text") $auth.query)
   let req_body = {"sessionAttributes": $session_attributes, "requestAttributes": $request_attributes, "inputText": $input_text, "activeContexts": $active_contexts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

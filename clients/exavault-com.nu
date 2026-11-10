@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -226,9 +253,9 @@ export def "get-account" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -278,11 +305,11 @@ export def "update-account" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/account" $auth.query)
   let req_body = {"accountOnboarding": $account_onboarding, "allowedIpRanges": $allowed_ip_ranges, "brandingSettings": $branding_settings, "complexPasswords": $complex_passwords, "customSignature": $custom_signature, "emailContent": $email_content, "emailSubject": $email_subject, "externalDomain": $external_domain, "quota": $quota, "secureOnly": $secure_only, "showReferralLinks": $show_referral_links} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -330,9 +357,9 @@ export def "get-session-logs" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activity/session" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -381,9 +408,9 @@ export def "get-webhook-logs" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "endpointUrl" $endpoint_url "scalar") (serialize-qp "event" $event "scalar") (serialize-qp "statusCode" $status_code "scalar") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activity/webhooks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -423,9 +450,9 @@ export def "get-email-lists" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-lists" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -466,11 +493,11 @@ export def "add-email-list" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/email-lists" $auth.query)
   let req_body = {"emails": $emails, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -510,9 +537,9 @@ export def "delete-email-list-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -554,9 +581,9 @@ export def "get-email-list-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -599,11 +626,11 @@ export def "update-email-list-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email-lists/{id}") $auth.query)
   let req_body = {"emails": $emails, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -644,11 +671,11 @@ export def "send-referral-email" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/email/referral" $auth.query)
   let req_body = {"emails": $emails, "message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -688,9 +715,9 @@ export def "send-welcome-email" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/email/welcome/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -732,9 +759,9 @@ export def "get-form-by-share-hash" [
   let qp = [(serialize-qp "shareHash" $share_hash "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/forms" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -774,9 +801,9 @@ export def "delete-form-message-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/entries/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -819,9 +846,9 @@ export def "get-form-entries" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/entries/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -863,9 +890,9 @@ export def "get-form-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -911,11 +938,11 @@ export def "update-form-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/forms/{id}") $auth.query)
   let req_body = {"cssStyles": $css_styles, "elements": $elements, "formDescription": $form_description, "submitButtonText": $submit_button_text, "successMessage": $success_message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -960,9 +987,9 @@ export def "list-notifications" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1008,12 +1035,12 @@ export def "add-notification" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/notifications" $auth.query)
   let req_body = {"action": $action, "message": $message, "recipients": $recipients, "resource": $resource, "sendEmail": $send_email, "type": $type, "usernames": $usernames} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "sendEmail") == null) { error make --unspanned { msg: "required body field 'sendEmail' missing: pass --send-email or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1053,9 +1080,9 @@ export def "delete-notification-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1097,9 +1124,9 @@ export def "get-notification-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1145,11 +1172,11 @@ export def "update-notification-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}") $auth.query)
   let req_body = {"action": $action, "message": $message, "recipients": $recipients, "sendEmail": $send_email, "usernames": $usernames} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1191,11 +1218,11 @@ export def "resend-invitations-for-share" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({share_id: (encode-path-segment $share_id)} | format pattern "/recipients/shares/invites/{share_id}") $auth.query)
   let req_body = {"recipientId": $recipient_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1235,11 +1262,11 @@ export def "delete-resources" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources" $auth.query)
   let req_body = {"resources": $resources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1281,9 +1308,9 @@ export def "get-resource-info" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1325,11 +1352,11 @@ export def "add-folder" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources" $auth.query)
   let req_body = {"name": $name, "parentResource": $parent_resource, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1371,11 +1398,11 @@ export def "compress-files" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/compress" $auth.query)
   let req_body = {"archiveName": $archive_name, "parentResource": $parent_resource, "resources": $resources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1416,11 +1443,11 @@ export def "copy-resources" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/copy" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resources": $resources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1463,9 +1490,9 @@ export def "download" [
   let qp = [(serialize-qp "resources[]" $resources "multi") (serialize-qp "downloadArchiveName" $download_archive_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/download" $qp $auth.query)
   let accept_val = ($accept | default "application/octet-stream")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1506,11 +1533,11 @@ export def "extract-files" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/extract" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resource": $resource} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1557,9 +1584,9 @@ export def "list-resources" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/list" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1605,9 +1632,9 @@ export def "list-resource-contents" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/list/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1648,11 +1675,11 @@ export def "move-resources" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/resources/move" $auth.query)
   let req_body = {"parentResource": $parent_resource, "resources": $resources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1698,9 +1725,9 @@ export def "get-preview-image" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/preview" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1748,12 +1775,12 @@ export def "upload-file" [
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "fileSize" $file_size "scalar") (serialize-qp "resume" $resume "scalar") (serialize-qp "allowOverwrite" $allow_overwrite "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/upload" $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token, "offsetBytes": $offset_bytes} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -1794,9 +1821,9 @@ export def "delete-resource-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1838,9 +1865,9 @@ export def "get-resource-info-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1882,11 +1909,11 @@ export def "update-resource-by-id" [
   if ($ev_api_key == null) { error make --unspanned { msg: "required header parameter 'ev-api-key' missing: pass --ev-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/{id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-access-token": $ev_access_token, "ev-api-key": $ev_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1936,9 +1963,9 @@ export def "list-shares" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "recipient" $recipient "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shares" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1993,11 +2020,11 @@ export def "add-share" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/shares" $auth.query)
   let req_body = {"accessMode": $access_mode, "embed": $embed, "expiration": $expiration, "fileDropCreateFolders": $file_drop_create_folders, "hasNotification": $has_notification, "isPublic": $is_public, "messageBody": $message_body, "messageSubject": $message_subject, "name": $name, "notificationEmails": $notification_emails, "password": $password, "recipients": $recipients, "requireEmail": $require_email, "resources": $resources, "sendingLocalFiles": $sending_local_files, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2037,9 +2064,9 @@ export def "complete-direct-send" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/complete-send/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2079,9 +2106,9 @@ export def "delete-share-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2123,9 +2150,9 @@ export def "get-share-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2181,11 +2208,11 @@ export def "update-share-by-id" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shares/{id}") $auth.query)
   let req_body = {"accessMode": $access_mode, "embed": $embed, "expiration": $expiration, "fileDropCreateFolders": $file_drop_create_folders, "hasNotification": $has_notification, "isPublic": $is_public, "messageBody": $message_body, "messageSubject": $message_subject, "name": $name, "notificationEmails": $notification_emails, "password": $password, "recipients": $recipients, "requireEmail": $require_email, "resources": $resources, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -2227,9 +2254,9 @@ export def "get-ssh-keys-list" [
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ssh-keys" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2270,11 +2297,11 @@ export def "add-ssh-key" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/ssh-keys" $auth.query)
   let req_body = {"publicKey": $public_key, "userId": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2314,9 +2341,9 @@ export def "delete-ssh-key" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ssh-keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2356,9 +2383,9 @@ export def "get-ssh-key" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ssh-keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2408,9 +2435,9 @@ export def "list-users" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "homeResource" $home_resource "scalar") (serialize-qp "nickname" $nickname "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2461,11 +2488,11 @@ export def "add-user" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/users" $auth.query)
   let req_body = {"email": $email, "expiration": $expiration, "homeResource": $home_resource, "locked": $locked, "nickname": $nickname, "onboarding": $onboarding, "password": $password, "permissions": $permissions, "role": $role, "timeZone": $time_zone, "username": $username, "welcomeEmail": $welcome_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2505,9 +2532,9 @@ export def "delete-user" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2549,9 +2576,9 @@ export def "get-user-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2603,11 +2630,11 @@ export def "update-user" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let req_body = {"email": $email, "expiration": $expiration, "homeResource": $home_resource, "locked": $locked, "nickname": $nickname, "onboarding": $onboarding, "password": $password, "permissions": $permissions, "role": $role, "timeZone": $time_zone, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -2649,9 +2676,9 @@ export def "get-wehooks-list" [
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2694,11 +2721,11 @@ export def "add-webhook" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base "/webhooks" $auth.query)
   let req_body = {"endpointUrl": $endpoint_url, "resource": $resource, "responseVersion": $response_version, "triggers": $triggers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2738,9 +2765,9 @@ export def "regenerate-webhook-token" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/regenerate-token/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2780,9 +2807,9 @@ export def "resend-webhook-activity-entry" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/webhooks/resend/{activity_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2822,9 +2849,9 @@ export def "delete-webhook" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2866,9 +2893,9 @@ export def "get-webhook-by-id" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2913,11 +2940,11 @@ export def "update-webhook" [
   if ($ev_access_token == null) { error make --unspanned { msg: "required header parameter 'ev-access-token' missing: pass --ev-access-token" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhooks/{id}") $auth.query)
   let req_body = {"endpointUrl": $endpoint_url, "resource": $resource, "responseVersion": $response_version, "triggers": $triggers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ev-api-key": $ev_api_key, "ev-access-token": $ev_access_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url

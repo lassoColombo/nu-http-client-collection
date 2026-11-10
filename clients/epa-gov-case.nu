@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -268,7 +295,7 @@ export def "get-case-rest-services-get-case-info" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_case_category" $p_case_category "scalar") (serialize-qp "p_case_status" $p_case_status "scalar") (serialize-qp "p_milestone" $p_milestone "scalar") (serialize-qp "p_from_date" $p_from_date "scalar") (serialize-qp "p_to_date" $p_to_date "scalar") (serialize-qp "p_milestone_fy" $p_milestone_fy "scalar") (serialize-qp "p_name" $p_name "scalar") (serialize-qp "p_name_type" $p_name_type "scalar") (serialize-qp "p_case_number" $p_case_number "scalar") (serialize-qp "p_docket_number" $p_docket_number "scalar") (serialize-qp "p_court_docket_number" $p_court_docket_number "scalar") (serialize-qp "p_activity_number" $p_activity_number "scalar") (serialize-qp "p_case_lead" $p_case_lead "scalar") (serialize-qp "p_case_sens_flg" $p_case_sens_flg "scalar") (serialize-qp "p_region" $p_region "scalar") (serialize-qp "p_state" $p_state "scalar") (serialize-qp "p_district" $p_district "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_sic_ao_naics" $p_sic_ao_naics "scalar") (serialize-qp "p_sic_primary_flg" $p_sic_primary_flg "scalar") (serialize-qp "p_sic_frs_flg" $p_sic_frs_flg "scalar") (serialize-qp "p_naics" $p_naics "scalar") (serialize-qp "p_naics_primary_flg" $p_naics_primary_flg "scalar") (serialize-qp "p_naics_frs_flg" $p_naics_frs_flg "scalar") (serialize-qp "p_enf_type" $p_enf_type "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_cp_citation" $p_cp_citation "scalar") (serialize-qp "p_rank_order" $p_rank_order "scalar") (serialize-qp "p_enf_program" $p_enf_program "scalar") (serialize-qp "p_violation" $p_violation "scalar") (serialize-qp "p_priority_area" $p_priority_area "scalar") (serialize-qp "p_priority_area_desc" $p_priority_area_desc "scalar") (serialize-qp "p_tribal" $p_tribal "scalar") (serialize-qp "p_oeca_core" $p_oeca_core "scalar") (serialize-qp "p_multimedia" $p_multimedia "scalar") (serialize-qp "p_fed_case" $p_fed_case "scalar") (serialize-qp "p_activity_contact" $p_activity_contact "scalar") (serialize-qp "p_role" $p_role "scalar") (serialize-qp "p_fed_penalty" $p_fed_penalty "scalar") (serialize-qp "p_total_fed_penalty" $p_total_fed_penalty "scalar") (serialize-qp "p_cost_recovery" $p_cost_recovery "scalar") (serialize-qp "p_total_cost_recovery" $p_total_cost_recovery "scalar") (serialize-qp "p_complying_actions" $p_complying_actions "scalar") (serialize-qp "p_comp_act_val" $p_comp_act_val "scalar") (serialize-qp "p_total_comp_act_val" $p_total_comp_act_val "scalar") (serialize-qp "p_sep_cats" $p_sep_cats "scalar") (serialize-qp "p_sep_val" $p_sep_val "scalar") (serialize-qp "p_total_sep_val" $p_total_sep_val "scalar") (serialize-qp "p_lodged_date" $p_lodged_date "scalar") (serialize-qp "p_entered_date" $p_entered_date "scalar") (serialize-qp "p_facility_id" $p_facility_id "scalar") (serialize-qp "p_fac_city" $p_fac_city "scalar") (serialize-qp "p_fac_zip" $p_fac_zip "scalar") (serialize-qp "p_fac_county" $p_fac_county "scalar") (serialize-qp "p_case_summary" $p_case_summary "scalar") (serialize-qp "p_case_summary_type" $p_case_summary_type "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_voluntary" $p_voluntary "scalar") (serialize-qp "p_fed_indicator" $p_fed_indicator "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_civil_criminal_indicator" $p_civil_criminal_indicator "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "mapset" $mapset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar") (serialize-qp "p_ocmap_fy" $p_ocmap_fy "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_has_map" $p_has_map "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_case_info" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -379,9 +406,9 @@ export def "post-case-rest-services-get-case-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_case_info" $auth.query)
   let req_body = {"output": $output, "p_case_category": $p_case_category, "p_case_status": $p_case_status, "p_milestone": $p_milestone, "p_from_date": $p_from_date, "p_to_date": $p_to_date, "p_milestone_fy": $p_milestone_fy, "p_name": $p_name, "p_name_type": $p_name_type, "p_case_number": $p_case_number, "p_docket_number": $p_docket_number, "p_court_docket_number": $p_court_docket_number, "p_activity_number": $p_activity_number, "p_case_lead": $p_case_lead, "p_case_sens_flg": $p_case_sens_flg, "p_region": $p_region, "p_state": $p_state, "p_district": $p_district, "p_sic": $p_sic, "p_sic_ao_naics": $p_sic_ao_naics, "p_sic_primary_flg": $p_sic_primary_flg, "p_sic_frs_flg": $p_sic_frs_flg, "p_naics": $p_naics, "p_naics_primary_flg": $p_naics_primary_flg, "p_naics_frs_flg": $p_naics_frs_flg, "p_enf_type": $p_enf_type, "p_law": $p_law, "p_section": $p_section, "p_cp_citation": $p_cp_citation, "p_rank_order": $p_rank_order, "p_enf_program": $p_enf_program, "p_violation": $p_violation, "p_priority_area": $p_priority_area, "p_priority_area_desc": $p_priority_area_desc, "p_tribal": $p_tribal, "p_oeca_core": $p_oeca_core, "p_multimedia": $p_multimedia, "p_fed_case": $p_fed_case, "p_activity_contact": $p_activity_contact, "p_role": $p_role, "p_fed_penalty": $p_fed_penalty, "p_total_fed_penalty": $p_total_fed_penalty, "p_cost_recovery": $p_cost_recovery, "p_total_cost_recovery": $p_total_cost_recovery, "p_complying_actions": $p_complying_actions, "p_comp_act_val": $p_comp_act_val, "p_total_comp_act_val": $p_total_comp_act_val, "p_sep_cats": $p_sep_cats, "p_sep_val": $p_sep_val, "p_total_sep_val": $p_total_sep_val, "p_lodged_date": $p_lodged_date, "p_entered_date": $p_entered_date, "p_facility_id": $p_facility_id, "p_fac_city": $p_fac_city, "p_fac_zip": $p_fac_zip, "p_fac_county": $p_fac_county, "p_case_summary": $p_case_summary, "p_case_summary_type": $p_case_summary_type, "p_usmex": $p_usmex, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_voluntary": $p_voluntary, "p_fed_indicator": $p_fed_indicator, "p_fntype": $p_fntype, "p_civil_criminal_indicator": $p_civil_criminal_indicator, "queryset": $queryset, "responseset": $responseset, "mapset": $mapset, "callback": $callback, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print, "p_ocmap_fy": $p_ocmap_fy, "p_qs": $p_qs, "p_has_map": $p_has_map} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -420,7 +447,7 @@ export def "get-case-rest-services-get-case-report" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_case_report" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -458,9 +485,9 @@ export def "post-case-rest-services-get-case-report" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_case_report" $auth.query)
   let req_body = {"p_id": $p_id, "output": $output, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -572,7 +599,7 @@ export def "get-case-rest-services-get-cases" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_case_category" $p_case_category "scalar") (serialize-qp "p_case_status" $p_case_status "scalar") (serialize-qp "p_violation" $p_violation "scalar") (serialize-qp "p_milestone" $p_milestone "scalar") (serialize-qp "p_from_date" $p_from_date "scalar") (serialize-qp "p_to_date" $p_to_date "scalar") (serialize-qp "p_milestone_fy" $p_milestone_fy "scalar") (serialize-qp "p_name" $p_name "scalar") (serialize-qp "p_name_type" $p_name_type "scalar") (serialize-qp "p_case_number" $p_case_number "scalar") (serialize-qp "p_docket_number" $p_docket_number "scalar") (serialize-qp "p_court_docket_number" $p_court_docket_number "scalar") (serialize-qp "p_activity_number" $p_activity_number "scalar") (serialize-qp "p_case_lead" $p_case_lead "scalar") (serialize-qp "p_case_sens_flg" $p_case_sens_flg "scalar") (serialize-qp "p_region" $p_region "scalar") (serialize-qp "p_state" $p_state "scalar") (serialize-qp "p_district" $p_district "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_sic_ao_naics" $p_sic_ao_naics "scalar") (serialize-qp "p_sic_primary_flg" $p_sic_primary_flg "scalar") (serialize-qp "p_sic_frs_flg" $p_sic_frs_flg "scalar") (serialize-qp "p_naics" $p_naics "scalar") (serialize-qp "p_naics_primary_flg" $p_naics_primary_flg "scalar") (serialize-qp "p_naics_frs_flg" $p_naics_frs_flg "scalar") (serialize-qp "p_enf_type" $p_enf_type "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_cp_citation" $p_cp_citation "scalar") (serialize-qp "p_rank_order" $p_rank_order "scalar") (serialize-qp "p_enf_program" $p_enf_program "scalar") (serialize-qp "p_priority_area" $p_priority_area "scalar") (serialize-qp "p_priority_area_desc" $p_priority_area_desc "scalar") (serialize-qp "p_tribal" $p_tribal "scalar") (serialize-qp "p_oeca_core" $p_oeca_core "scalar") (serialize-qp "p_multimedia" $p_multimedia "scalar") (serialize-qp "p_fed_case" $p_fed_case "scalar") (serialize-qp "p_activity_contact" $p_activity_contact "scalar") (serialize-qp "p_role" $p_role "scalar") (serialize-qp "p_fed_penalty" $p_fed_penalty "scalar") (serialize-qp "p_total_fed_penalty" $p_total_fed_penalty "scalar") (serialize-qp "p_cost_recovery" $p_cost_recovery "scalar") (serialize-qp "p_total_cost_recovery" $p_total_cost_recovery "scalar") (serialize-qp "p_complying_actions" $p_complying_actions "scalar") (serialize-qp "p_comp_act_val" $p_comp_act_val "scalar") (serialize-qp "p_total_comp_act_val" $p_total_comp_act_val "scalar") (serialize-qp "p_sep_cats" $p_sep_cats "scalar") (serialize-qp "p_sep_val" $p_sep_val "scalar") (serialize-qp "p_total_sep_val" $p_total_sep_val "scalar") (serialize-qp "p_lodged_date" $p_lodged_date "scalar") (serialize-qp "p_entered_date" $p_entered_date "scalar") (serialize-qp "p_facility_id" $p_facility_id "scalar") (serialize-qp "p_fac_city" $p_fac_city "scalar") (serialize-qp "p_fac_zip" $p_fac_zip "scalar") (serialize-qp "p_fac_county" $p_fac_county "scalar") (serialize-qp "p_case_summary" $p_case_summary "scalar") (serialize-qp "p_case_summary_type" $p_case_summary_type "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_voluntary" $p_voluntary "scalar") (serialize-qp "p_fed_indicator" $p_fed_indicator "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_civil_criminal_indicator" $p_civil_criminal_indicator "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_ocmap_fy" $p_ocmap_fy "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_has_map" $p_has_map "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_cases" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -683,9 +710,9 @@ export def "post-case-rest-services-get-cases" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_cases" $auth.query)
   let req_body = {"output": $output, "p_case_category": $p_case_category, "p_case_status": $p_case_status, "p_milestone": $p_milestone, "p_from_date": $p_from_date, "p_to_date": $p_to_date, "p_milestone_fy": $p_milestone_fy, "p_name": $p_name, "p_name_type": $p_name_type, "p_case_number": $p_case_number, "p_docket_number": $p_docket_number, "p_court_docket_number": $p_court_docket_number, "p_activity_number": $p_activity_number, "p_case_lead": $p_case_lead, "p_case_sens_flg": $p_case_sens_flg, "p_region": $p_region, "p_state": $p_state, "p_district": $p_district, "p_sic": $p_sic, "p_sic_ao_naics": $p_sic_ao_naics, "p_sic_primary_flg": $p_sic_primary_flg, "p_sic_frs_flg": $p_sic_frs_flg, "p_naics": $p_naics, "p_naics_primary_flg": $p_naics_primary_flg, "p_naics_frs_flg": $p_naics_frs_flg, "p_enf_type": $p_enf_type, "p_law": $p_law, "p_section": $p_section, "p_cp_citation": $p_cp_citation, "p_rank_order": $p_rank_order, "p_enf_program": $p_enf_program, "p_violation": $p_violation, "p_priority_area": $p_priority_area, "p_priority_area_desc": $p_priority_area_desc, "p_tribal": $p_tribal, "p_oeca_core": $p_oeca_core, "p_multimedia": $p_multimedia, "p_fed_case": $p_fed_case, "p_activity_contact": $p_activity_contact, "p_role": $p_role, "p_fed_penalty": $p_fed_penalty, "p_total_fed_penalty": $p_total_fed_penalty, "p_cost_recovery": $p_cost_recovery, "p_total_cost_recovery": $p_total_cost_recovery, "p_complying_actions": $p_complying_actions, "p_comp_act_val": $p_comp_act_val, "p_total_comp_act_val": $p_total_comp_act_val, "p_sep_cats": $p_sep_cats, "p_sep_val": $p_sep_val, "p_total_sep_val": $p_total_sep_val, "p_lodged_date": $p_lodged_date, "p_entered_date": $p_entered_date, "p_facility_id": $p_facility_id, "p_fac_city": $p_fac_city, "p_fac_zip": $p_fac_zip, "p_fac_county": $p_fac_county, "p_case_summary": $p_case_summary, "p_case_summary_type": $p_case_summary_type, "p_usmex": $p_usmex, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_voluntary": $p_voluntary, "p_fed_indicator": $p_fed_indicator, "p_fntype": $p_fntype, "p_civil_criminal_indicator": $p_civil_criminal_indicator, "queryset": $queryset, "responseset": $responseset, "maplist": $maplist, "tablelist": $tablelist, "callback": $callback, "qcolumns": $qcolumns, "p_ocmap_fy": $p_ocmap_fy, "p_qs": $p_qs, "p_has_map": $p_has_map} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -725,7 +752,7 @@ export def "get-case-rest-services-get-cases-from-facility" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_cases_from_facility" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -764,7 +791,7 @@ export def "post-case-rest-services-get-cases-from-facility" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_cases_from_facility" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -803,7 +830,7 @@ export def "get-case-rest-services-get-crcase-report" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "mapset" $mapset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_crcase_report" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -841,9 +868,9 @@ export def "post-case-rest-services-get-crcase-report" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_crcase_report" $auth.query)
   let req_body = {"p_id": $p_id, "output": $output, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -883,7 +910,7 @@ export def "get-case-rest-services-get-download" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -921,9 +948,9 @@ export def "post-case-rest-services-get-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_download" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -963,7 +990,7 @@ export def "get-case-rest-services-get-facilities-from-case" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_facilities_from_case" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1002,7 +1029,7 @@ export def "post-case-rest-services-get-facilities-from-case" [
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_facilities_from_case" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1046,7 +1073,7 @@ export def "get-case-rest-services-get-map" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "c1_lat" $c1_lat "scalar") (serialize-qp "c1_long" $c1_long "scalar") (serialize-qp "c2_lat" $c2_lat "scalar") (serialize-qp "c2_long" $c2_long "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1090,9 +1117,9 @@ export def "post-case-rest-services-get-map" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_map" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "callback": $callback, "tablelist": $tablelist, "c1_lat": $c1_lat, "c1_long": $c1_long, "c2_lat": $c2_lat, "c2_long": $c2_long, "mapset": $mapset} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1136,7 +1163,7 @@ export def "get-case-rest-services-get-qid" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,9 +1205,9 @@ export def "post-case-rest-services-get-qid" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.get_qid" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1218,7 +1245,7 @@ export def "get-case-rest-services-metadata" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/case_rest_services.metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1255,9 +1282,9 @@ export def "post-case-rest-services-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/case_rest_services.metadata" $auth.query)
   let req_body = {"output": $output, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1300,7 +1327,7 @@ export def "get-rest-lookups-icis-law-sections" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "statute_code" $statute_code "scalar") (serialize-qp "status_flag" $status_flag "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest_lookups.icis_law_sections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1342,9 +1369,9 @@ export def "post-rest-lookups-icis-law-sections" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest_lookups.icis_law_sections" $auth.query)
   let req_body = {"output": $output, "callback": $callback, "statute_code": $statute_code, "status_flag": $status_flag, "search_term": $search_term, "search_code": $search_code, "sort_order": $sort_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

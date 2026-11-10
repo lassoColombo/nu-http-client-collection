@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -184,7 +211,7 @@ export def "mybusinesslodging-locations-get-lodging" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -238,7 +265,7 @@ export def "mybusinesslodging-locations-update-lodging" [
   --health-and-safety: record # Health and safety measures implemented by the hotel during COVID-19. — shape: {enhancedCleaning?: record, increasedFoodSafety?: record, minimizedContact?: record, personalProtection?: record, physicalDistancing?: record}
   --housekeeping: record # Conveniences provided in guest units to facilitate an easier, more comfortable stay. — shape: {dailyHousekeeping?: bool, dailyHousekeepingException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", housekeepingAvailable?: bool, housekeepingAvailableException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", turndownService?: bool, turndownServiceException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK"}
   --metadata: record # Metadata for the Lodging. — shape: {updateTime?: string}
-  --body-name: string # Required. Google identifier for this location in the form: `locations/{location_id}/lodging`
+  --body-name: string # Required. Google identifier for this location in the form: `locations/{location_id}/lodging` (spec name: name)
   --parking: record # Parking options at the property. — shape: {electricCarChargingStations?: bool, electricCarChargingStationsException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freeParking?: bool, freeParkingException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freeSelfParking?: bool, freeSelfParkingException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", freeValetParking?: bool, ... (7 more fields)}
   --pets: record # Policies regarding guest-owned animals. — shape: {catsAllowed?: bool, catsAllowedException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", dogsAllowed?: bool, dogsAllowedException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", petsAllowed?: bool, petsAllowedException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", petsAllowedFree?: bool, ... (1 more fields)}
   --policies: record # Property rules that impact guests. — shape: {allInclusiveAvailable?: bool, allInclusiveAvailableException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", allInclusiveOnly?: bool, allInclusiveOnlyException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", checkinTime?: record, checkinTimeException?: "EXCEPTION_UNSPECIFIED"|"UNDER_CONSTRUCTION"|"DEPENDENT_ON_SEASON"|"DEPENDENT_ON_DAY_OF_WEEK", checkoutTime?: record, ... (10 more fields)}
@@ -257,9 +284,9 @@ export def "mybusinesslodging-locations-update-lodging" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}") $qp $auth.query)
   let req_body = {"accessibility": $accessibility, "activities": $activities, "allUnits": $all_units, "business": $business, "commonLivingArea": $common_living_area, "connectivity": $connectivity, "families": $families, "foodAndDrink": $food_and_drink, "guestUnits": $guest_units, "healthAndSafety": $health_and_safety, "housekeeping": $housekeeping, "metadata": $metadata, "name": $body_name, "parking": $parking, "pets": $pets, "policies": $policies, "pools": $pools, "property": $property, "services": $services, "someUnits": $some_units, "sustainability": $sustainability, "transportation": $transportation, "wellness": $wellness} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -308,7 +335,7 @@ export def "mybusinesslodging-locations-lodging-get-google-updated" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1/{name}:getGoogleUpdated") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

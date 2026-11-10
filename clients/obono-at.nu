@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,7 +207,7 @@ export def "get-auth" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -215,7 +242,7 @@ export def "get-belege-beleg-uuid" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/belege/{beleg_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -252,7 +279,7 @@ export def "get-export-csv-registrierkassen-registrierkasse-uuid-belege" [
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "posten" $posten "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/csv/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -288,7 +315,7 @@ export def "get-export-dep131-registrierkassen-registrierkasse-uuid-belege" [
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep131/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -324,7 +351,7 @@ export def "get-export-dep7-registrierkassen-registrierkasse-uuid-belege" [
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/dep7/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -360,7 +387,7 @@ export def "get-export-gobd-registrierkassen-registrierkasse-uuid" [
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/gobd/registrierkassen/{registrierkasse_uuid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -393,7 +420,7 @@ export def "get-export-html-belege-beleg-uuid" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/html/belege/{beleg_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -426,7 +453,7 @@ export def "get-export-pdf-belege-beleg-uuid" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/pdf/belege/{beleg_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -459,7 +486,7 @@ export def "get-export-qr-belege-beleg-uuid" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/qr/belege/{beleg_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -497,7 +524,7 @@ export def "get-export-thermal-print-belege-beleg-uuid" [
   let qp = [(serialize-qp "qr" $qr "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "dialect" $dialect "scalar") (serialize-qp "encoding" $encoding "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/export/thermal-print/belege/{beleg_uuid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -533,7 +560,7 @@ export def "get-export-xls-registrierkassen-registrierkasse-uuid-belege" [
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/export/xls/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -569,7 +596,7 @@ export def "get-registrierkasse" [
   if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -608,9 +635,9 @@ export def "create-abschluss" [
   if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/abschluss") $auth.query)
   let req_body = {"Abschluss-Beginn-Datum-Uhrzeit": $abschluss_beginn_datum_uhrzeit, "Abschluss-Ende-Datum-Uhrzeit": $abschluss_ende_datum_uhrzeit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -656,7 +683,7 @@ export def "get-belege" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "gte" $gte "scalar") (serialize-qp "lte" $lte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -694,7 +721,7 @@ export def "get-beleg" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -754,9 +781,9 @@ export def "add-beleg" [
   if ($beleg_uuid | is-empty) { error make --unspanned { msg: "path parameter 'belegUuid' must be non-empty" } }
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid), beleg_uuid: (encode-path-segment $beleg_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/belege/{beleg_uuid}") $auth.query)
   let req_body = {"Externer-Beleg-Belegkreis": $externer_beleg_belegkreis, "Externer-Beleg-Bezeichnung": $externer_beleg_bezeichnung, "Externer-Beleg-Referenz": $externer_beleg_referenz, "Kunde": $kunde, "Notizen": $notizen, "Posten": $posten, "Rabatte": $rabatte, "Storno": $storno, "Storno-Beleg-UUID": $storno_beleg_uuid, "Storno-Text": $storno_text, "Training": $training, "Unternehmen-Adresse1": $unternehmen_adresse1, "Unternehmen-Adresse2": $unternehmen_adresse2, "Unternehmen-Fusszeile": $unternehmen_fusszeile, "Unternehmen-ID": $unternehmen_id, "Unternehmen-ID-Typ": $unternehmen_id_typ, "Unternehmen-Kopfzeile": $unternehmen_kopfzeile, "Unternehmen-Name": $unternehmen_name, "Unternehmen-Ort": $unternehmen_ort, "Unternehmen-PLZ": $unternehmen_plz, "Zahlungen": $zahlungen} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -792,7 +819,7 @@ export def "get-dep" [
   if ($registrierkasse_uuid | is-empty) { error make --unspanned { msg: "path parameter 'registrierkasseUuid' must be non-empty" } }
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/dep") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -831,7 +858,7 @@ export def "get-monatsbelege" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({registrierkasse_uuid: (encode-path-segment $registrierkasse_uuid)} | format pattern "/registrierkassen/{registrierkasse_uuid}/monatsbelege") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

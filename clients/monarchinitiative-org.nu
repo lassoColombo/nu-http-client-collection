@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -200,7 +227,7 @@ export def "get-associations-between" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject: (encode-path-segment $subject), object: (encode-path-segment $object)} | format pattern "/association/between/{subject}/{object}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -246,7 +273,7 @@ export def "get-association-by-subject-category-search" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "object_taxon" $object_taxon "scalar") (serialize-qp "relation" $relation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject_category: (encode-path-segment $subject_category)} | format pattern "/association/find/{subject_category}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -296,7 +323,7 @@ export def "get-association-by-subject-and-object-category-search" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "object" $object "scalar") (serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "object_taxon" $object_taxon "scalar") (serialize-qp "relation" $relation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject_category: (encode-path-segment $subject_category), object_category: (encode-path-segment $object_category)} | format pattern "/association/find/{subject_category}/{object_category}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -341,7 +368,7 @@ export def "get-associations-from" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "object_taxon" $object_taxon "scalar") (serialize-qp "relation" $relation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject: (encode-path-segment $subject)} | format pattern "/association/from/{subject}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -384,7 +411,7 @@ export def "get-associations-to" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object: (encode-path-segment $object)} | format pattern "/association/to/{object}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -429,7 +456,7 @@ export def "get-association-by-subject-and-assoc-type" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "object" $object "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({association_type: (encode-path-segment $association_type)} | format pattern "/association/type/{association_type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -465,7 +492,7 @@ export def "get-association-object" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/association/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -518,7 +545,7 @@ export def "get-anatomy-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/anatomy/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -575,7 +602,7 @@ export def "get-anatomy-gene-by-taxon-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), taxid: (encode-path-segment $taxid)} | format pattern "/bioentity/anatomy/{id}/genes/{taxid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -623,7 +650,7 @@ export def "get-case-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/case/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -671,7 +698,7 @@ export def "get-case-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/case/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -719,7 +746,7 @@ export def "get-case-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/case/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -767,7 +794,7 @@ export def "get-case-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/case/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -815,7 +842,7 @@ export def "get-case-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/case/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -863,7 +890,7 @@ export def "get-disease-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -917,7 +944,7 @@ export def "get-disease-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -970,7 +997,7 @@ export def "get-disease-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,7 +1050,7 @@ export def "get-disease-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1075,7 +1102,7 @@ export def "get-disease-model-taxon-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), taxon: (encode-path-segment $taxon)} | format pattern "/bioentity/disease/{id}/models/{taxon}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1128,7 +1155,7 @@ export def "get-disease-pathway-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1181,7 +1208,7 @@ export def "get-disease-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1234,7 +1261,7 @@ export def "get-disease-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1282,7 +1309,7 @@ export def "get-disease-substance-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/treatment") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1335,7 +1362,7 @@ export def "get-disease-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/disease/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1375,7 +1402,7 @@ export def "get-function-associations" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "evidence" $evidence "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/function/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1429,7 +1456,7 @@ export def "get-function-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "relationship_type" $relationship_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/function/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1469,7 +1496,7 @@ export def "get-function-publication-associations" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "evidence" $evidence "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/function/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1509,7 +1536,7 @@ export def "get-function-taxon-associations" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "evidence" $evidence "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/function/{id}/taxons") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1562,7 +1589,7 @@ export def "get-gene-anatomy-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/anatomy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1610,7 +1637,7 @@ export def "get-gene-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1664,7 +1691,7 @@ export def "get-gene-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "association_type" $association_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1717,7 +1744,7 @@ export def "get-gene-expression-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/expression/anatomy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1765,7 +1792,7 @@ export def "get-gene-function-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/function") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1818,7 +1845,7 @@ export def "get-gene-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1869,7 +1896,7 @@ export def "get-gene-homolog-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "homology_type" $homology_type "scalar") (serialize-qp "direct_taxon" $direct_taxon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/homologs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1922,7 +1949,7 @@ export def "get-gene-interactions" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/interactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1975,7 +2002,7 @@ export def "get-gene-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2028,7 +2055,7 @@ export def "get-gene-ortholog-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/ortholog/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2081,7 +2108,7 @@ export def "get-gene-ortholog-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/ortholog/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2134,7 +2161,7 @@ export def "get-gene-pathway-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2187,7 +2214,7 @@ export def "get-gene-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2240,7 +2267,7 @@ export def "get-gene-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2293,7 +2320,7 @@ export def "get-gene-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/gene/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2341,7 +2368,7 @@ export def "get-genotype-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2394,7 +2421,7 @@ export def "get-genotype-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2447,7 +2474,7 @@ export def "get-genotype-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2500,7 +2527,7 @@ export def "get-genotype-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2553,7 +2580,7 @@ export def "get-genotype-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2606,7 +2633,7 @@ export def "get-genotype-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2659,7 +2686,7 @@ export def "get-genotype-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2712,7 +2739,7 @@ export def "get-genotype-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/genotype/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2763,7 +2790,7 @@ export def "get-goterm-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "relationship_type" $relationship_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/goterm/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2811,7 +2838,7 @@ export def "get-model-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2864,7 +2891,7 @@ export def "get-model-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2917,7 +2944,7 @@ export def "get-model-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2970,7 +2997,7 @@ export def "get-model-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3023,7 +3050,7 @@ export def "get-model-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3076,7 +3103,7 @@ export def "get-model-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3129,7 +3156,7 @@ export def "get-model-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/model/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3182,7 +3209,7 @@ export def "get-pathway-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3235,7 +3262,7 @@ export def "get-pathway-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3288,7 +3315,7 @@ export def "get-pathway-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/pathway/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3336,7 +3363,7 @@ export def "get-phenotype-anatomy-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/anatomy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3384,7 +3411,7 @@ export def "get-phenotype-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3437,7 +3464,7 @@ export def "get-phenotype-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3489,7 +3516,7 @@ export def "get-phenotype-gene-by-taxon-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), taxid: (encode-path-segment $taxid)} | format pattern "/bioentity/phenotype/{id}/gene/{taxid}/ids") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3542,7 +3569,7 @@ export def "get-phenotype-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3595,7 +3622,7 @@ export def "get-phenotype-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3648,7 +3675,7 @@ export def "get-phenotype-pathway-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/pathways") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3701,7 +3728,7 @@ export def "get-phenotype-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3754,7 +3781,7 @@ export def "get-phenotype-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/phenotype/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3807,7 +3834,7 @@ export def "get-publication-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3860,7 +3887,7 @@ export def "get-publication-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3913,7 +3940,7 @@ export def "get-publication-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3966,7 +3993,7 @@ export def "get-publication-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4019,7 +4046,7 @@ export def "get-publication-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4072,7 +4099,7 @@ export def "get-publication-variant-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/publication/{id}/variants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4120,7 +4147,7 @@ export def "get-substance-participant-in-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/substance/{id}/participant_in") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4168,7 +4195,7 @@ export def "get-substance-role-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/substance/{id}/roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4216,7 +4243,7 @@ export def "get-substance-treats-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/substance/{id}/treats") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4264,7 +4291,7 @@ export def "get-variant-case-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/cases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4317,7 +4344,7 @@ export def "get-variant-disease-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/diseases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4370,7 +4397,7 @@ export def "get-variant-gene-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/genes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4423,7 +4450,7 @@ export def "get-variant-genotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/genotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4471,7 +4498,7 @@ export def "get-variant-model-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4524,7 +4551,7 @@ export def "get-variant-phenotype-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/phenotypes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4577,7 +4604,7 @@ export def "get-variant-publication-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/variant/{id}/publications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4625,7 +4652,7 @@ export def "get-generic-object" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4678,7 +4705,7 @@ export def "get-generic-associations" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "taxon" $taxon "multi") (serialize-qp "direct_taxon" $direct_taxon "scalar") (serialize-qp "relation" $relation "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bioentity/{id}/associations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4730,7 +4757,7 @@ export def "get-generic-object-by-type" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facet" $facet "scalar") (serialize-qp "facet_fields" $facet_fields "multi") (serialize-qp "unselect_evidence" $unselect_evidence "scalar") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "fetch_objects" $fetch_objects "scalar") (serialize-qp "use_compact_associations" $use_compact_associations "scalar") (serialize-qp "slim" $slim "multi") (serialize-qp "evidence" $evidence "scalar") (serialize-qp "direct" $direct "scalar") (serialize-qp "get_association_counts" $get_association_counts "scalar") (serialize-qp "distinct_counts" $distinct_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/bioentity/{type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4769,7 +4796,7 @@ export def "get-entity-set-associations" [
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "background" $background "multi") (serialize-qp "object_category" $object_category "scalar") (serialize-qp "object_slim" $object_slim "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/associations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4808,7 +4835,7 @@ export def "get-entity-set-summary" [
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "background" $background "multi") (serialize-qp "object_category" $object_category "scalar") (serialize-qp "object_slim" $object_slim "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/descriptor/counts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4847,7 +4874,7 @@ export def "get-entity-set-graph-resource" [
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "background" $background "multi") (serialize-qp "object_category" $object_category "scalar") (serialize-qp "object_slim" $object_slim "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/graph" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4883,7 +4910,7 @@ export def "get-entity-set-homologs" [
   let qp = [(serialize-qp "subject" $subject "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/homologs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4925,7 +4952,7 @@ export def "get-over-representation" [
   let qp = [(serialize-qp "object_category" $object_category "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "background" $background "multi") (serialize-qp "subject_category" $subject_category "scalar") (serialize-qp "max_p_value" $max_p_value "scalar") (serialize-qp "ontology" $ontology "scalar") (serialize-qp "taxon" $taxon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/overrepresentation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4967,7 +4994,7 @@ export def "get-entity-set-anatomy-slimmer" [
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/anatomy" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5010,7 +5037,7 @@ export def "get-entity-set-function-slimmer" [
   let qp = [(serialize-qp "relationship_type" $relationship_type "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/function" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5052,7 +5079,7 @@ export def "get-entity-set-phenotype-slimmer" [
   let qp = [(serialize-qp "subject" $subject "multi") (serialize-qp "slim" $slim "multi") (serialize-qp "exclude_automatic_assertions" $exclude_automatic_assertions "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bioentityset/slimmer/phenotype" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5089,7 +5116,7 @@ export def "get-activity-collection" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cam/activity" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5128,7 +5155,7 @@ export def "get-instance-object" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/cam/instance/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5162,7 +5189,7 @@ export def "get-model-instances" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cam/instances" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5196,7 +5223,7 @@ export def "get-model-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cam/model" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5230,7 +5257,7 @@ export def "get-model-contributors" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cam/model/contributors" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5267,7 +5294,7 @@ export def "get-model-properties" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cam/model/properties" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5304,7 +5331,7 @@ export def "get-model-property-values" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cam/model/property_values" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5341,7 +5368,7 @@ export def "get-model-query" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cam/model/query" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5377,7 +5404,7 @@ export def "get-model-object" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/cam/model/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5414,7 +5441,7 @@ export def "get-physical-interaction" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "contributor" $contributor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cam/physical_interaction" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5450,7 +5477,7 @@ export def "get-evidence-graph-object" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/evidence/graph/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5488,7 +5515,7 @@ export def "get-evidence-graph-table" [
   let qp = [(serialize-qp "is_publication" $is_publication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/evidence/graph/{id}/table") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5530,7 +5557,7 @@ export def "get-features-within-resource" [
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({build: (encode-path-segment $build), reference: (encode-path-segment $reference), begin: (encode-path-segment $begin), end: (encode-path-segment $end)} | format pattern "/genome/features/within/{build}/{reference}/{begin}/{end}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5572,7 +5599,7 @@ export def "get-edge-resource" [
   let qp = [(serialize-qp "depth" $depth "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "relationship_type" $relationship_type "multi") (serialize-qp "entail" $entail "scalar") (serialize-qp "graph" $graph "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/graph/edges/from/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5608,7 +5635,7 @@ export def "get-node-resource" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/graph/node/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5646,7 +5673,7 @@ export def "get-identifier-mapper" [
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), target: (encode-path-segment $target)} | format pattern "/identifier/mapper/{source}/{target}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5680,7 +5707,7 @@ export def "get-prefix-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identifier/prefixes/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5716,7 +5743,7 @@ export def "get-prefix-contract" [
   if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
   let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/identifier/prefixes/contract/{uri}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5752,7 +5779,7 @@ export def "get-prefix-expand" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/identifier/prefixes/expand/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5788,7 +5815,7 @@ export def "get-pedigree" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/individual/pedigree/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5824,7 +5851,7 @@ export def "get-individual" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/individual/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5864,7 +5891,7 @@ export def "get-mart-case-associations-resource" [
   let qp = [(serialize-qp "slim" $slim "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({object_category: (encode-path-segment $object_category), taxon: (encode-path-segment $taxon)} | format pattern "/mart/case/{object_category}/{taxon}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5904,7 +5931,7 @@ export def "get-mart-disease-associations-resource" [
   let qp = [(serialize-qp "slim" $slim "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({object_category: (encode-path-segment $object_category), taxon: (encode-path-segment $taxon)} | format pattern "/mart/disease/{object_category}/{taxon}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5944,7 +5971,7 @@ export def "get-mart-gene-associations-resource" [
   let qp = [(serialize-qp "slim" $slim "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({object_category: (encode-path-segment $object_category), taxon: (encode-path-segment $taxon)} | format pattern "/mart/gene/{object_category}/{taxon}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5982,7 +6009,7 @@ export def "get-mart-ortholog-associations-resource" [
   if ($taxon2 | is-empty) { error make --unspanned { msg: "path parameter 'taxon2' must be non-empty" } }
   let full_url = (build-url $base ({taxon1: (encode-path-segment $taxon1), taxon2: (encode-path-segment $taxon2)} | format pattern "/mart/ortholog/{taxon1}/{taxon2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6020,7 +6047,7 @@ export def "get-mart-paralog-associations-resource" [
   if ($taxon2 | is-empty) { error make --unspanned { msg: "path parameter 'taxon2' must be non-empty" } }
   let full_url = (build-url $base ({taxon1: (encode-path-segment $taxon1), taxon2: (encode-path-segment $taxon2)} | format pattern "/mart/paralog/{taxon1}/{taxon2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6054,7 +6081,7 @@ export def "get-metadata-for-datasets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/datasets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6090,9 +6117,9 @@ export def "post-disease-mme" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mme/disease" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6128,9 +6155,9 @@ export def "post-fly-mme" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mme/fly" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6166,9 +6193,9 @@ export def "post-mouse-mme" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mme/mouse" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6204,9 +6231,9 @@ export def "post-nematode-mme" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mme/nematode" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6242,9 +6269,9 @@ export def "post-zebrafish-mme" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mme/zebrafish" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6287,7 +6314,7 @@ export def "get-annotate" [
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nlp/annotate/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6330,7 +6357,7 @@ export def "post-annotate" [
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nlp/annotate/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6373,7 +6400,7 @@ export def "get-annotate-entities" [
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nlp/annotate/entities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6416,7 +6443,7 @@ export def "post-annotate-entities" [
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "include_category" $include_category "multi") (serialize-qp "exclude_category" $exclude_category "multi") (serialize-qp "min_length" $min_length "scalar") (serialize-qp "longest_only" $longest_only "scalar") (serialize-qp "include_abbreviation" $include_abbreviation "scalar") (serialize-qp "include_acronym" $include_acronym "scalar") (serialize-qp "include_numbers" $include_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nlp/annotate/entities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6453,7 +6480,7 @@ export def "get-ontol-identifier-resource" [
   let qp = [(serialize-qp "label" $label "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/identifier/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6490,7 +6517,7 @@ export def "post-ontol-identifier-resource" [
   let qp = [(serialize-qp "label" $label "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/identifier/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6532,7 +6559,7 @@ export def "get-information-content-resource" [
   let qp = [(serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject_category: (encode-path-segment $subject_category), object_category: (encode-path-segment $object_category), subject_taxon: (encode-path-segment $subject_taxon)} | format pattern "/ontol/information_content/{subject_category}/{object_category}/{subject_taxon}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6569,7 +6596,7 @@ export def "get-ontol-labeler-resource" [
   let qp = [(serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/ontol/labeler/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6613,7 +6640,7 @@ export def "get-extract-ontology-subgraph-resource" [
   let qp = [(serialize-qp "cnode" $cnode "multi") (serialize-qp "include_ancestors" $include_ancestors "scalar") (serialize-qp "include_descendants" $include_descendants "scalar") (serialize-qp "relation" $relation "multi") (serialize-qp "include_meta" $include_meta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ontology: (encode-path-segment $ontology), node: (encode-path-segment $node)} | format pattern "/ontol/subgraph/{ontology}/{node}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6657,7 +6684,7 @@ export def "post-extract-ontology-subgraph-resource" [
   let qp = [(serialize-qp "cnode" $cnode "multi") (serialize-qp "include_ancestors" $include_ancestors "scalar") (serialize-qp "include_descendants" $include_descendants "scalar") (serialize-qp "relation" $relation "multi") (serialize-qp "include_meta" $include_meta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ontology: (encode-path-segment $ontology), node: (encode-path-segment $node)} | format pattern "/ontol/subgraph/{ontology}/{node}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6695,7 +6722,7 @@ export def "get-ontology-terms-shared-ancestor" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({subject: (encode-path-segment $subject), object: (encode-path-segment $object)} | format pattern "/ontology/shared/{subject}/{object}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6731,7 +6758,7 @@ export def "get-ontology-subset" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ontology/subset/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6767,7 +6794,7 @@ export def "get-ontology-term" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ontology/term/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6805,7 +6832,7 @@ export def "get-ontology-term-graph" [
   let qp = [(serialize-qp "graph_type" $graph_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ontology/term/{id}/graph") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6847,7 +6874,7 @@ export def "get-ontology-term-subgraph" [
   let qp = [(serialize-qp "cnode" $cnode "multi") (serialize-qp "include_ancestors" $include_ancestors "scalar") (serialize-qp "include_descendants" $include_descendants "scalar") (serialize-qp "relation" $relation "multi") (serialize-qp "include_meta" $include_meta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ontology/term/{id}/subgraph") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6883,7 +6910,7 @@ export def "get-ontology-term-subsets" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ontology/term/{id}/subsets") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6919,7 +6946,7 @@ export def "get-dl-query" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/owl/ontology/dlquery/{query}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6955,7 +6982,7 @@ export def "get-sparql-query" [
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/owl/ontology/sparql/{query}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6995,7 +7022,7 @@ export def "get-pair-sim-jaccard-resource" [
   let qp = [(serialize-qp "object_category" $object_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/pair/sim/jaccard/{id1}/{id2}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7032,7 +7059,7 @@ export def "get-relation-usage-resource" [
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/relation/usage/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7073,7 +7100,7 @@ export def "get-relation-usage-between-resource" [
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subject_category: (encode-path-segment $subject_category), object_category: (encode-path-segment $object_category)} | format pattern "/relation/usage/between/{subject_category}/{object_category}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7110,7 +7137,7 @@ export def "get-relation-usage-pivot-resource" [
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/relation/usage/pivot" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7147,7 +7174,7 @@ export def "get-relation-usage-pivot-label-resource" [
   let qp = [(serialize-qp "subject_taxon" $subject_taxon "scalar") (serialize-qp "evidence" $evidence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/relation/usage/pivot/label" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7197,7 +7224,7 @@ export def "get-autocomplete" [
   let qp = [(serialize-qp "fq" $fq "multi") (serialize-qp "category" $category "multi") (serialize-qp "prefix" $prefix "multi") (serialize-qp "include_eqs" $include_eqs "scalar") (serialize-qp "boost_fx" $boost_fx "multi") (serialize-qp "boost_q" $boost_q "multi") (serialize-qp "taxon" $taxon "multi") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "highlight_class" $highlight_class "scalar") (serialize-qp "min_match" $min_match "scalar") (serialize-qp "exclude_groups" $exclude_groups "scalar") (serialize-qp "minimal_tokenizer" $minimal_tokenizer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({term: (encode-path-segment $term)} | format pattern "/search/entity/autocomplete/{term}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7241,7 +7268,7 @@ export def "get-search-hpo-entities" [
   let qp = [(serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "phenotype_group" $phenotype_group "scalar") (serialize-qp "phenotype_group_label" $phenotype_group_label "scalar") (serialize-qp "anatomical_system" $anatomical_system "scalar") (serialize-qp "anatomical_system_label" $anatomical_system_label "scalar") (serialize-qp "highlight_class" $highlight_class "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({term: (encode-path-segment $term)} | format pattern "/search/entity/hpo-pl/{term}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7291,7 +7318,7 @@ export def "get-search-entities" [
   let qp = [(serialize-qp "fq" $fq "multi") (serialize-qp "category" $category "multi") (serialize-qp "prefix" $prefix "multi") (serialize-qp "include_eqs" $include_eqs "scalar") (serialize-qp "boost_fx" $boost_fx "multi") (serialize-qp "boost_q" $boost_q "multi") (serialize-qp "taxon" $taxon "multi") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "highlight_class" $highlight_class "scalar") (serialize-qp "min_match" $min_match "scalar") (serialize-qp "exclude_groups" $exclude_groups "scalar") (serialize-qp "minimal_tokenizer" $minimal_tokenizer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({term: (encode-path-segment $term)} | format pattern "/search/entity/{term}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7330,7 +7357,7 @@ export def "get-sim-compare" [
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "ref_id" $ref_id "multi") (serialize-qp "query_id" $query_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/sim/compare" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7367,9 +7394,9 @@ export def "post-sim-compare" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim/compare" $auth.query)
   let req_body = {"query_ids": $query_ids, "reference_ids": $reference_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7406,7 +7433,7 @@ export def "get-annotation-score" [
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "absent_id" $absent_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/sim/score" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7443,9 +7470,9 @@ export def "post-annotation-score" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sim/score" $auth.query)
   let req_body = {"features": $features, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7485,7 +7512,7 @@ export def "get-sim-search" [
   let qp = [(serialize-qp "is_feature_set" $is_feature_set "scalar") (serialize-qp "metric" $metric "scalar") (serialize-qp "id" $id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "taxon" $taxon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sim/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7522,7 +7549,7 @@ export def "get-variant-sets-collection" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/variation/set/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7563,9 +7590,9 @@ export def "post-variant-sets-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/variation/set/" $auth.query)
   let req_body = {"body": $body, "category": $category, "category_id": $category_id, "id": $id, "pub_date": $pub_date, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7601,7 +7628,7 @@ export def "get-variant-analyze" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/variation/set/analyze/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7644,7 +7671,7 @@ export def "get-variant-sets-archive-collection" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/variation/set/archive/{year}/{month}/{day}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7680,7 +7707,7 @@ export def "delete-variant-set-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/variation/set/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7716,7 +7743,7 @@ export def "get-variant-set-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/variation/set/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7749,7 +7776,7 @@ export def "put-variant-set-item" [
   body: string # Article content
   --category: string
   --category-id: int
-  --body-id: int # The unique identifier of a variant set
+  --body-id: int # The unique identifier of a variant set (spec name: id)
   --pub-date: string # format: date-time
   title: string # Article title
 ]: any -> any {
@@ -7759,9 +7786,9 @@ export def "put-variant-set-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/variation/set/{id}") $auth.query)
   let req_body = {"body": $body, "category": $category, "category_id": $category_id, "id": $body_id, "pub_date": $pub_date, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

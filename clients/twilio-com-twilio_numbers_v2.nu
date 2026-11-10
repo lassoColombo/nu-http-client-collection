@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -184,22 +211,22 @@ export def "list-bundle" [
   --sort-by: string@sort-by-completer # Can be `valid-until` or `date-updated`. Defaults to `date-created`.
   --sort-direction: string@sort-direction-completer # Default is `DESC`. Can be `ASC` or `DESC`.
   --valid-until-date: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
-  --valid-until-date-2: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time) (disambiguated-2)
-  --valid-until-date-3: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time) (disambiguated-3)
+  --qp-valid-until-date: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time) (spec name: ValidUntilDate<)
+  --qp-valid-until-date-2: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time) (spec name: ValidUntilDate>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
 ]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "RegulationSid" $regulation_sid "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "NumberType" $number_type "scalar") (serialize-qp "HasValidUntilDate" $has_valid_until_date "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "SortDirection" $sort_direction "scalar") (serialize-qp "ValidUntilDate" $valid_until_date "scalar") (serialize-qp "ValidUntilDate<" $valid_until_date_2 "scalar") (serialize-qp "ValidUntilDate>" $valid_until_date_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "RegulationSid" $regulation_sid "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "NumberType" $number_type "scalar") (serialize-qp "HasValidUntilDate" $has_valid_until_date "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "SortDirection" $sort_direction "scalar") (serialize-qp "ValidUntilDate" $valid_until_date "scalar") (serialize-qp "ValidUntilDate<" $qp_valid_until_date "scalar") (serialize-qp "ValidUntilDate>" $qp_valid_until_date_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Bundles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Status": $status, "FriendlyName": $friendly_name, "RegulationSid": $regulation_sid, "IsoCountry": $iso_country, "NumberType": $number_type, "HasValidUntilDate": $has_valid_until_date, "SortBy": $sort_by, "SortDirection": $sort_direction, "ValidUntilDate": $valid_until_date, "ValidUntilDate<": $valid_until_date_2, "ValidUntilDate>": $valid_until_date_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"Status": $status, "FriendlyName": $friendly_name, "RegulationSid": $regulation_sid, "IsoCountry": $iso_country, "NumberType": $number_type, "HasValidUntilDate": $has_valid_until_date, "SortBy": $sort_by, "SortDirection": $sort_direction, "ValidUntilDate": $valid_until_date, "ValidUntilDate<": $qp_valid_until_date, "ValidUntilDate>": $qp_valid_until_date_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -237,9 +264,9 @@ export def "create-bundle" [
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Bundles" $auth.query)
   let req_body = {"Email": $email, "EndUserType": $end_user_type, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "NumberType": $number_type, "RegulationSid": $regulation_sid, "StatusCallback": $status_callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -280,7 +307,7 @@ export def "list-bundle-copy" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -318,9 +345,9 @@ export def "create-bundle-copy" [
   if ($bundle_sid | is-empty) { error make --unspanned { msg: "path parameter 'BundleSid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -361,7 +388,7 @@ export def "list-evaluation" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -397,7 +424,7 @@ export def "create-evaluation" [
   if ($bundle_sid | is-empty) { error make --unspanned { msg: "path parameter 'BundleSid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -435,7 +462,7 @@ export def "fetch-evaluation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -475,7 +502,7 @@ export def "list-item-assignment" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -513,9 +540,9 @@ export def "create-item-assignment" [
   if ($bundle_sid | is-empty) { error make --unspanned { msg: "path parameter 'BundleSid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments") $auth.query)
   let req_body = {"ObjectSid": $object_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -554,7 +581,7 @@ export def "delete-item-assignment" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -592,7 +619,7 @@ export def "fetch-item-assignment" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid), sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -630,9 +657,9 @@ export def "create-replace-items" [
   if ($bundle_sid | is-empty) { error make --unspanned { msg: "path parameter 'BundleSid' must be non-empty" } }
   let full_url = (build-url $base ({bundle_sid: (encode-path-segment $bundle_sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ReplaceItems") $auth.query)
   let req_body = {"FromBundleSid": $from_bundle_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -669,7 +696,7 @@ export def "delete-bundle" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -705,7 +732,7 @@ export def "fetch-bundle" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -746,9 +773,9 @@ export def "update-bundle" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}") $auth.query)
   let req_body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -787,7 +814,7 @@ export def "list-end-user-type" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUserTypes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -823,7 +850,7 @@ export def "fetch-end-user-type" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUserTypes/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -861,7 +888,7 @@ export def "list-end-user" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUsers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -899,9 +926,9 @@ export def "create-end-user" [
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUsers" $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -938,7 +965,7 @@ export def "delete-end-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -974,7 +1001,7 @@ export def "fetch-end-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1013,9 +1040,9 @@ export def "update-end-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1057,7 +1084,7 @@ export def "list-regulation" [
   let qp = [(serialize-qp "EndUserType" $end_user_type "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "NumberType" $number_type "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Regulations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1093,7 +1120,7 @@ export def "fetch-regulation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/Regulations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1131,7 +1158,7 @@ export def "list-supporting-document-type" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocumentTypes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1167,7 +1194,7 @@ export def "fetch-supporting-document-type" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocumentTypes/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "list-supporting-document" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocuments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1243,9 +1270,9 @@ export def "create-supporting-document" [
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocuments" $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1282,7 +1309,7 @@ export def "delete-supporting-document" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1318,7 +1345,7 @@ export def "fetch-supporting-document" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1357,9 +1384,9 @@ export def "update-supporting-document" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

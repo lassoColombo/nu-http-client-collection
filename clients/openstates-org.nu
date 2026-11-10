@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,9 +208,9 @@ export def "bills-search-bills-get" [
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "session" $session "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "identifier" $identifier "multi") (serialize-qp "classification" $classification "scalar") (serialize-qp "subject" $subject "multi") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "created_since" $created_since "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sponsor" $sponsor "scalar") (serialize-qp "sponsor_classification" $sponsor_classification "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bills" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -223,9 +250,9 @@ export def "bill-detail-by-id-bills-ocd-bill-openstates-bill-id-get" [
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({openstates_bill_id: (encode-path-segment $openstates_bill_id)} | format pattern "/bills/ocd-bill/{openstates_bill_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -269,9 +296,9 @@ export def "bill-detail-bills-jurisdiction-session-bill-id-get" [
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({jurisdiction: (encode-path-segment $jurisdiction), session: (encode-path-segment $session), bill_id: (encode-path-segment $bill_id)} | format pattern "/bills/{jurisdiction}/{session}/{bill_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -315,9 +342,9 @@ export def "committee-list-committees-get" [
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "classification" $classification "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "chamber" $chamber "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/committees" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -357,9 +384,9 @@ export def "committee-detail-committees-committee-id-get" [
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({committee_id: (encode-path-segment $committee_id)} | format pattern "/committees/{committee_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -404,9 +431,9 @@ export def "event-list-events-get" [
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "require_bills" $require_bills "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -446,9 +473,9 @@ export def "event-detail-events-event-id-get" [
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -489,9 +516,9 @@ export def "jurisdiction-list-jurisdictions-get" [
   let qp = [(serialize-qp "classification" $classification "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jurisdictions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -531,9 +558,9 @@ export def "jurisdiction-detail-jurisdictions-jurisdiction-id-get" [
   let qp = [(serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/jurisdictions/{jurisdiction_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -567,7 +594,7 @@ export def "metrics-metrics-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metrics" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -612,9 +639,9 @@ export def "people-search-people-get" [
   let qp = [(serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "id" $id "multi") (serialize-qp "org_classification" $org_classification "scalar") (serialize-qp "district" $district "scalar") (serialize-qp "include" $include "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -656,9 +683,9 @@ export def "people-geo-people-geo-get" [
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "include" $include "multi") (serialize-qp "apikey" $apikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/people.geo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-api-key": $x_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

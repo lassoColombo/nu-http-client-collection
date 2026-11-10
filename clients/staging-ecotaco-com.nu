@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -172,7 +199,7 @@ export def "retrieve-the-version-api" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/vnd.siren+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -201,16 +228,16 @@ export def "get-current-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -239,16 +266,16 @@ export def "create-a-new-account-with-an-application-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -277,16 +304,16 @@ export def "update-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -315,16 +342,16 @@ export def "forget-password-with-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/password" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -353,16 +380,16 @@ export def "payment-methods" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/payment_methods" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -391,16 +418,16 @@ export def "settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -429,16 +456,16 @@ export def "login-with-email-password-and-application-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/sign_in" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -467,16 +494,16 @@ export def "update-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/update_password" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -505,16 +532,16 @@ export def "get-autocomplete-places" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses/places_autocomplete" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -543,16 +570,16 @@ export def "get-autocomplete-places-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses/places_details" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -581,16 +608,16 @@ export def "list-all-catchement-areas" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catchement_areas" $auth.query)
   let accept_val = "application/vnd.geo+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -620,7 +647,7 @@ export def "get-a-catchement-area" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -628,9 +655,9 @@ export def "get-a-catchement-area" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/catchement_areas/{id}") $auth.query)
   let accept_val = "application/vnd.geo+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -659,16 +686,16 @@ export def "list-all-credit-cards-for-the-current-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit_cards" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -704,7 +731,7 @@ export def "get-a-credit-card" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credit_cards/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -733,16 +760,16 @@ export def "list-all-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -772,7 +799,7 @@ export def "get-a-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -780,9 +807,9 @@ export def "get-a-product" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -811,16 +838,16 @@ export def "get-all-promotional-codes-for-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promotional_codes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -849,15 +876,15 @@ export def "add-a-promotional-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promotional_codes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -887,7 +914,7 @@ export def "get-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -895,9 +922,9 @@ export def "get-a-ride" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rides/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -927,7 +954,7 @@ export def "cancel-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -935,9 +962,9 @@ export def "cancel-a-ride" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rides/{id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -967,7 +994,7 @@ export def "cancel-fee-of-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -975,9 +1002,9 @@ export def "cancel-fee-of-a-ride" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rides/{id}/cancel_fees") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1007,7 +1034,7 @@ export def "estimate-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1015,9 +1042,9 @@ export def "estimate-a-ride" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rides/{id}/estimate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1047,7 +1074,7 @@ export def "reserve-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1055,9 +1082,9 @@ export def "reserve-a-ride" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rides/{id}/reserve") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1088,7 +1115,7 @@ export def "get-all-user-rides" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1097,9 +1124,9 @@ export def "get-all-user-rides" [
   if ($per_page | is-empty) { error make --unspanned { msg: "path parameter 'per_page' must be non-empty" } }
   let full_url = (build-url $base ({page: (encode-path-segment $page), per_page: (encode-path-segment $per_page)} | format pattern "/rides") "page={page}&per_page={per_page}" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1128,16 +1155,16 @@ export def "create-a-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json) (spec name: Accept)
   --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rides" "page={page}&per_page={per_page}" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1173,7 +1200,7 @@ export def "retrieve-the-entry-point-on-version" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/{version}") $auth.query)
   let accept_val = "application/vnd.siren+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

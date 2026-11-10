@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -191,7 +218,7 @@ export def "billing-accounts-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/billingAccounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -231,7 +258,7 @@ export def "billing-accounts-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -272,9 +299,9 @@ export def "billing-accounts-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -314,7 +341,7 @@ export def "agreements-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -356,7 +383,7 @@ export def "agreements-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), agreement_name: (encode-path-segment $agreement_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements/{agreement_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -395,7 +422,7 @@ export def "billing-permissions-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -435,7 +462,7 @@ export def "billing-profiles-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -477,7 +504,7 @@ export def "billing-profiles-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -520,9 +547,9 @@ export def "billing-profiles-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -569,9 +596,9 @@ export def "billing-profiles-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp $auth.query)
   let req_body = {"address": $address, "displayName": $display_name, "enabledAzurePlans": $enabled_azure_plans, "invoiceEmailOptIn": $invoice_email_opt_in, "poNumber": $po_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -612,7 +639,7 @@ export def "available-balances-get-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/availableBalance/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -653,7 +680,7 @@ export def "billing-permissions-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -694,7 +721,7 @@ export def "billing-role-assignments-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -737,7 +764,7 @@ export def "billing-role-assignments-delete-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -780,7 +807,7 @@ export def "billing-role-assignments-get-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -821,7 +848,7 @@ export def "billing-role-definitions-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -864,7 +891,7 @@ export def "billing-role-definitions-get-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -906,7 +933,7 @@ export def "billing-subscriptions-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -950,9 +977,9 @@ export def "billing-role-assignments-add-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -995,7 +1022,7 @@ export def "customers-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1037,9 +1064,9 @@ export def "partner-transfers-initiate" [
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/initiateTransfer") $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1079,7 +1106,7 @@ export def "partner-transfers-list" [
   if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1121,7 +1148,7 @@ export def "partner-transfers-cancel" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1163,7 +1190,7 @@ export def "partner-transfers-get" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "instructions-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1248,7 +1275,7 @@ export def "instructions-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1293,9 +1320,9 @@ export def "instructions-put" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1336,7 +1363,7 @@ export def "invoice-sections-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1379,7 +1406,7 @@ export def "invoice-sections-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1424,9 +1451,9 @@ export def "invoice-sections-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1471,9 +1498,9 @@ export def "invoice-sections-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp $auth.query)
   let req_body = {"displayName": $display_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1516,7 +1543,7 @@ export def "billing-permissions-list-by-invoice-sections" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1559,7 +1586,7 @@ export def "billing-role-assignments-list-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1604,7 +1631,7 @@ export def "billing-role-assignments-delete-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1649,7 +1676,7 @@ export def "billing-role-assignments-get-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1692,7 +1719,7 @@ export def "billing-role-definitions-list-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1737,7 +1764,7 @@ export def "billing-role-definitions-get-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1781,7 +1808,7 @@ export def "billing-subscriptions-list-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1827,7 +1854,7 @@ export def "billing-subscriptions-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1872,9 +1899,9 @@ export def "billing-subscriptions-transfer" [
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/transfer") $auth.query)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1919,9 +1946,9 @@ export def "billing-subscriptions-validate-transfer" [
   if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/validateTransferEligibility") $auth.query)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1967,9 +1994,9 @@ export def "billing-role-assignments-add-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2009,7 +2036,7 @@ export def "invoice-sections-elevate-to-billing-profile" [
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/elevate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2051,9 +2078,9 @@ export def "transfers-initiate" [
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/initiateTransfer") $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2098,7 +2125,7 @@ export def "products-list-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2144,7 +2171,7 @@ export def "products-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2192,9 +2219,9 @@ export def "products-transfer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/transfer") $qp $auth.query)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2241,9 +2268,9 @@ export def "products-update-auto-renew-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/updateAutoRenew") $qp $auth.query)
   let req_body = {"autoRenew": $auto_renew} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2288,9 +2315,9 @@ export def "products-validate-transfer" [
   if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/validateTransferEligibility") $auth.query)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2339,7 +2366,7 @@ export def "transactions-list-by-invoice-section" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2379,7 +2406,7 @@ export def "transfers-list" [
   if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2421,7 +2448,7 @@ export def "transfers-cancel" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2463,7 +2490,7 @@ export def "transfers-get" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2508,7 +2535,7 @@ export def "invoices-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2551,7 +2578,7 @@ export def "invoices-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2594,7 +2621,7 @@ export def "price-sheet-download" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}/pricesheet/default/download") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2636,7 +2663,7 @@ export def "payment-methods-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/paymentMethods") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2678,7 +2705,7 @@ export def "policies-get-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2721,9 +2748,9 @@ export def "policies-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2764,7 +2791,7 @@ export def "price-sheet-download-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/pricesheet/default/download") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2811,7 +2838,7 @@ export def "transactions-list-by-billing-profile" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2859,7 +2886,7 @@ export def "transactions-get" [
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), transaction_name: (encode-path-segment $transaction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions/{transaction_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2898,7 +2925,7 @@ export def "billing-role-assignments-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2939,7 +2966,7 @@ export def "billing-role-assignments-delete-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2980,7 +3007,7 @@ export def "billing-role-assignments-get-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3019,7 +3046,7 @@ export def "billing-role-definitions-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3060,7 +3087,7 @@ export def "billing-role-definitions-get-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3100,7 +3127,7 @@ export def "billing-subscriptions-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3146,7 +3173,7 @@ export def "invoices-list-by-billing-subscription" [
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3190,7 +3217,7 @@ export def "invoices-get-by-id" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices/{invoice_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3232,9 +3259,9 @@ export def "billing-role-assignments-add-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/createBillingRoleAssignment") $qp $auth.query)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3275,7 +3302,7 @@ export def "customers-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3317,7 +3344,7 @@ export def "customers-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3358,7 +3385,7 @@ export def "billing-permissions-list-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3400,7 +3427,7 @@ export def "billing-subscriptions-list-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3444,7 +3471,7 @@ export def "billing-subscriptions-get-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions/{billing_subscription_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3486,7 +3513,7 @@ export def "policies-get-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3529,9 +3556,9 @@ export def "policies-update-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3574,7 +3601,7 @@ export def "products-list-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3618,7 +3645,7 @@ export def "products-get-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products/{product_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3665,7 +3692,7 @@ export def "transactions-list-by-customer" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3706,7 +3733,7 @@ export def "departments-list-by-billing-account-name" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3749,7 +3776,7 @@ export def "departments-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), department_name: (encode-path-segment $department_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments/{department_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3790,7 +3817,7 @@ export def "enrollment-accounts-list-by-billing-account-name" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3833,7 +3860,7 @@ export def "enrollment-accounts-get-by-enrollment-account-id" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), enrollment_account_name: (encode-path-segment $enrollment_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts/{enrollment_account_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3876,7 +3903,7 @@ export def "invoices-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3915,7 +3942,7 @@ export def "billing-accounts-list-invoice-sections-by-create-subscription-permis
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/listInvoiceSectionsWithCreateSubscriptionPermission") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3955,7 +3982,7 @@ export def "payment-methods-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/paymentMethods") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3996,7 +4023,7 @@ export def "products-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4041,7 +4068,7 @@ export def "transactions-list-by-billing-account" [
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/transactions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4078,7 +4105,7 @@ export def "operations-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/operations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4112,7 +4139,7 @@ export def "recipient-transfers-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/providers/Microsoft.Billing/transfers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4148,7 +4175,7 @@ export def "recipient-transfers-get" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4186,9 +4213,9 @@ export def "recipient-transfers-accept" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/acceptTransfer") $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4224,7 +4251,7 @@ export def "recipient-transfers-decline" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/declineTransfer") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4262,9 +4289,9 @@ export def "recipient-transfers-validate" [
   if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/validateTransfer") $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4312,9 +4339,9 @@ export def "address-validate" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Billing/validateAddress" $qp $auth.query)
   let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "addressLine3": $address_line3, "city": $city, "companyName": $company_name, "country": $country, "firstName": $first_name, "lastName": $last_name, "postalCode": $postal_code, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4353,7 +4380,7 @@ export def "line-of-credits-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4394,9 +4421,9 @@ export def "line-of-credits-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp $auth.query)
   let req_body = {"properties": $properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4436,7 +4463,7 @@ export def "billing-property-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingProperty/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -168,7 +195,7 @@ export def "read-device-details" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -202,7 +229,7 @@ export def "read-strategy-details" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -236,7 +263,7 @@ export def "read-analog-inputs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/analogInputs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -272,7 +299,7 @@ export def "read-analog-input-eu" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogInputs/{io_name}/eu") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -306,7 +333,7 @@ export def "read-analog-outputs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/analogOutputs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -342,7 +369,7 @@ export def "read-analog-output-eu" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -380,9 +407,9 @@ export def "write-analog-output-eu" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -416,7 +443,7 @@ export def "read-digital-inputs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/digitalInputs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -452,7 +479,7 @@ export def "read-digital-input-state" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalInputs/{io_name}/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -486,7 +513,7 @@ export def "read-digital-outputs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/ios/digitalOutputs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -522,7 +549,7 @@ export def "read-digital-output-state" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -560,9 +587,9 @@ export def "write-digital-output-state" [
   if ($io_name | is-empty) { error make --unspanned { msg: "path parameter 'ioName' must be non-empty" } }
   let full_url = (build-url $base ({io_name: (encode-path-segment $io_name)} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -596,7 +623,7 @@ export def "read-float-tables" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/floats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -635,7 +662,7 @@ export def "read-float-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -675,9 +702,9 @@ export def "write-float-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/floats/{table_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -715,7 +742,7 @@ export def "read-float-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -755,9 +782,9 @@ export def "write-float-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/floats/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -791,7 +818,7 @@ export def "read-int32-tables" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/int32s" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -830,7 +857,7 @@ export def "read-int32-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -870,9 +897,9 @@ export def "write-int32-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -910,7 +937,7 @@ export def "read-int32-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -950,9 +977,9 @@ export def "write-int32-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -986,7 +1013,7 @@ export def "read-int64-tables" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/int64s" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1025,7 +1052,7 @@ export def "read-int64-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1065,9 +1092,9 @@ export def "write-int64-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1106,7 +1133,7 @@ export def "read-int64-table-as-string" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1146,9 +1173,9 @@ export def "write-int64-table-as-string" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1186,7 +1213,7 @@ export def "read-int64-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1226,9 +1253,9 @@ export def "write-int64-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1266,7 +1293,7 @@ export def "read-int64-table-element-as-string" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1306,9 +1333,9 @@ export def "write-int64-table-element-as-string" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1342,7 +1369,7 @@ export def "read-string-tables" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/tables/strings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1381,7 +1408,7 @@ export def "read-string-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1421,9 +1448,9 @@ export def "write-string-table" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name)} | format pattern "/device/strategy/tables/strings/{table_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1461,7 +1488,7 @@ export def "read-string-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1501,9 +1528,9 @@ export def "write-string-table-element" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({table_name: (encode-path-segment $table_name), index: (encode-path-segment $index)} | format pattern "/device/strategy/tables/strings/{table_name}/{index}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1537,7 +1564,7 @@ export def "read-down-timer-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/downTimers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1573,7 +1600,7 @@ export def "read-down-timer-value" [
   if ($down_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'downTimerName' must be non-empty" } }
   let full_url = (build-url $base ({down_timer_name: (encode-path-segment $down_timer_name)} | format pattern "/device/strategy/vars/downTimers/{down_timer_name}/value") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1607,7 +1634,7 @@ export def "read-float-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/floats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1643,7 +1670,7 @@ export def "read-float-var" [
   if ($float_name | is-empty) { error make --unspanned { msg: "path parameter 'floatName' must be non-empty" } }
   let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1681,9 +1708,9 @@ export def "write-float-var" [
   if ($float_name | is-empty) { error make --unspanned { msg: "path parameter 'floatName' must be non-empty" } }
   let full_url = (build-url $base ({float_name: (encode-path-segment $float_name)} | format pattern "/device/strategy/vars/floats/{float_name}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1717,7 +1744,7 @@ export def "read-int32-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int32s" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1753,7 +1780,7 @@ export def "read-int32-var" [
   if ($int32_name | is-empty) { error make --unspanned { msg: "path parameter 'int32Name' must be non-empty" } }
   let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1791,9 +1818,9 @@ export def "write-int32-var" [
   if ($int32_name | is-empty) { error make --unspanned { msg: "path parameter 'int32Name' must be non-empty" } }
   let full_url = (build-url $base ({int32_name: (encode-path-segment $int32_name)} | format pattern "/device/strategy/vars/int32s/{int32_name}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1827,7 +1854,7 @@ export def "read-int64-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int64s" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1861,7 +1888,7 @@ export def "read-int64-vars-as-strings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/int64s/_string" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1897,7 +1924,7 @@ export def "read-int64-var" [
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
   let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1935,9 +1962,9 @@ export def "write-int64-var" [
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
   let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1973,7 +2000,7 @@ export def "read-int64-var-as-string" [
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
   let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2011,9 +2038,9 @@ export def "write-int64-var-as-string" [
   if ($int64_name | is-empty) { error make --unspanned { msg: "path parameter 'int64Name' must be non-empty" } }
   let full_url = (build-url $base ({int64_name: (encode-path-segment $int64_name)} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2047,7 +2074,7 @@ export def "read-string-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/strings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2083,7 +2110,7 @@ export def "read-string-var" [
   if ($string_name | is-empty) { error make --unspanned { msg: "path parameter 'stringName' must be non-empty" } }
   let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2121,9 +2148,9 @@ export def "write-string-var" [
   if ($string_name | is-empty) { error make --unspanned { msg: "path parameter 'stringName' must be non-empty" } }
   let full_url = (build-url $base ({string_name: (encode-path-segment $string_name)} | format pattern "/device/strategy/vars/strings/{string_name}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2157,7 +2184,7 @@ export def "read-up-timer-vars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/device/strategy/vars/upTimers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2193,7 +2220,7 @@ export def "read-up-timer-value" [
   if ($up_timer_name | is-empty) { error make --unspanned { msg: "path parameter 'upTimerName' must be non-empty" } }
   let full_url = (build-url $base ({up_timer_name: (encode-path-segment $up_timer_name)} | format pattern "/device/strategy/vars/upTimers/{up_timer_name}/value") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

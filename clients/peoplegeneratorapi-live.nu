@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -159,7 +186,7 @@ export def "generate-address" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/address" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -192,7 +219,7 @@ export def "generate-address-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/address/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -225,7 +252,7 @@ export def "generate-life-story-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/lifestory" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -258,7 +285,7 @@ export def "generate-life-story" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/lifestory/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -291,7 +318,7 @@ export def "get-person-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -324,7 +351,7 @@ export def "get-person" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -357,7 +384,7 @@ export def "age-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/age" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -390,7 +417,7 @@ export def "age" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/age/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -423,7 +450,7 @@ export def "bloodtype-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/bloodtype" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -456,7 +483,7 @@ export def "bloodtype" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/bloodtype/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -489,7 +516,7 @@ export def "creditcardnumber" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/creditcardnumber" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -522,7 +549,7 @@ export def "creditcardnumber-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/creditcardnumber/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -555,7 +582,7 @@ export def "creditscore-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/creditscore" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -588,7 +615,7 @@ export def "creditscore" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/creditscore/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -621,7 +648,7 @@ export def "email" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/email" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -654,7 +681,7 @@ export def "email-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/email/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -687,7 +714,7 @@ export def "eyecolor-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/eyecolor" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -720,7 +747,7 @@ export def "eyecolor" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/eyecolor/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -753,7 +780,7 @@ export def "gender" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/gender" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -786,7 +813,7 @@ export def "gender-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/gender/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -819,7 +846,7 @@ export def "gpa" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/gpa" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -852,7 +879,7 @@ export def "gpa-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/gpa/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -885,7 +912,7 @@ export def "haschildren-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/haschildren" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -918,7 +945,7 @@ export def "haschildren" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/haschildren/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -951,7 +978,7 @@ export def "hasdegree" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/hasdegree" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -984,7 +1011,7 @@ export def "hasdegree-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/hasdegree/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1017,7 +1044,7 @@ export def "height" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/height" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1050,7 +1077,7 @@ export def "height-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/height/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1083,7 +1110,7 @@ export def "income" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/income" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1116,7 +1143,7 @@ export def "income-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/income/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1149,7 +1176,7 @@ export def "get-api-person-job" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/job" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1182,7 +1209,7 @@ export def "job-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/job/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1215,7 +1242,7 @@ export def "maritalstatus-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/maritalstatus" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1248,7 +1275,7 @@ export def "maritalstatus" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/maritalstatus/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1281,7 +1308,7 @@ export def "name-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/name" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1314,7 +1341,7 @@ export def "name" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/name/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1347,7 +1374,7 @@ export def "political-leaning" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/politicalleaning" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1380,7 +1407,7 @@ export def "political-leaning-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/politicalleaning/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1413,7 +1440,7 @@ export def "religion-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/religion" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1446,7 +1473,7 @@ export def "religion" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/religion/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1479,7 +1506,7 @@ export def "username-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/username" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1512,7 +1539,7 @@ export def "username" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/username/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1545,7 +1572,7 @@ export def "weight" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/weight" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1578,7 +1605,7 @@ export def "weight-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/person/weight/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1613,7 +1640,7 @@ export def "get-compressed-person-1" [
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
   let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/api/person/{number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1648,7 +1675,7 @@ export def "get-compressed-person" [
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
   let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/api/person/{number}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

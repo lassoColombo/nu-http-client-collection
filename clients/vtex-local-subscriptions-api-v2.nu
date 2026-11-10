@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -182,7 +209,7 @@ export def "getreportstatusby-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -191,9 +218,9 @@ export def "getreportstatusby-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/report/reportStatus/{report_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -226,7 +253,7 @@ export def "requestreportbydate" [
   --begin-date: int # begin date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190101)
   --end-date: int # end date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190701)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -238,9 +265,9 @@ export def "requestreportbydate" [
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsByDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -272,7 +299,7 @@ export def "requestreportby-status" [
   --requester-email: string # Email that the report will be sent to (required, e.g. user@vtex.com.br)
   --status: int # Binary OR of the following status: 1 - ACTIVE; 2 - PAUSED; 4 - CANCELED; 8 - EXPIRED (required, format: int32, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -283,9 +310,9 @@ export def "requestreportby-status" [
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsByStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -318,7 +345,7 @@ export def "requestreportbyorderdate" [
   --begin-date: int # begin date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190101)
   --end-date: int # end date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190701)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -330,9 +357,9 @@ export def "requestreportbyorderdate" [
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsOrderByDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -365,7 +392,7 @@ export def "requestreportbyschedule" [
   --begin-date: int # begin date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190101)
   --end-date: int # end date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190701)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -377,9 +404,9 @@ export def "requestreportbyschedule" [
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsScheduled" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -412,7 +439,7 @@ export def "requestreportbyupdate" [
   --begin-date: int # begin date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190101)
   --end-date: int # end date of report interval, use format yyyyMMdd (required, format: int32, e.g. 20190701)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -424,9 +451,9 @@ export def "requestreportbyupdate" [
   let qp = [(serialize-qp "requesterEmail" $requester_email "scalar") (serialize-qp "beginDate" $begin_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/report/subscriptionsUpdated" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -456,7 +483,7 @@ export def "get-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<defaultSla: string, deliveryChannels: list<string>, executionHourInUtc: int, isMultipleInstallmentsEnabledOnCreation: bool, isMultipleInstallmentsEnabledOnUpdate: bool, isUsingV3: bool, manualPriceAllowed: bool, onMigrationProcess: bool, orderCustomDataAppId: string, postponeExpiration: bool, randomIdGeneration: bool, slaOption: string, useItemPriceFromOriginalOrder: bool, workflowVersion: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -464,9 +491,9 @@ export def "get-settings" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -496,7 +523,7 @@ export def "edit-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --default-sla: string # Default delivery method. (nullable)
   delivery_channels: list<string> # Array containing delivery channels. (default: [], e.g. delivery)
   execution_hour_in_utc: int # Indicates the time future subscription orders will be generated. (default: 0, e.g. 9)
@@ -519,7 +546,7 @@ export def "edit-settings" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/settings" $auth.query)
   let req_body = {"defaultSla": $default_sla, "deliveryChannels": $delivery_channels, "executionHourInUtc": $execution_hour_in_utc, "isMultipleInstallmentsEnabledOnCreation": $is_multiple_installments_enabled_on_creation, "isMultipleInstallmentsEnabledOnUpdate": $is_multiple_installments_enabled_on_update, "isUsingV3": $is_using_v3, "manualPriceAllowed": $manual_price_allowed, "onMigrationProcess": $on_migration_process, "orderCustomDataAppId": $order_custom_data_app_id, "postponeExpiration": $postpone_expiration, "randomIdGeneration": $random_id_generation, "slaOption": $sla_option, "useItemPriceFromOriginalOrder": $use_item_price_from_original_order, "workflowVersion": $workflow_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isMultipleInstallmentsEnabledOnCreation") == null) { error make --unspanned { msg: "required body field 'isMultipleInstallmentsEnabledOnCreation' missing: pass --is-multiple-installments-enabled-on-creation or pipe a record" } }
   if (($req_body | get -o "isMultipleInstallmentsEnabledOnUpdate") == null) { error make --unspanned { msg: "required body field 'isMultipleInstallmentsEnabledOnUpdate' missing: pass --is-multiple-installments-enabled-on-update or pipe a record" } }
   if (($req_body | get -o "isUsingV3") == null) { error make --unspanned { msg: "required body field 'isUsingV3' missing: pass --is-using-v3 or pipe a record" } }
@@ -529,11 +556,11 @@ export def "edit-settings" [
   if (($req_body | get -o "randomIdGeneration") == null) { error make --unspanned { msg: "required body field 'randomIdGeneration' missing: pass --random-id-generation or pipe a record" } }
   if (($req_body | get -o "useItemPriceFromOriginalOrder") == null) { error make --unspanned { msg: "required body field 'useItemPriceFromOriginalOrder' missing: pass --use-item-price-from-original-order or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -564,7 +591,7 @@ export def "getsubscriptionstocustomer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: string # Customer ID. (required, e.g. user@vtex.com.br)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -574,9 +601,9 @@ export def "getsubscriptionstocustomer" [
   let qp = [(serialize-qp "customerId" $customer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -606,7 +633,7 @@ export def "get-allsubscriptiongroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -614,9 +641,9 @@ export def "get-allsubscriptiongroup" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/subscriptions-group" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -646,7 +673,7 @@ export def "getsubscriptiongrouplist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -654,9 +681,9 @@ export def "getsubscriptiongrouplist" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/subscriptions-group/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -687,7 +714,7 @@ export def "get-nextpurchase" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -696,9 +723,9 @@ export def "get-nextpurchase" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({date_str: (encode-path-segment $date_str)} | format pattern "/subscriptions-group/nextPurchase/{date_str}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -729,7 +756,7 @@ export def "get-simulatebysubscription-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -738,9 +765,9 @@ export def "get-simulatebysubscription-group" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/simulate/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -771,7 +798,7 @@ export def "get-subscriptionbygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -780,9 +807,9 @@ export def "get-subscriptionbygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -826,10 +853,10 @@ export def "update-subscriptionbygroup-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}") $auth.query)
   let req_body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isSkipped") == null) { error make --unspanned { msg: "required body field 'isSkipped' missing: pass --is-skipped or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -859,7 +886,7 @@ export def "additemsubscription-group-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
   endpoint: string
   price_at_subscription_date: int # format: int32
@@ -875,13 +902,13 @@ export def "additemsubscription-group-id" [
   let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/additem") $auth.query)
   let req_body = {"endpoint": $endpoint, "priceAtSubscriptionDate": $price_at_subscription_date, "quantity": $quantity, "sellingPrice": $selling_price, "sku": $sku} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -912,7 +939,7 @@ export def "getaddressesbygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -921,9 +948,9 @@ export def "getaddressesbygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -953,7 +980,7 @@ export def "insert-addressesbygroup-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
   additional_components: list # item shape: {longName: string, shortName: string, types: list<string>}
   address_id: string
@@ -980,13 +1007,13 @@ export def "insert-addressesbygroup-id" [
   let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/addresses") $auth.query)
   let req_body = {"additionalComponents": $additional_components, "addressId": $address_id, "addressName": $address_name, "addressType": $address_type, "city": $city, "complement": $complement, "country": $country, "formattedAddress": $formatted_address, "geoCoordinate": $geo_coordinate, "neighborhood": $neighborhood, "number": $number, "postalCode": $postal_code, "receiverName": $receiver_name, "reference": $reference, "state": $state, "street": $street} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1016,7 +1043,7 @@ export def "cancel-subscriptionbygroup-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -1026,9 +1053,9 @@ export def "cancel-subscriptionbygroup-id" [
   let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1059,7 +1086,7 @@ export def "get-configsubscriptionsgroup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1068,9 +1095,9 @@ export def "get-configsubscriptionsgroup" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1101,7 +1128,7 @@ export def "get-conversation-messagebygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1110,9 +1137,9 @@ export def "get-conversation-messagebygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/conversation-message") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1143,7 +1170,7 @@ export def "getfrequencyoptionsbygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1152,9 +1179,9 @@ export def "getfrequencyoptionsbygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/frequency-options") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1185,7 +1212,7 @@ export def "getpayment-systembygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1194,9 +1221,9 @@ export def "getpayment-systembygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/payment-systems") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1227,7 +1254,7 @@ export def "getwillcreatebygroup-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1236,9 +1263,9 @@ export def "getwillcreatebygroup-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/subscriptions-group/{group_id}/will-create") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1269,7 +1296,7 @@ export def "retrysubscriptionbygroup-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -1280,9 +1307,9 @@ export def "retrysubscriptionbygroup-id" [
   let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({groupid: (encode-path-segment $groupid), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions-group/{groupid}/instances/{instance_id}/retry") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1312,7 +1339,7 @@ export def "get-subscription-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1320,9 +1347,9 @@ export def "get-subscription-list" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/subscriptions/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1353,7 +1380,7 @@ export def "getsubscriptionby-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1362,9 +1389,9 @@ export def "getsubscriptionby-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1395,7 +1422,7 @@ export def "update-subscriptionsby-subscription-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-skipped: oneof<nothing, bool>
   item: record # e.g. {endpoint: string, priceAtSubscriptionDate: 0, quantity: 0, sellingPrice: 0, sku: {detailUrl: string, id: string, imageUrl: string, name: string, nameComplete: string, productName: string}} — shape: {endpoint: string, priceAtSubscriptionDate: int, quantity: int, sellingPrice: int, sku: record}
   metadata: list # item shape: {name: string, properties: record}
@@ -1412,14 +1439,14 @@ export def "update-subscriptionsby-subscription-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}") $auth.query)
   let req_body = {"isSkipped": $is_skipped, "item": $item, "metadata": $metadata, "plan": $plan, "purchaseSettings": $purchase_settings, "shippingAddress": $shipping_address, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isSkipped") == null) { error make --unspanned { msg: "required body field 'isSkipped' missing: pass --is-skipped or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -1450,7 +1477,7 @@ export def "insert-addressesfor-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: list
 ]: any -> any {
   let input = $in
@@ -1461,13 +1488,13 @@ export def "insert-addressesfor-subscription" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/addresses") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1497,7 +1524,7 @@ export def "cancel-subscriptionsby-subscription-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -1507,9 +1534,9 @@ export def "cancel-subscriptionsby-subscription-id" [
   let content_type = ($content_type | default "application/json")
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1540,7 +1567,7 @@ export def "getfrequencyoptionsbysubscription-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1549,9 +1576,9 @@ export def "getfrequencyoptionsbysubscription-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/frequency-options") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

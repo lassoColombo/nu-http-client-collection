@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,9 +217,9 @@ export def "complete-snapshot" [
   if ($x_amz_changed_blocks_count == null) { error make --unspanned { msg: "required header parameter 'x-amz-ChangedBlocksCount' missing: pass --x-amz-changed-blocks-count" } }
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/completion/{snapshot_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-ChangedBlocksCount": $x_amz_changed_blocks_count, "x-amz-Checksum": $x_amz_checksum, "x-amz-Checksum-Algorithm": $x_amz_checksum_algorithm, "x-amz-Checksum-Aggregation-Method": $x_amz_checksum_aggregation_method} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -240,9 +267,9 @@ export def "get-snapshot-block" [
   let qp = [(serialize-qp "blockToken" $block_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id), block_index: (encode-path-segment $block_index)} | format pattern "/snapshots/{snapshot_id}/blocks/{block_index}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -276,7 +303,7 @@ export def "list-changed-blocks" [
   --page-token: string # The token to request the next page of results. If you specify NextToken, then StartingBlockIndex is ignored.
   --max-results: int # The maximum number of blocks to be returned by the request. Even if additional blocks can be retrieved from the snapshot, the request can return less blocks than MaxResults or an empty array of blocks. To retrieve the next set of blocks from the snapshot, make another request with the returned NextToken value. The value of NextToken is null when there are no more blocks to return.
   --starting-block-index: int # The block index from which the comparison should start. The list in the response will start from this block index or the next valid block index in the snapshots. If you specify NextToken, then StartingBlockIndex is ignored.
-  --max-results-2: string # Pagination limit (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -289,16 +316,16 @@ export def "list-changed-blocks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($second_snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'secondSnapshotId' must be non-empty" } }
-  let qp = [(serialize-qp "firstSnapshotId" $first_snapshot_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startingBlockIndex" $starting_block_index "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "firstSnapshotId" $first_snapshot_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startingBlockIndex" $starting_block_index "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({second_snapshot_id: (encode-path-segment $second_snapshot_id)} | format pattern "/snapshots/{second_snapshot_id}/changedblocks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"firstSnapshotId": $first_snapshot_id, "pageToken": $page_token, "maxResults": $max_results, "startingBlockIndex": $starting_block_index, "MaxResults": $max_results_2, "NextToken": $next_token} | compact)
+    query: ({"firstSnapshotId": $first_snapshot_id, "pageToken": $page_token, "maxResults": $max_results, "startingBlockIndex": $starting_block_index, "MaxResults": $qp_max_results, "NextToken": $next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -327,7 +354,7 @@ export def "list-snapshot-blocks" [
   --page-token: string # The token to request the next page of results. If you specify NextToken, then StartingBlockIndex is ignored.
   --max-results: int # The maximum number of blocks to be returned by the request. Even if additional blocks can be retrieved from the snapshot, the request can return less blocks than MaxResults or an empty array of blocks. To retrieve the next set of blocks from the snapshot, make another request with the returned NextToken value. The value of NextToken is null when there are no more blocks to return.
   --starting-block-index: int # The block index from which the list should start. The list in the response will start from this block index or the next valid block index in the snapshot. If you specify NextToken, then StartingBlockIndex is ignored.
-  --max-results-2: string # Pagination limit (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
   --next-token: string # Pagination token
   --x-amz-content-sha256: string
   --x-amz-date: string
@@ -340,16 +367,16 @@ export def "list-snapshot-blocks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
-  let qp = [(serialize-qp "pageToken" $page_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startingBlockIndex" $starting_block_index "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageToken" $page_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startingBlockIndex" $starting_block_index "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/snapshots/{snapshot_id}/blocks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageToken": $page_token, "maxResults": $max_results, "startingBlockIndex": $starting_block_index, "MaxResults": $max_results_2, "NextToken": $next_token} | compact)
+    query: ({"pageToken": $page_token, "maxResults": $max_results, "startingBlockIndex": $starting_block_index, "MaxResults": $qp_max_results, "NextToken": $next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -399,11 +426,11 @@ export def "put-snapshot-block" [
   let x_amz_checksum_algorithm = ($x_amz_checksum_algorithm | default "SHA256")
   let full_url = (build-url $base ({snapshot_id: (encode-path-segment $snapshot_id), block_index: (encode-path-segment $block_index)} | format pattern "/snapshots/{snapshot_id}/blocks/{block_index}") $auth.query)
   let req_body = {"BlockData": $block_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-Data-Length": $x_amz_data_length, "x-amz-Progress": $x_amz_progress, "x-amz-Checksum": $x_amz_checksum, "x-amz-Checksum-Algorithm": $x_amz_checksum_algorithm} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -453,11 +480,11 @@ export def "start-snapshot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/snapshots" $auth.query)
   let req_body = {"VolumeSize": $volume_size, "ParentSnapshotId": $parent_snapshot_id, "Tags": $tags, "Description": $description, "ClientToken": $client_token, "Encrypted": $encrypted, "KmsKeyArn": $kms_key_arn, "Timeout": $timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

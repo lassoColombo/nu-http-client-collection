@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,7 +208,7 @@ export def "login" [
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/auth-v1/login" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -215,7 +242,7 @@ export def "login-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service/auth-v1/login" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -251,7 +278,7 @@ export def "get-all-projects" [
   let qp = [(serialize-qp "excludeAllowedReviewers" $exclude_allowed_reviewers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/projects-v1" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -289,7 +316,7 @@ export def "get-project" [
   let qp = [(serialize-qp "excludeAllowedReviewers" $exclude_allowed_reviewers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service/projects-v1/{key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -329,7 +356,7 @@ export def "get-all-repositories" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "available" $available "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/repositories-v1" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -367,7 +394,7 @@ export def "browse" [
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/browse/{repository}/{path}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -405,7 +432,7 @@ export def "change" [
   if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision)} | format pattern "/rest-service/repositories-v1/change/{repository}/{revision}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -449,7 +476,7 @@ export def "changes" [
   let qp = [(serialize-qp "oldestCsid" $oldest_csid "scalar") (serialize-qp "includeOldest" $include_oldest "scalar") (serialize-qp "newestCsid" $newest_csid "scalar") (serialize-qp "includeNewest" $include_newest "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/changes/{repository}/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -489,7 +516,7 @@ export def "get-contents" [
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/content/{repository}/{revision}/{path}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -529,7 +556,7 @@ export def "get-rest-service-repositories-v1-history-repository-revision-path" [
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/history/{repository}/{revision}/{path}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -564,7 +591,7 @@ export def "get-repository-details" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/repositories-v1/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -600,7 +627,7 @@ export def "get-svn-repository-details" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/repositories-v1/{repository}/svn") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -639,7 +666,7 @@ export def "details" [
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/{repository}/{revision}/{path}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -674,7 +701,7 @@ export def "get-all-reviews" [
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -707,7 +734,7 @@ export def "create-review" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service/reviews-v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -743,7 +770,7 @@ export def "get-all-detailed-reviews" [
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1/details" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -790,7 +817,7 @@ export def "get-custom-filter-reviews" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $or_roles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $all_reviewers_complete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1/filter" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -824,7 +851,7 @@ export def "post-custom-filter-reviews" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service/reviews-v1/filter" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -871,7 +898,7 @@ export def "get-detailed-custom-filter-reviews" [
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "moderator" $moderator "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "reviewer" $reviewer "scalar") (serialize-qp "orRoles" $or_roles "scalar") (serialize-qp "complete" $complete "scalar") (serialize-qp "allReviewersComplete" $all_reviewers_complete "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/reviews-v1/filter/details" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -905,7 +932,7 @@ export def "post-detailed-custom-filter-reviews" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service/reviews-v1/filter/details" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -941,7 +968,7 @@ export def "get-filtered-reviews-for-user" [
   if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   let full_url = (build-url $base ({filter: (encode-path-segment $filter)} | format pattern "/rest-service/reviews-v1/filter/{filter}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -977,7 +1004,7 @@ export def "get-detailed-filtered-reviews-for-user" [
   if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   let full_url = (build-url $base ({filter: (encode-path-segment $filter)} | format pattern "/rest-service/reviews-v1/filter/{filter}/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1013,7 +1040,7 @@ export def "get-metrics" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/rest-service/reviews-v1/metrics/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1051,7 +1078,7 @@ export def "get-reviews-for-path" [
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/reviews-v1/search/{repository}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1089,7 +1116,7 @@ export def "get-reviews-details-for-path" [
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/reviews-v1/search/{repository}/details") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1123,7 +1150,7 @@ export def "get-version-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service/reviews-v1/versionInfo" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1159,7 +1186,7 @@ export def "delete-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1195,7 +1222,7 @@ export def "get-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1231,7 +1258,7 @@ export def "get-available-actions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/actions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1266,7 +1293,7 @@ export def "add-changeset-to-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addChangeset") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1301,7 +1328,7 @@ export def "add-file" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addFile") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1337,7 +1364,7 @@ export def "add-patch-review0" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addPatch") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1373,7 +1400,7 @@ export def "close-review-with-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/close") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1411,7 +1438,7 @@ export def "get-all-comments" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1447,7 +1474,7 @@ export def "add-general-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1484,7 +1511,7 @@ export def "get-general-comments" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/general") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1520,7 +1547,7 @@ export def "mark-all-comments-as-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/markAllAsRead") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1557,7 +1584,7 @@ export def "get-versioned-comments" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/versioned") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1595,7 +1622,7 @@ export def "remove-comment" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1635,7 +1662,7 @@ export def "get-comment" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1673,7 +1700,7 @@ export def "update-comment" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1711,7 +1738,7 @@ export def "mark-comment-as-leave-unread" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsLeaveUnread") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1749,7 +1776,7 @@ export def "mark-comment-as-read" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsRead") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1789,7 +1816,7 @@ export def "get-replies" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1827,7 +1854,7 @@ export def "add-reply" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1867,7 +1894,7 @@ export def "remove-reply" [
   if ($r_id | is-empty) { error make --unspanned { msg: "path parameter 'rId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id), r_id: (encode-path-segment $r_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1907,7 +1934,7 @@ export def "update-reply" [
   if ($r_id | is-empty) { error make --unspanned { msg: "path parameter 'rId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id), r_id: (encode-path-segment $r_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1945,7 +1972,7 @@ export def "complete-review" [
   let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/complete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1981,7 +2008,7 @@ export def "get-detailed-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2017,7 +2044,7 @@ export def "get-review-patches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/patch") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2053,7 +2080,7 @@ export def "add-patch-to-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/patch") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2091,7 +2118,7 @@ export def "remove-patch" [
   if ($patch_id | is-empty) { error make --unspanned { msg: "path parameter 'patchId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), patch_id: (encode-path-segment $patch_id)} | format pattern "/rest-service/reviews-v1/{id}/patch/{patch_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2127,7 +2154,7 @@ export def "publish-all-comments" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/publish") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2165,7 +2192,7 @@ export def "publish-comment" [
   if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/publish/{c_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2201,7 +2228,7 @@ export def "remind-incomplete-reviewers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/remind") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2237,7 +2264,7 @@ export def "get-reviewers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2273,7 +2300,7 @@ export def "add-reviewers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2309,7 +2336,7 @@ export def "get-completed-reviewers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/completed") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2345,7 +2372,7 @@ export def "get-uncompleted-reviewers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/uncompleted") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2383,7 +2410,7 @@ export def "remove-reviewer" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2419,7 +2446,7 @@ export def "get-review-items-for-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2455,7 +2482,7 @@ export def "add-fisheye-review-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2491,7 +2518,7 @@ export def "add-review-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2527,7 +2554,7 @@ export def "add-review-items" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2565,7 +2592,7 @@ export def "remove-review-item" [
   if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2603,7 +2630,7 @@ export def "get-review-item" [
   if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2642,7 +2669,7 @@ export def "get-review-items-comments" [
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2680,7 +2707,7 @@ export def "add-versioned-comment" [
   if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2718,7 +2745,7 @@ export def "set-review-item" [
   if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2758,7 +2785,7 @@ export def "remove-review-item-revisions" [
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2798,7 +2825,7 @@ export def "add-review-item-revisions" [
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2837,7 +2864,7 @@ export def "change-state" [
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/transition") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2873,7 +2900,7 @@ export def "get-available-transitions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/transitions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2911,7 +2938,7 @@ export def "uncomplete-review" [
   let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/uncomplete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2948,7 +2975,7 @@ export def "get-reviews-for-term" [
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/search-v1/reviews" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2985,7 +3012,7 @@ export def "get-reviews-for-issue-key" [
   let qp = [(serialize-qp "jiraKey" $jira_key "scalar") (serialize-qp "maxReturn" $max_return "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/search-v1/reviewsForIssue" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3021,7 +3048,7 @@ export def "get-users" [
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service/users-v1" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3059,7 +3086,7 @@ export def "get-mapped-user" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), username: (encode-path-segment $username)} | format pattern "/rest-service/users-v1/{repository}/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3095,7 +3122,7 @@ export def "get-user-profile" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/rest-service/users-v1/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

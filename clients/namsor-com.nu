@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,7 +200,7 @@ export def "anonymize" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), anonymized: (encode-path-segment $anonymized), token_arg: (encode-path-segment $token_arg)} | format pattern "/api2/json/anonymize/{source}/{anonymized}/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -207,7 +234,7 @@ export def "api-key-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiKeyInfo" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -241,7 +268,7 @@ export def "available-services" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiServices" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -275,7 +302,7 @@ export def "api-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiStatus" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -309,7 +336,7 @@ export def "api-usage" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsage" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -343,7 +370,7 @@ export def "api-usage-history" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsageHistory" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -377,7 +404,7 @@ export def "api-usage-history-aggregate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/apiUsageHistoryAggregate" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -415,7 +442,7 @@ export def "castegroup-indian-full" [
   if ($personal_name_full | is-empty) { error make --unspanned { msg: "path parameter 'personalNameFull' must be non-empty" } }
   let full_url = (build-url $base ({sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/castegroupIndianFull/{sub_division_iso31662}/{personal_name_full}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -452,9 +479,9 @@ export def "castegroup-indian-full-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/castegroupIndianFullBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -492,7 +519,7 @@ export def "chinese-name-candidates" [
   if ($chinese_given_name_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseGivenNameLatin' must be non-empty" } }
   let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin)} | format pattern "/api2/json/chineseNameCandidates/{chinese_surname_latin}/{chinese_given_name_latin}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -529,9 +556,9 @@ export def "chinese-name-candidates-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameCandidatesBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -568,9 +595,9 @@ export def "chinese-name-candidates-gender-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameCandidatesGenderBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -610,7 +637,7 @@ export def "chinese-name-gender-candidates" [
   if ($known_gender | is-empty) { error make --unspanned { msg: "path parameter 'knownGender' must be non-empty" } }
   let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin), known_gender: (encode-path-segment $known_gender)} | format pattern "/api2/json/chineseNameGenderCandidates/{chinese_surname_latin}/{chinese_given_name_latin}/{known_gender}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -650,7 +677,7 @@ export def "chinese-name-match" [
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
   let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin), chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/chineseNameMatch/{chinese_surname_latin}/{chinese_given_name_latin}/{chinese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -687,9 +714,9 @@ export def "chinese-name-match-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/chineseNameMatchBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -735,7 +762,7 @@ export def "corridor" [
   if ($last_name_to | is-empty) { error make --unspanned { msg: "path parameter 'lastNameTo' must be non-empty" } }
   let full_url = (build-url $base ({country_iso2_from: (encode-path-segment $country_iso2_from), first_name_from: (encode-path-segment $first_name_from), last_name_from: (encode-path-segment $last_name_from), country_iso2_to: (encode-path-segment $country_iso2_to), first_name_to: (encode-path-segment $first_name_to), last_name_to: (encode-path-segment $last_name_to)} | format pattern "/api2/json/corridor/{country_iso2_from}/{first_name_from}/{last_name_from}/{country_iso2_to}/{first_name_to}/{last_name_to}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -772,9 +799,9 @@ export def "corridor-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/corridorBatch" $auth.query)
   let req_body = {"corridorFromTo": $corridor_from_to, "facts": $facts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -810,7 +837,7 @@ export def "country" [
   if ($personal_name_full | is-empty) { error make --unspanned { msg: "path parameter 'personalNameFull' must be non-empty" } }
   let full_url = (build-url $base ({personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/country/{personal_name_full}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -847,9 +874,9 @@ export def "country-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/countryBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -889,7 +916,7 @@ export def "diaspora" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/diaspora/{country_iso2}/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -926,9 +953,9 @@ export def "diaspora-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/diasporaBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -964,7 +991,7 @@ export def "gender" [
   if ($first_name | is-empty) { error make --unspanned { msg: "path parameter 'firstName' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name)} | format pattern "/api2/json/gender/{first_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1002,7 +1029,7 @@ export def "gender-1" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/gender/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1039,9 +1066,9 @@ export def "gender-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1077,7 +1104,7 @@ export def "gender-chinese-name" [
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
   let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/genderChineseName/{chinese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1114,9 +1141,9 @@ export def "gender-chinese-name-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderChineseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1154,7 +1181,7 @@ export def "gender-chinese-name-pinyin" [
   if ($chinese_given_name_latin | is-empty) { error make --unspanned { msg: "path parameter 'chineseGivenNameLatin' must be non-empty" } }
   let full_url = (build-url $base ({chinese_surname_latin: (encode-path-segment $chinese_surname_latin), chinese_given_name_latin: (encode-path-segment $chinese_given_name_latin)} | format pattern "/api2/json/genderChineseNamePinyin/{chinese_surname_latin}/{chinese_given_name_latin}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1191,9 +1218,9 @@ export def "gender-chinese-name-pinyin-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderChineseNamePinyinBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1229,7 +1256,7 @@ export def "gender-full" [
   if ($full_name | is-empty) { error make --unspanned { msg: "path parameter 'fullName' must be non-empty" } }
   let full_url = (build-url $base ({full_name: (encode-path-segment $full_name)} | format pattern "/api2/json/genderFull/{full_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1266,9 +1293,9 @@ export def "gender-full-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderFullBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1306,7 +1333,7 @@ export def "gender-full-geo" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({full_name: (encode-path-segment $full_name), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/genderFullGeo/{full_name}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1343,9 +1370,9 @@ export def "gender-full-geo-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderFullGeoBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1385,7 +1412,7 @@ export def "gender-geo" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/genderGeo/{first_name}/{last_name}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1422,9 +1449,9 @@ export def "gender-geo-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderGeoBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1462,7 +1489,7 @@ export def "gender-japanese-name-pinyin" [
   if ($japanese_given_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseGivenName' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname: (encode-path-segment $japanese_surname), japanese_given_name: (encode-path-segment $japanese_given_name)} | format pattern "/api2/json/genderJapaneseName/{japanese_surname}/{japanese_given_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1499,9 +1526,9 @@ export def "gender-japanese-name-pinyin-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderJapaneseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1537,7 +1564,7 @@ export def "gender-japanese-name-full" [
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
   let full_url = (build-url $base ({japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/genderJapaneseNameFull/{japanese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1574,9 +1601,9 @@ export def "gender-japanese-name-full-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/genderJapaneseNameFullBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1613,9 +1640,9 @@ export def "japanese-name-gender-kanji-candidates-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameGenderKanjiCandidatesBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1653,7 +1680,7 @@ export def "japanese-name-kanji-candidates" [
   if ($japanese_given_name_latin | is-empty) { error make --unspanned { msg: "path parameter 'japaneseGivenNameLatin' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin)} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1693,7 +1720,7 @@ export def "japanese-name-kanji-candidates-1" [
   if ($known_gender | is-empty) { error make --unspanned { msg: "path parameter 'knownGender' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), known_gender: (encode-path-segment $known_gender)} | format pattern "/api2/json/japaneseNameKanjiCandidates/{japanese_surname_latin}/{japanese_given_name_latin}/{known_gender}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1730,9 +1757,9 @@ export def "japanese-name-kanji-candidates-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameKanjiCandidatesBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1770,7 +1797,7 @@ export def "japanese-name-latin-candidates" [
   if ($japanese_given_name_kanji | is-empty) { error make --unspanned { msg: "path parameter 'japaneseGivenNameKanji' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname_kanji: (encode-path-segment $japanese_surname_kanji), japanese_given_name_kanji: (encode-path-segment $japanese_given_name_kanji)} | format pattern "/api2/json/japaneseNameLatinCandidates/{japanese_surname_kanji}/{japanese_given_name_kanji}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1807,9 +1834,9 @@ export def "japanese-name-latin-candidates-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameLatinCandidatesBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1849,7 +1876,7 @@ export def "japanese-name-match" [
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/japaneseNameMatch/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1886,9 +1913,9 @@ export def "japanese-name-match-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/japaneseNameMatchBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1928,7 +1955,7 @@ export def "japanese-name-match-feedback-loop" [
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
   let full_url = (build-url $base ({japanese_surname_latin: (encode-path-segment $japanese_surname_latin), japanese_given_name_latin: (encode-path-segment $japanese_given_name_latin), japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/japaneseNameMatchFeedbackLoop/{japanese_surname_latin}/{japanese_given_name_latin}/{japanese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1968,7 +1995,7 @@ export def "learnable" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), learnable: (encode-path-segment $learnable), token_arg: (encode-path-segment $token_arg)} | format pattern "/api2/json/learnable/{source}/{learnable}/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2004,7 +2031,7 @@ export def "name-type" [
   if ($proper_noun | is-empty) { error make --unspanned { msg: "path parameter 'properNoun' must be non-empty" } }
   let full_url = (build-url $base ({proper_noun: (encode-path-segment $proper_noun)} | format pattern "/api2/json/nameType/{proper_noun}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2041,9 +2068,9 @@ export def "name-type-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/nameTypeBatch" $auth.query)
   let req_body = {"facts": $facts, "properNouns": $proper_nouns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2081,7 +2108,7 @@ export def "name-type-geo" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({proper_noun: (encode-path-segment $proper_noun), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/nameTypeGeo/{proper_noun}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2118,9 +2145,9 @@ export def "name-type-geo-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/nameTypeGeoBatch" $auth.query)
   let req_body = {"facts": $facts, "properNouns": $proper_nouns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2158,7 +2185,7 @@ export def "origin" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/origin/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2195,9 +2222,9 @@ export def "origin-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/originBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2233,7 +2260,7 @@ export def "parse-chinese-name" [
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
   let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/parseChineseName/{chinese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2270,9 +2297,9 @@ export def "parse-chinese-name-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseChineseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2308,7 +2335,7 @@ export def "parse-japanese-name" [
   if ($japanese_name | is-empty) { error make --unspanned { msg: "path parameter 'japaneseName' must be non-empty" } }
   let full_url = (build-url $base ({japanese_name: (encode-path-segment $japanese_name)} | format pattern "/api2/json/parseJapaneseName/{japanese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2345,9 +2372,9 @@ export def "parse-japanese-name-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseJapaneseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2383,7 +2410,7 @@ export def "parse-name" [
   if ($name_full | is-empty) { error make --unspanned { msg: "path parameter 'nameFull' must be non-empty" } }
   let full_url = (build-url $base ({name_full: (encode-path-segment $name_full)} | format pattern "/api2/json/parseName/{name_full}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2421,7 +2448,7 @@ export def "parse-name-geo" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({name_full: (encode-path-segment $name_full), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/parseName/{name_full}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2458,9 +2485,9 @@ export def "parse-name-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2497,9 +2524,9 @@ export def "parse-name-geo-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/parseNameGeoBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2539,7 +2566,7 @@ export def "phone-code" [
   if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumber' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number)} | format pattern "/api2/json/phoneCode/{first_name}/{last_name}/{phone_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2576,9 +2603,9 @@ export def "phone-code-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/phoneCodeBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2620,7 +2647,7 @@ export def "phone-code-geo" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/phoneCodeGeo/{first_name}/{last_name}/{phone_number}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2657,9 +2684,9 @@ export def "phone-code-geo-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/phoneCodeGeoBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNamesWithPhoneNumbers": $personal_names_with_phone_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2703,7 +2730,7 @@ export def "phone-code-geo-feedback-loop" [
   if ($country_iso2 | is-empty) { error make --unspanned { msg: "path parameter 'countryIso2' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), phone_number: (encode-path-segment $phone_number), phone_number_e164: (encode-path-segment $phone_number_e164), country_iso2: (encode-path-segment $country_iso2)} | format pattern "/api2/json/phoneCodeGeoFeedbackLoop/{first_name}/{last_name}/{phone_number}/{phone_number_e164}/{country_iso2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2739,7 +2766,7 @@ export def "pinyin-chinese-name" [
   if ($chinese_name | is-empty) { error make --unspanned { msg: "path parameter 'chineseName' must be non-empty" } }
   let full_url = (build-url $base ({chinese_name: (encode-path-segment $chinese_name)} | format pattern "/api2/json/pinyinChineseName/{chinese_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2776,9 +2803,9 @@ export def "pinyin-chinese-name-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/pinyinChineseNameBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2812,7 +2839,7 @@ export def "regions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/regions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2852,7 +2879,7 @@ export def "religion-full" [
   if ($personal_name_full | is-empty) { error make --unspanned { msg: "path parameter 'personalNameFull' must be non-empty" } }
   let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/religionFull/{country_iso2}/{sub_division_iso31662}/{personal_name_full}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2889,9 +2916,9 @@ export def "religion-full-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/religionFullBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2929,7 +2956,7 @@ export def "religion" [
   if ($personal_name_full | is-empty) { error make --unspanned { msg: "path parameter 'personalNameFull' must be non-empty" } }
   let full_url = (build-url $base ({sub_division_iso31662: (encode-path-segment $sub_division_iso31662), personal_name_full: (encode-path-segment $personal_name_full)} | format pattern "/api2/json/religionIndianFull/{sub_division_iso31662}/{personal_name_full}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2966,9 +2993,9 @@ export def "religion-indian-full-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/religionIndianFullBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3002,7 +3029,7 @@ export def "software-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/softwareVersion" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3042,7 +3069,7 @@ export def "subclassification" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({country_iso2: (encode-path-segment $country_iso2), first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/subclassification/{country_iso2}/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3079,9 +3106,9 @@ export def "subclassification-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/subclassificationBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3119,7 +3146,7 @@ export def "subclassification-indian" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/subclassificationIndian/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3156,9 +3183,9 @@ export def "subclassification-indian-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/subclassificationIndianBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3194,7 +3221,7 @@ export def "taxonomy-classes" [
   if ($classifier_name | is-empty) { error make --unspanned { msg: "path parameter 'classifierName' must be non-empty" } }
   let full_url = (build-url $base ({classifier_name: (encode-path-segment $classifier_name)} | format pattern "/api2/json/taxonomyClasses/{classifier_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3232,7 +3259,7 @@ export def "us-race-ethnicity" [
   if ($last_name | is-empty) { error make --unspanned { msg: "path parameter 'lastName' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name)} | format pattern "/api2/json/usRaceEthnicity/{first_name}/{last_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3269,9 +3296,9 @@ export def "us-race-ethnicity-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/usRaceEthnicityBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3311,7 +3338,7 @@ export def "us-race-ethnicity-zip5" [
   if ($zip5_code | is-empty) { error make --unspanned { msg: "path parameter 'zip5Code' must be non-empty" } }
   let full_url = (build-url $base ({first_name: (encode-path-segment $first_name), last_name: (encode-path-segment $last_name), zip5_code: (encode-path-segment $zip5_code)} | format pattern "/api2/json/usRaceEthnicityZIP5/{first_name}/{last_name}/{zip5_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3348,9 +3375,9 @@ export def "us-zip-race-ethnicity-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api2/json/usZipRaceEthnicityBatch" $auth.query)
   let req_body = {"facts": $facts, "personalNames": $personal_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

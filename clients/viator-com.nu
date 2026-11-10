@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,11 +208,11 @@ export def "available-products" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/available/products" $auth.query)
   let req_body = {"currencyCode": $currency_code, "endDate": $end_date, "numAdults": $num_adults, "productCodes": $product_codes, "startDate": $start_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -227,11 +254,11 @@ export def "booking-availability" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability" $auth.query)
   let req_body = {"ageBands": $age_bands, "currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -269,9 +296,9 @@ export def "booking-availability-dates" [
   let qp = [(serialize-qp "productCode" $product_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/availability/dates" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -312,11 +339,11 @@ export def "booking-availability-tourgrades" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability/tourgrades" $auth.query)
   let req_body = {"ageBands": $age_bands, "bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -357,11 +384,11 @@ export def "booking-availability-tourgrades-pricingmatrix" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/availability/tourgrades/pricingmatrix" $auth.query)
   let req_body = {"currencyCode": $currency_code, "month": $month, "productCode": $product_code, "year": $year} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -403,11 +430,11 @@ export def "booking-book" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/book" $auth.query)
   let req_body = {"booker": $booker, "currencyCode": $currency_code, "demo": $demo, "items": $items, "partnerDetail": $partner_detail} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -446,11 +473,11 @@ export def "booking-calculateprice" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/calculateprice" $auth.query)
   let req_body = {"currencyCode": $currency_code, "items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -489,9 +516,9 @@ export def "booking-hotels" [
   let qp = [(serialize-qp "productCode" $product_code "scalar") (serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/hotels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -531,9 +558,9 @@ export def "booking-mybookings" [
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itineraryOrItemId" $itinerary_or_item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/mybookings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -573,9 +600,9 @@ export def "booking-pastbooking" [
   let qp = [(serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "itemId" $item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/pastbooking" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -616,11 +643,11 @@ export def "booking-pricingmatrix" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/pricingmatrix" $auth.query)
   let req_body = {"bookingDate": $booking_date, "currencyCode": $currency_code, "productCode": $product_code, "tourGradeCode": $tour_grade_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -665,11 +692,11 @@ export def "booking-status" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/status" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -714,11 +741,11 @@ export def "booking-status-items" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/booking/status/items" $auth.query)
   let req_body = {"bookingDateFrom": $booking_date_from, "bookingDateTo": $booking_date_to, "distributorItemRefs": $distributor_item_refs, "distributorRefs": $distributor_refs, "itemIds": $item_ids, "leadFirstName": $lead_first_name, "leadSurname": $lead_surname, "test": $test} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -761,9 +788,9 @@ export def "booking-voucher" [
   let qp = [(serialize-qp "leadLastName" $lead_last_name "scalar") (serialize-qp "itemId" $item_id "scalar") (serialize-qp "embeddedResources" $embedded_resources "scalar") (serialize-qp "voucherKey" $voucher_key "scalar") (serialize-qp "fullHTML" $full_html "scalar") (serialize-qp "mobileVoucher" $mobile_voucher "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/booking/voucher" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -799,9 +826,9 @@ export def "cancellation-reasons" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/bookings/cancel-reasons" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -841,11 +868,11 @@ export def "cancel-booking" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel") $auth.query)
   let req_body = {"reasonCode": $reason_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -881,7 +908,7 @@ export def "cancel-booking-quote" [
   if ($booking_reference | is-empty) { error make --unspanned { msg: "path parameter 'booking-reference' must be non-empty" } }
   let full_url = (build-url $base ({booking_reference: (encode-path-segment $booking_reference)} | format pattern "/bookings/{booking_reference}/cancel-quote") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -917,9 +944,9 @@ export def "health-check" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/health/check" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -961,11 +988,11 @@ export def "merchant-cancellation" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/merchant/cancellation" $auth.query)
   let req_body = {"cancelItems": $cancel_items, "distributorRef": $distributor_ref, "itineraryId": $itinerary_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1008,9 +1035,9 @@ export def "product" [
   let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "voucherOption" $voucher_option "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar") (serialize-qp "excludeTourGradeAvailability" $exclude_tour_grade_availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1050,9 +1077,9 @@ export def "product-photos" [
   let qp = [(serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product/photos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1093,9 +1120,9 @@ export def "product-reviews" [
   let qp = [(serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "topX" $top_x "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "showUnavailable" $show_unavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product/reviews" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1138,11 +1165,11 @@ export def "search-freetext" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/freetext" $auth.query)
   let req_body = {"currencyCode": $currency_code, "destId": $dest_id, "searchTypes": $search_types, "sortOrder": $sort_order, "text": $text, "topX": $top_x} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1188,11 +1215,11 @@ export def "search-products" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/products" $auth.query)
   let req_body = {"catId": $cat_id, "currencyCode": $currency_code, "destId": $dest_id, "endDate": $end_date, "seoId": $seo_id, "sortOrder": $sort_order, "startDate": $start_date, "subCatId": $sub_cat_id, "topX": $top_x} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1231,11 +1258,11 @@ export def "search-products-codes" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/search/products/codes" $auth.query)
   let req_body = {"currencyCode": $currency_code, "productCodes": $product_codes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1275,11 +1302,11 @@ export def "taxonomy-attractions" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/taxonomy/attractions" $auth.query)
   let req_body = {"destId": $dest_id, "sortOrder": $sort_order, "topX": $top_x} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1317,9 +1344,9 @@ export def "taxonomy-categories" [
   let qp = [(serialize-qp "destId" $dest_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxonomy/categories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1355,9 +1382,9 @@ export def "taxonomy-destinations" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'Accept-Language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/taxonomy/destinations" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

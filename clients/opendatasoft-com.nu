@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,7 +200,7 @@ export def "get-root" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -207,7 +234,7 @@ export def "get-pages" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pages" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -243,7 +270,7 @@ export def "get-page" [
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/pages/{slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -279,7 +306,7 @@ export def "get-source" [
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -325,7 +352,7 @@ export def "aggregate-datasets" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/aggregates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -376,7 +403,7 @@ export def "get-datasets" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/datasets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -419,7 +446,7 @@ export def "get-dataset" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -467,7 +494,7 @@ export def "aggregate-records" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -505,7 +532,7 @@ export def "get-dataset-attachements" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -545,7 +572,7 @@ export def "download-dataset-attachement" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments/{attachment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -595,7 +622,7 @@ export def "export-records-csv" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp $auth.query)
   let accept_val = "text/csv"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -646,7 +673,7 @@ export def "export-records-geojson" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -696,7 +723,7 @@ export def "export-records-ical" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -747,7 +774,7 @@ export def "export-records-json" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -797,7 +824,7 @@ export def "export-records-ov2" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -847,7 +874,7 @@ export def "export-records-shp" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -897,7 +924,7 @@ export def "export-records-xls" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp $auth.query)
   let accept_val = "xls"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -942,7 +969,7 @@ export def "get-records-facets" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -985,9 +1012,9 @@ export def "send-dataset-feedback" [
   if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/feedback") $auth.query)
   let req_body = {"comment": $comment, "newValues": $new_values, "recordid": $recordid, "schema": $schema} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1029,7 +1056,7 @@ export def "get-dataset-file" [
   let qp = [(serialize-qp "thumbnail_size" $thumbnail_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), file_id: (encode-path-segment $file_id)} | format pattern "/{source}/datasets/{dataset_id}/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1081,7 +1108,7 @@ export def "get-records" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/records") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1125,7 +1152,7 @@ export def "get-record" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), record_id: (encode-path-segment $record_id)} | format pattern "/{source}/datasets/{dataset_id}/records/{record_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1167,7 +1194,7 @@ export def "get-dataset-reuses" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1209,7 +1236,7 @@ export def "get-dataset-reuse" [
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), reuse_id: (encode-path-segment $reuse_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses/{reuse_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1249,7 +1276,7 @@ export def "get-dataset-snapshots" [
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1291,7 +1318,7 @@ export def "download-dataset-snapshot" [
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1338,7 +1365,7 @@ export def "export-datasets-csv" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/csv") $qp $auth.query)
   let accept_val = "text/csv"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1385,7 +1412,7 @@ export def "export-datasets-json" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1431,7 +1458,7 @@ export def "export-datasets-rdf" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rdf") $qp $auth.query)
   let accept_val = "application/rdf+xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1477,7 +1504,7 @@ export def "export-datasets-rss" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rss") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1523,7 +1550,7 @@ export def "export-datasets-ttl" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/ttl") $qp $auth.query)
   let accept_val = "text/turtle"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1569,7 +1596,7 @@ export def "export-datasets-xls" [
   let qp = [(serialize-qp "where" $where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/xls") $qp $auth.query)
   let accept_val = "xls"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1612,7 +1639,7 @@ export def "get-datasets-facets" [
   let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/facets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1648,7 +1675,7 @@ export def "get-metadata-templates-types" [
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/metadata_templates") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1686,7 +1713,7 @@ export def "get-metadata-templates-type" [
   if ($metadata_template_type | is-empty) { error make --unspanned { msg: "path parameter 'metadata_template_type' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type)} | format pattern "/{source}/metadata_templates/{metadata_template_type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1726,7 +1753,7 @@ export def "get-metadata-template" [
   if ($metadata_template_name | is-empty) { error make --unspanned { msg: "path parameter 'metadata_template_name' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type), metadata_template_name: (encode-path-segment $metadata_template_name)} | format pattern "/{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

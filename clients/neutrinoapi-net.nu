@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -183,9 +210,9 @@ export def "bad-word-filter" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bad-word-filter" $auth.query)
   let req_body = {"catalog": $catalog, "censor-character": $censor_character, "content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -223,7 +250,7 @@ export def "bin-list-download" [
   let qp = [(serialize-qp "include-iso3" $include_iso3 "scalar") (serialize-qp "include-8digit" $include_8digit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin-list-download" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -261,7 +288,7 @@ export def "bin-lookup" [
   let qp = [(serialize-qp "bin-number" $bin_number "scalar") (serialize-qp "customer-ip" $customer_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin-lookup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -303,9 +330,9 @@ export def "browser-bot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/browser-bot" $auth.query)
   let req_body = {"delay": $delay, "exec": $exec, "ignore-certificate-errors": $ignore_certificate_errors, "selector": $selector, "timeout": $timeout, "url": $url, "user-agent": $user_agent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -347,7 +374,7 @@ export def "convert" [
   let qp = [(serialize-qp "from-value" $from_value "scalar") (serialize-qp "from-type" $from_type "scalar") (serialize-qp "to-type" $to_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convert" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -385,7 +412,7 @@ export def "email-validate" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-validate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -423,7 +450,7 @@ export def "email-verify" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-verify" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,7 +495,7 @@ export def "geocode-address" [
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "house-number" $house_number "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "postal-code" $postal_code "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "fuzzy-search" $fuzzy_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode-address" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -509,7 +536,7 @@ export def "geocode-reverse" [
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "zoom" $zoom "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode-reverse" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -547,7 +574,7 @@ export def "hlr-lookup" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hlr-lookup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -586,7 +613,7 @@ export def "host-reputation" [
   let qp = [(serialize-qp "host" $host "scalar") (serialize-qp "list-rating" $list_rating "scalar") (serialize-qp "zones" $zones "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/host-reputation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -623,9 +650,9 @@ export def "html-clean" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-clean" $auth.query)
   let req_body = {"content": $content, "output-type": $output_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -683,9 +710,9 @@ export def "html-render" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-render" $auth.query)
   let req_body = {"content": $content, "css": $css, "delay": $delay, "footer": $footer, "format": $format, "grayscale": $grayscale, "header": $header, "ignore-certificate-errors": $ignore_certificate_errors, "image-height": $image_height, "image-width": $image_width, "landscape": $landscape, "margin": $margin, "margin-bottom": $margin_bottom, "margin-left": $margin_left, "margin-right": $margin_right, "margin-top": $margin_top, "page-height": $page_height, "page-size": $page_size, "page-width": $page_width, "timeout": $timeout, "title": $title, "zoom": $zoom} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -727,9 +754,9 @@ export def "image-resize" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-resize" $auth.query)
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "resize-mode": $resize_mode, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -774,9 +801,9 @@ export def "image-watermark" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-watermark" $auth.query)
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "opacity": $opacity, "position": $position, "resize-mode": $resize_mode, "watermark-url": $watermark_url, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -815,7 +842,7 @@ export def "ip-blocklist" [
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "vpn-lookup" $vpn_lookup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-blocklist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -854,7 +881,7 @@ export def "ip-blocklist-download" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "include-vpn" $include_vpn "scalar") (serialize-qp "cidr" $cidr "scalar") (serialize-qp "ip6" $ip6 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-blocklist-download" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -892,7 +919,7 @@ export def "ip-info" [
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "reverse-lookup" $reverse_lookup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-info" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -929,7 +956,7 @@ export def "ip-probe" [
   let qp = [(serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-probe" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,9 +995,9 @@ export def "phone-playback" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-playback" $auth.query)
   let req_body = {"audio-url": $audio_url, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1010,7 +1037,7 @@ export def "phone-validate" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-validate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1053,9 +1080,9 @@ export def "phone-verify" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-verify" $auth.query)
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "playback-delay": $playback_delay, "security-code": $security_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1096,9 +1123,9 @@ export def "qr-code" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qr-code" $auth.query)
   let req_body = {"bg-color": $bg_color, "content": $content, "fg-color": $fg_color, "height": $height, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1141,9 +1168,9 @@ export def "sms-verify" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms-verify" $auth.query)
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "security-code": $security_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1187,7 +1214,7 @@ export def "ua-lookup" [
   let qp = [(serialize-qp "ua" $ua "scalar") (serialize-qp "ua-version" $ua_version "scalar") (serialize-qp "ua-platform" $ua_platform "scalar") (serialize-qp "ua-platform-version" $ua_platform_version "scalar") (serialize-qp "ua-mobile" $ua_mobile "scalar") (serialize-qp "device-model" $device_model "scalar") (serialize-qp "device-brand" $device_brand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ua-lookup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1228,7 +1255,7 @@ export def "url-info" [
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "fetch-content" $fetch_content "scalar") (serialize-qp "ignore-certificate-errors" $ignore_certificate_errors "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "retry" $retry "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/url-info" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1266,7 +1293,7 @@ export def "verify-security-code" [
   let qp = [(serialize-qp "security-code" $security_code "scalar") (serialize-qp "limit-by" $limit_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/verify-security-code" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

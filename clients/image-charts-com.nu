@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -212,7 +239,7 @@ export def "get-chart" [
   let qp = [(serialize-qp "cht" $cht "scalar") (serialize-qp "chd" $chd "scalar") (serialize-qp "chds" $chds "scalar") (serialize-qp "choe" $choe "scalar") (serialize-qp "chld" $chld "scalar") (serialize-qp "chxr" $chxr "scalar") (serialize-qp "chxp" $chxp "scalar") (serialize-qp "chof" $chof "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "chdl" $chdl "scalar") (serialize-qp "chdls" $chdls "scalar") (serialize-qp "chg" $chg "scalar") (serialize-qp "chco" $chco "scalar") (serialize-qp "chtt" $chtt "scalar") (serialize-qp "chts" $chts "scalar") (serialize-qp "chxt" $chxt "scalar") (serialize-qp "chxl" $chxl "scalar") (serialize-qp "chxs" $chxs "scalar") (serialize-qp "chm" $chm "scalar") (serialize-qp "chls" $chls "scalar") (serialize-qp "chl" $chl "scalar") (serialize-qp "chlps" $chlps "scalar") (serialize-qp "chma" $chma "scalar") (serialize-qp "chdlp" $chdlp "scalar") (serialize-qp "chf" $chf "scalar") (serialize-qp "chbh" $chbh "scalar") (serialize-qp "chbr" $chbr "scalar") (serialize-qp "chan" $chan "scalar") (serialize-qp "chli" $chli "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icff" $icff "scalar") (serialize-qp "icfs" $icfs "scalar") (serialize-qp "iclocale" $iclocale "scalar") (serialize-qp "icwt" $icwt "scalar") (serialize-qp "icretina" $icretina "scalar") (serialize-qp "icqrb" $icqrb "scalar") (serialize-qp "icqrf" $icqrf "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chart" $qp $auth.query)
   let accept_val = ($accept | default "application/png")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -258,7 +285,7 @@ export def "get-chartjs280" [
   let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "bkg" $bkg "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icretina" $icretina "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/chart.js/2.8.0" $qp $auth.query)
   let accept_val = ($accept | default "application/png")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

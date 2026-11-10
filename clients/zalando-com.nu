@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,9 +200,9 @@ export def "get-article-reviews" [
   let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -215,9 +242,9 @@ export def "get-article-reviews-summaries" [
   let qp = [(serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/article-reviews-summaries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -255,9 +282,9 @@ export def "get-article-reviews-summaries-article-model-id" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_model_id: (encode-path-segment $article_model_id)} | format pattern "/article-reviews-summaries/{article_model_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -295,9 +322,9 @@ export def "get-article-reviews-review-id" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/article-reviews/{review_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -370,9 +397,9 @@ export def "get-articles" [
   let qp = [(serialize-qp "articleId" $article_id "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "articleUnitId" $article_unit_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "ageGroup" $age_group "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "fullText" $full_text "scalar") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/articles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -410,9 +437,9 @@ export def "get-articles-article-id" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -450,9 +477,9 @@ export def "get-articles-article-id-media" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -495,9 +522,9 @@ export def "get-articles-article-id-reviews" [
   let qp = [(serialize-qp "minStarRating" $min_star_rating "scalar") (serialize-qp "maxStarRating" $max_star_rating "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -535,9 +562,9 @@ export def "get-articles-article-id-reviews-summary" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/reviews-summary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -575,9 +602,9 @@ export def "get-articles-article-id-units" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/units") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -617,9 +644,9 @@ export def "get-articles-article-id-units-unit-id" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), unit_id: (encode-path-segment $unit_id)} | format pattern "/articles/{article_id}/units/{unit_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -661,9 +688,9 @@ export def "get-brands" [
   let qp = [(serialize-qp "key" $key "multi") (serialize-qp "name" $name "multi") (serialize-qp "brandFamilyName" $brand_family_name "multi") (serialize-qp "brandFamilyKey" $brand_family_key "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/brands" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -701,9 +728,9 @@ export def "get-brands-key" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/brands/{key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -750,9 +777,9 @@ export def "get-categories" [
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "type" $type "scalar") (serialize-qp "outlet" $outlet "scalar") (serialize-qp "hidden" $hidden "scalar") (serialize-qp "targetGroup" $target_group "scalar") (serialize-qp "key" $key "multi") (serialize-qp "parentKey" $parent_key "multi") (serialize-qp "childKey" $child_key "multi") (serialize-qp "suggestedFilter" $suggested_filter "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -790,9 +817,9 @@ export def "get-categories-key" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-array $key)} | format pattern "/categories/{key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -825,7 +852,7 @@ export def "get-domains" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -893,9 +920,9 @@ export def "get-facets" [
   let qp = [(serialize-qp "ageGroup" $age_group "multi") (serialize-qp "articleId" $article_id "multi") (serialize-qp "activationDate" $activation_date "multi") (serialize-qp "articleModelId" $article_model_id "multi") (serialize-qp "assortmentArea" $assortment_area "multi") (serialize-qp "brand" $brand "multi") (serialize-qp "brandfamily" $brandfamily "multi") (serialize-qp "category" $category "multi") (serialize-qp "color" $color "multi") (serialize-qp "den" $den "multi") (serialize-qp "filling" $filling "multi") (serialize-qp "gender" $gender "multi") (serialize-qp "heelForm" $heel_form "multi") (serialize-qp "heelHeight" $heel_height "multi") (serialize-qp "length" $length "scalar") (serialize-qp "occasion" $occasion "multi") (serialize-qp "pattern" $pattern "multi") (serialize-qp "price" $price "scalar") (serialize-qp "sale" $sale "csv") (serialize-qp "season" $season "multi") (serialize-qp "shaftHeight" $shaft_height "multi") (serialize-qp "shaftWidth" $shaft_width "multi") (serialize-qp "shirtCollar" $shirt_collar "multi") (serialize-qp "shoeFastener" $shoe_fastener "multi") (serialize-qp "shoeToecap" $shoe_toecap "multi") (serialize-qp "shopArea" $shop_area "multi") (serialize-qp "size" $size "scalar") (serialize-qp "sports" $sports "multi") (serialize-qp "technology" $technology "multi") (serialize-qp "trouserRise" $trouser_rise "multi") (serialize-qp "upperMaterial" $upper_material "multi") (serialize-qp "volume" $volume "multi") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/facets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -931,9 +958,9 @@ export def "get-filters" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/filters" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -971,9 +998,9 @@ export def "get-filters-filter-name" [
   let qp = [(serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({filter_name: (encode-path-segment $filter_name)} | format pattern "/filters/{filter_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1012,9 +1039,9 @@ export def "get-recommendations-article-ids" [
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({article_ids: (encode-path-array $article_ids)} | format pattern "/recommendations/{article_ids}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

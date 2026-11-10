@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,7 +200,7 @@ export def "app-get-application-api-usage" [
   let qp = [(serialize-qp "end" $end "scalar") (serialize-qp "start" $start "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/App/ApiUsage/{application_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -207,7 +234,7 @@ export def "app-get-bungie-applications" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/App/FirstParty/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,7 +274,7 @@ export def "community-content-get-community-content" [
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let full_url = (build-url $base ({sort: (encode-path-segment $sort), media_filter: (encode-path-segment $media_filter), page: (encode-path-segment $page)} | format pattern "/CommunityContent/Get/{sort}/{media_filter}/{page}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -287,7 +314,7 @@ export def "content-get-content-by-id" [
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentById/{id}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -329,7 +356,7 @@ export def "content-get-content-by-tag-and-type" [
   let qp = [(serialize-qp "head" $head "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/GetContentByTagAndType/{tag}/{type}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -365,7 +392,7 @@ export def "content-get-content-type" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/Content/GetContentType/{type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -404,7 +431,7 @@ export def "content-rss-news-articles" [
   let qp = [(serialize-qp "categoryfilter" $categoryfilter "scalar") (serialize-qp "includebody" $includebody "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({page_token: (encode-path-segment $page_token)} | format pattern "/Content/Rss/NewsArticles/{page_token}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -447,7 +474,7 @@ export def "content-search-content-with-text" [
   let qp = [(serialize-qp "ctype" $ctype "scalar") (serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "searchtext" $searchtext "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({locale: (encode-path-segment $locale)} | format pattern "/Content/Search/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -491,7 +518,7 @@ export def "content-search-content-by-tag-and-type" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "itemsperpage" $itemsperpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), type: (encode-path-segment $type), locale: (encode-path-segment $locale)} | format pattern "/Content/SearchContentByTagAndType/{tag}/{type}/{locale}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -529,7 +556,7 @@ export def "content-search-help-articles" [
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
   let full_url = (build-url $base ({searchtext: (encode-path-segment $searchtext), size: (encode-path-segment $size)} | format pattern "/Content/SearchHelpArticles/{searchtext}/{size}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -563,7 +590,7 @@ export def "destiny2-equip-item" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItem/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -597,7 +624,7 @@ export def "destiny2-equip-items" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItems/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -631,7 +658,7 @@ export def "destiny2-insert-socket-plug" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlug/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -665,7 +692,7 @@ export def "destiny2-insert-socket-plug-free" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlugFree/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -699,7 +726,7 @@ export def "destiny2-pull-from-postmaster" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/PullFromPostmaster/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -733,7 +760,7 @@ export def "destiny2-set-item-lock-state" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/SetLockState/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -767,7 +794,7 @@ export def "destiny2-set-quest-tracked-state" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/SetTrackedState/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -801,7 +828,7 @@ export def "destiny2-transfer-item" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/TransferItem/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -835,7 +862,7 @@ export def "destiny2-clear-loadout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/ClearLoadout/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -869,7 +896,7 @@ export def "destiny2-equip-loadout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/EquipLoadout/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -903,7 +930,7 @@ export def "destiny2-snapshot-loadout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/SnapshotLoadout/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -937,7 +964,7 @@ export def "destiny2-update-loadout-identifiers" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -977,7 +1004,7 @@ export def "destiny2-search-destiny-entities" [
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), search_term: (encode-path-segment $search_term)} | format pattern "/Destiny2/Armory/Search/{type}/{search_term}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1011,7 +1038,7 @@ export def "destiny2-awa-provide-authorization-result" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Awa/AwaProvideAuthorizationResult/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1047,7 +1074,7 @@ export def "destiny2-awa-get-action-token" [
   if ($correlation_id | is-empty) { error make --unspanned { msg: "path parameter 'correlationId' must be non-empty" } }
   let full_url = (build-url $base ({correlation_id: (encode-path-segment $correlation_id)} | format pattern "/Destiny2/Awa/GetActionToken/{correlation_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1081,7 +1108,7 @@ export def "destiny2-awa-initialize-request" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Awa/Initialize/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1115,7 +1142,7 @@ export def "destiny2-get-clan-banner-source" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Clan/ClanBannerDictionary/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1151,7 +1178,7 @@ export def "destiny2-get-clan-weekly-reward-state" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Clan/{group_id}/WeeklyRewardState/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1185,7 +1212,7 @@ export def "destiny2-get-destiny-manifest" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Manifest/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1223,7 +1250,7 @@ export def "destiny2-get-destiny-entity-definition" [
   if ($hash_identifier | is-empty) { error make --unspanned { msg: "path parameter 'hashIdentifier' must be non-empty" } }
   let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type), hash_identifier: (encode-path-segment $hash_identifier)} | format pattern "/Destiny2/Manifest/{entity_type}/{hash_identifier}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1257,7 +1284,7 @@ export def "destiny2-get-public-milestones" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Milestones/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1293,7 +1320,7 @@ export def "destiny2-get-public-milestone-content" [
   if ($milestone_hash | is-empty) { error make --unspanned { msg: "path parameter 'milestoneHash' must be non-empty" } }
   let full_url = (build-url $base ({milestone_hash: (encode-path-segment $milestone_hash)} | format pattern "/Destiny2/Milestones/{milestone_hash}/Content/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1329,7 +1356,7 @@ export def "destiny2-search-destiny-player-by-bungie-name" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type)} | format pattern "/Destiny2/SearchDestinyPlayerByBungieName/{membership_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1367,7 +1394,7 @@ export def "destiny2-get-clan-aggregate-stats" [
   let qp = [(serialize-qp "modes" $modes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/AggregateClanStats/{group_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1401,7 +1428,7 @@ export def "destiny2-get-historical-stats-definition" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Stats/Definition/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1441,7 +1468,7 @@ export def "destiny2-get-clan-leaderboards" [
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Destiny2/Stats/Leaderboards/Clans/{group_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1485,7 +1512,7 @@ export def "destiny2-get-leaderboards-for-character" [
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/Stats/Leaderboards/{membership_type}/{destiny_membership_id}/{character_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1521,7 +1548,7 @@ export def "destiny2-get-post-game-carnage-report" [
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1557,7 +1584,7 @@ export def "destiny2-report-offensive-post-game-carnage-report-player" [
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/Destiny2/Stats/PostGameCarnageReport/{activity_id}/Report/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1593,7 +1620,7 @@ export def "destiny2-get-public-vendors" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Destiny2/Vendors/" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1639,7 +1666,7 @@ export def "destiny2-get-historical-stats" [
   let qp = [(serialize-qp "dayend" $dayend "scalar") (serialize-qp "daystart" $daystart "scalar") (serialize-qp "groups" $groups "csv") (serialize-qp "modes" $modes "csv") (serialize-qp "periodType" $period_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1683,7 +1710,7 @@ export def "destiny2-get-activity-history" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/Activities/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1723,7 +1750,7 @@ export def "destiny2-get-destiny-aggregate-activity-stats" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/AggregateActivityStats/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1763,7 +1790,7 @@ export def "destiny2-get-unique-weapon-history" [
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'characterId' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Character/{character_id}/Stats/UniqueWeapons/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1803,7 +1830,7 @@ export def "destiny2-get-historical-stats-for-account" [
   let qp = [(serialize-qp "groups" $groups "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1845,7 +1872,7 @@ export def "destiny2-get-leaderboards" [
   let qp = [(serialize-qp "maxtop" $maxtop "scalar") (serialize-qp "modes" $modes "scalar") (serialize-qp "statid" $statid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Account/{destiny_membership_id}/Stats/Leaderboards/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1885,7 +1912,7 @@ export def "destiny2-get-profile" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1927,7 +1954,7 @@ export def "destiny2-get-character" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1971,7 +1998,7 @@ export def "destiny2-get-collectible-node-details" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), collectible_presentation_node_hash: (encode-path-segment $collectible_presentation_node_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Collectibles/{collectible_presentation_node_hash}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2014,7 +2041,7 @@ export def "destiny2-get-vendors" [
   let qp = [(serialize-qp "components" $components "csv") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2058,7 +2085,7 @@ export def "destiny2-get-vendor" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), character_id: (encode-path-segment $character_id), vendor_hash: (encode-path-segment $vendor_hash)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Character/{character_id}/Vendors/{vendor_hash}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2100,7 +2127,7 @@ export def "destiny2-get-item" [
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), destiny_membership_id: (encode-path-segment $destiny_membership_id), item_instance_id: (encode-path-segment $item_instance_id)} | format pattern "/Destiny2/{membership_type}/Profile/{destiny_membership_id}/Item/{item_instance_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2140,7 +2167,7 @@ export def "destiny2-get-linked-profiles" [
   let qp = [(serialize-qp "getAllMemberships" $get_all_memberships "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/Destiny2/{membership_type}/Profile/{membership_id}/LinkedProfiles/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2176,7 +2203,7 @@ export def "fireteam-get-active-private-clan-fireteam-count" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/Fireteam/Clan/{group_id}/ActiveCount/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2227,7 +2254,7 @@ export def "fireteam-get-available-clan-fireteams" [
   let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), public_only: (encode-path-segment $public_only), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{public_only}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2272,7 +2299,7 @@ export def "fireteam-get-my-clan-fireteams" [
   let qp = [(serialize-qp "groupFilter" $group_filter "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), platform: (encode-path-segment $platform), include_closed: (encode-path-segment $include_closed), page: (encode-path-segment $page)} | format pattern "/Fireteam/Clan/{group_id}/My/{platform}/{include_closed}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2310,7 +2337,7 @@ export def "fireteam-get-clan-fireteam" [
   if ($fireteam_id | is-empty) { error make --unspanned { msg: "path parameter 'fireteamId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), fireteam_id: (encode-path-segment $fireteam_id)} | format pattern "/Fireteam/Clan/{group_id}/Summary/{fireteam_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2357,7 +2384,7 @@ export def "fireteam-search-public-available-clan-fireteams" [
   let qp = [(serialize-qp "excludeImmediate" $exclude_immediate "scalar") (serialize-qp "langFilter" $lang_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({platform: (encode-path-segment $platform), activity_type: (encode-path-segment $activity_type), date_range: (encode-path-segment $date_range), slot_filter: (encode-path-segment $slot_filter), page: (encode-path-segment $page)} | format pattern "/Fireteam/Search/Available/{platform}/{activity_type}/{date_range}/{slot_filter}/{page}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2401,7 +2428,7 @@ export def "forum-get-core-topics-paged" [
   let qp = [(serialize-qp "locales" $locales "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({page: (encode-path-segment $page), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetCoreTopicsPaged/{page}/{sort}/{quick_date}/{category_filter}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2437,7 +2464,7 @@ export def "forum-get-forum-tag-suggestions" [
   let qp = [(serialize-qp "partialtag" $partialtag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Forum/GetForumTagSuggestions/" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2475,7 +2502,7 @@ export def "forum-get-post-and-parent" [
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParent/{child_post_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2513,7 +2540,7 @@ export def "forum-get-post-and-parent-awaiting-approval" [
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id)} | format pattern "/Forum/GetPostAndParentAwaitingApproval/{child_post_id}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2563,7 +2590,7 @@ export def "forum-get-posts-threaded-paged" [
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent_post_id: (encode-path-segment $parent_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), get_parent_post: (encode-path-segment $get_parent_post), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPaged/{parent_post_id}/{page}/{page_size}/{reply_size}/{get_parent_post}/{root_thread_mode}/{sort_mode}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2611,7 +2638,7 @@ export def "forum-get-posts-threaded-paged-from-child" [
   let qp = [(serialize-qp "showbanned" $showbanned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({child_post_id: (encode-path-segment $child_post_id), page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), reply_size: (encode-path-segment $reply_size), root_thread_mode: (encode-path-segment $root_thread_mode), sort_mode: (encode-path-segment $sort_mode)} | format pattern "/Forum/GetPostsThreadedPagedFromChild/{child_post_id}/{page}/{page_size}/{reply_size}/{root_thread_mode}/{sort_mode}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2647,7 +2674,7 @@ export def "forum-get-topic-for-content" [
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
   let full_url = (build-url $base ({content_id: (encode-path-segment $content_id)} | format pattern "/Forum/GetTopicForContent/{content_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2696,7 +2723,7 @@ export def "forum-get-topics-paged" [
   let qp = [(serialize-qp "locales" $locales "scalar") (serialize-qp "tagstring" $tagstring "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size), group: (encode-path-segment $group), sort: (encode-path-segment $sort), quick_date: (encode-path-segment $quick_date), category_filter: (encode-path-segment $category_filter)} | format pattern "/Forum/GetTopicsPaged/{page}/{page_size}/{group}/{sort}/{quick_date}/{category_filter}/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2732,7 +2759,7 @@ export def "forum-get-poll" [
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
   let full_url = (build-url $base ({topic_id: (encode-path-segment $topic_id)} | format pattern "/Forum/Poll/{topic_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2766,7 +2793,7 @@ export def "forum-get-recruitment-thread-summaries" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Forum/Recruit/Summaries/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2800,7 +2827,7 @@ export def "get-available-locales" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetAvailableLocales/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2836,7 +2863,7 @@ export def "get-global-alerts" [
   let qp = [(serialize-qp "includestreaming" $includestreaming "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GlobalAlerts/" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2870,7 +2897,7 @@ export def "group-v2-get-available-avatars" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/GetAvailableAvatars/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2904,7 +2931,7 @@ export def "group-v2-get-available-themes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/GetAvailableThemes/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2940,7 +2967,7 @@ export def "group-v2-get-user-clan-invite-setting" [
   if ($m_type | is-empty) { error make --unspanned { msg: "path parameter 'mType' must be non-empty" } }
   let full_url = (build-url $base ({m_type: (encode-path-segment $m_type)} | format pattern "/GroupV2/GetUserClanInviteSetting/{m_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2978,7 +3005,7 @@ export def "group-v2-get-group-by-name" [
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
   let full_url = (build-url $base ({group_name: (encode-path-segment $group_name), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Name/{group_name}/{group_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3012,7 +3039,7 @@ export def "group-v2-get-group-by-name-v2" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/NameV2/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3050,7 +3077,7 @@ export def "group-v2-get-recommended-groups" [
   if ($create_date_range | is-empty) { error make --unspanned { msg: "path parameter 'createDateRange' must be non-empty" } }
   let full_url = (build-url $base ({group_type: (encode-path-segment $group_type), create_date_range: (encode-path-segment $create_date_range)} | format pattern "/GroupV2/Recommended/{group_type}/{create_date_range}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3090,7 +3117,7 @@ export def "group-v2-recover-group-for-founder" [
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/Recover/{membership_type}/{membership_id}/{group_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3124,7 +3151,7 @@ export def "group-v2-group-search" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/Search/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3166,7 +3193,7 @@ export def "group-v2-get-potential-groups-for-member" [
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/Potential/{membership_type}/{membership_id}/{filter}/{group_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3208,7 +3235,7 @@ export def "group-v2-get-groups-for-member" [
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
   let full_url = (build-url $base ({membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), filter: (encode-path-segment $filter), group_type: (encode-path-segment $group_type)} | format pattern "/GroupV2/User/{membership_type}/{membership_id}/{filter}/{group_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3244,7 +3271,7 @@ export def "group-v2-get-group" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3284,7 +3311,7 @@ export def "group-v2-abdicate-foundership" [
   if ($founder_id_new | is-empty) { error make --unspanned { msg: "path parameter 'founderIdNew' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), founder_id_new: (encode-path-segment $founder_id_new)} | format pattern "/GroupV2/{group_id}/Admin/AbdicateFoundership/{membership_type}/{founder_id_new}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3323,7 +3350,7 @@ export def "group-v2-get-admins-and-founder-of-group" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/AdminsAndFounder/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3362,7 +3389,7 @@ export def "group-v2-get-banned-members-of-group" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Banned/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3398,7 +3425,7 @@ export def "group-v2-edit-group" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Edit/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3434,7 +3461,7 @@ export def "group-v2-edit-clan-banner" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditClanBanner/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3470,7 +3497,7 @@ export def "group-v2-edit-founder-options" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/EditFounderOptions/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3511,7 +3538,7 @@ export def "group-v2-get-members-of-group" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar") (serialize-qp "memberType" $member_type "scalar") (serialize-qp "nameSearch" $name_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3551,7 +3578,7 @@ export def "group-v2-approve-pending" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/Approve/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3587,7 +3614,7 @@ export def "group-v2-approve-all-pending" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveAll/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3623,7 +3650,7 @@ export def "group-v2-approve-pending-for-list" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/ApproveList/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3659,7 +3686,7 @@ export def "group-v2-deny-all-pending" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyAll/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3695,7 +3722,7 @@ export def "group-v2-deny-pending-for-list" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/DenyList/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3735,7 +3762,7 @@ export def "group-v2-individual-group-invite" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInvite/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3775,7 +3802,7 @@ export def "group-v2-individual-group-invite-cancel" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/IndividualInviteCancel/{membership_type}/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3814,7 +3841,7 @@ export def "group-v2-get-invited-individuals" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/InvitedIndividuals/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3853,7 +3880,7 @@ export def "group-v2-get-pending-memberships" [
   let qp = [(serialize-qp "currentpage" $currentpage "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/Members/Pending/") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3893,7 +3920,7 @@ export def "group-v2-ban-member" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Ban/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3933,7 +3960,7 @@ export def "group-v2-kick-member" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Kick/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3975,7 +4002,7 @@ export def "group-v2-edit-group-membership" [
   if ($member_type | is-empty) { error make --unspanned { msg: "path parameter 'memberType' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id), member_type: (encode-path-segment $member_type)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/SetMembershipType/{member_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4015,7 +4042,7 @@ export def "group-v2-unban-member" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), membership_type: (encode-path-segment $membership_type), membership_id: (encode-path-segment $membership_id)} | format pattern "/GroupV2/{group_id}/Members/{membership_type}/{membership_id}/Unban/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4051,7 +4078,7 @@ export def "group-v2-get-group-optional-conversations" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4087,7 +4114,7 @@ export def "group-v2-add-optional-conversation" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Add/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4125,7 +4152,7 @@ export def "group-v2-edit-optional-conversation" [
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), conversation_id: (encode-path-segment $conversation_id)} | format pattern "/GroupV2/{group_id}/OptionalConversations/Edit/{conversation_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4159,7 +4186,7 @@ export def "get-common-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Settings/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4193,7 +4220,7 @@ export def "social-get-friend-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Social/Friends/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4229,7 +4256,7 @@ export def "social-issue-friend-request" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Add/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4265,7 +4292,7 @@ export def "social-remove-friend" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Remove/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4299,7 +4326,7 @@ export def "social-get-friend-request-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Social/Friends/Requests/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4335,7 +4362,7 @@ export def "social-accept-friend-request" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Accept/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4371,7 +4398,7 @@ export def "social-decline-friend-request" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Decline/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4407,7 +4434,7 @@ export def "social-remove-friend-request" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Social/Friends/Requests/Remove/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4445,7 +4472,7 @@ export def "social-get-platform-friend-list" [
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let full_url = (build-url $base ({friend_platform: (encode-path-segment $friend_platform), page: (encode-path-segment $page)} | format pattern "/Social/PlatformFriends/{friend_platform}/{page}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4483,7 +4510,7 @@ export def "tokens-apply-missing-partner-offers-without-claim" [
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
   let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/ApplyMissingOffers/{partner_application_id}/{target_bnet_membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4517,7 +4544,7 @@ export def "tokens-claim-partner-offer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Partner/ClaimOffer/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4551,7 +4578,7 @@ export def "tokens-force-drops-repair" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Partner/ForceDropsRepair/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4589,7 +4616,7 @@ export def "tokens-get-partner-offer-sku-history" [
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
   let full_url = (build-url $base ({partner_application_id: (encode-path-segment $partner_application_id), target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id)} | format pattern "/Tokens/Partner/History/{partner_application_id}/{target_bnet_membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4627,7 +4654,7 @@ export def "tokens-get-partner-reward-history" [
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({target_bnet_membership_id: (encode-path-segment $target_bnet_membership_id), partner_application_id: (encode-path-segment $partner_application_id)} | format pattern "/Tokens/Partner/History/{target_bnet_membership_id}/Application/{partner_application_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4661,7 +4688,7 @@ export def "tokens-get-bungie-rewards-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Rewards/BungieRewards/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4699,7 +4726,7 @@ export def "tokens-get-bungie-rewards-for-platform-user" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/Tokens/Rewards/GetRewardsForPlatformUser/{membership_id}/{membership_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4735,7 +4762,7 @@ export def "tokens-get-bungie-rewards-for-user" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/Tokens/Rewards/GetRewardsForUser/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4769,7 +4796,7 @@ export def "trending-get-trending-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Trending/Categories/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4807,7 +4834,7 @@ export def "trending-get-trending-category" [
   if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id), page_number: (encode-path-segment $page_number)} | format pattern "/Trending/Categories/{category_id}/{page_number}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4845,7 +4872,7 @@ export def "trending-get-trending-entry-detail" [
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
   let full_url = (build-url $base ({trending_entry_type: (encode-path-segment $trending_entry_type), identifier: (encode-path-segment $identifier)} | format pattern "/Trending/Details/{trending_entry_type}/{identifier}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4879,7 +4906,7 @@ export def "user-get-available-themes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/User/GetAvailableThemes/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4915,7 +4942,7 @@ export def "user-get-bungie-net-user-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/User/GetBungieNetUserById/{id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4951,7 +4978,7 @@ export def "user-get-credential-types-for-target-account" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetCredentialTypesForTargetAccount/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4989,7 +5016,7 @@ export def "user-get-membership-from-hard-linked-credential" [
   if ($credential | is-empty) { error make --unspanned { msg: "path parameter 'credential' must be non-empty" } }
   let full_url = (build-url $base ({cr_type: (encode-path-segment $cr_type), credential: (encode-path-segment $credential)} | format pattern "/User/GetMembershipFromHardLinkedCredential/{cr_type}/{credential}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5027,7 +5054,7 @@ export def "user-get-membership-data-by-id" [
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id), membership_type: (encode-path-segment $membership_type)} | format pattern "/User/GetMembershipsById/{membership_id}/{membership_type}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5061,7 +5088,7 @@ export def "user-get-membership-data-for-current-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/User/GetMembershipsForCurrentUser/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5097,7 +5124,7 @@ export def "user-get-sanitized-platform-display-names" [
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
   let full_url = (build-url $base ({membership_id: (encode-path-segment $membership_id)} | format pattern "/User/GetSanitizedPlatformDisplayNames/{membership_id}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5133,7 +5160,7 @@ export def "user-search-by-global-name-post" [
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let full_url = (build-url $base ({page: (encode-path-segment $page)} | format pattern "/User/Search/GlobalName/{page}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5171,7 +5198,7 @@ export def "user-search-by-global-name-prefix" [
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
   let full_url = (build-url $base ({display_name_prefix: (encode-path-segment $display_name_prefix), page: (encode-path-segment $page)} | format pattern "/User/Search/Prefix/{display_name_prefix}/{page}/") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5205,7 +5232,7 @@ export def "get-user-system-overrides" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UserSystemOverrides/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -202,7 +229,7 @@ export def "search-apis" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apis" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -243,7 +270,7 @@ export def "get-owner-apis" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/apis/{owner}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -281,7 +308,7 @@ export def "delete-api" [
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -319,7 +346,7 @@ export def "get-api-versions" [
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -363,9 +390,9 @@ export def "save-definition" [
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -406,7 +433,7 @@ export def "rename-api" [
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/rename") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -444,7 +471,7 @@ export def "get-api-default-version" [
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/settings/default") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -484,9 +511,9 @@ export def "set-api-default-version" [
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api)} | format pattern "/apis/{owner}/{api}/settings/default") $auth.query)
   let req_body = {"version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -526,7 +553,7 @@ export def "delete-api-version" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -570,7 +597,7 @@ export def "get-definition" [
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "clone-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --private: oneof<nothing, bool> # Whether the new version should be public (`false`) or private (`true`) (e.g. false)
-  --body-version: string # The version identifier for the new version (e.g. 1.0.1)
+  --body-version: string # The version identifier for the new version (e.g. 1.0.1) (spec name: version)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -613,10 +640,10 @@ export def "clone-api" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/clone") $auth.query)
   let req_body = {"private": $private, "version": $body_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -656,7 +683,7 @@ export def "get-api-comments-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -700,9 +727,9 @@ export def "add-api-comment-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments") $auth.query)
   let req_body = {"body": $body, "position": $position, "replies": $replies} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -750,9 +777,9 @@ export def "update-api-comments-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/comments/batch") $auth.query)
   let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -794,7 +821,7 @@ export def "delete-api-comment-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -839,9 +866,9 @@ export def "update-api-comment-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}") $auth.query)
   let req_body = {"body": $body, "position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -885,9 +912,9 @@ export def "add-api-comment-reply-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -931,7 +958,7 @@ export def "delete-api-comment-reply-v2" [
   if ($reply | is-empty) { error make --unspanned { msg: "path parameter 'reply' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -977,9 +1004,9 @@ export def "update-api-comment-reply-v2" [
   if ($reply | is-empty) { error make --unspanned { msg: "path parameter 'reply' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/replies/{reply}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1023,7 +1050,7 @@ export def "set-api-comment-status-v2" [
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), comment: (encode-path-segment $comment), status: (encode-path-segment $status)} | format pattern "/apis/{owner}/{api}/{version}/comments/{comment}/status/{status}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1056,10 +1083,10 @@ export def "fork-api" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/creating-api.html). Can be the name of an existing definition, in which case the fork will become a new version in that definition, unless that version already exists. (e.g. api-fork)
-  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme)
+  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme) (spec name: owner)
   --private: oneof<nothing, bool> # Whether the forked version should be public (`false`) or private (`true`). If the value is not set, the original version's setting will be used.
   --project: string # If forking into an organization, you can optionally specify an existing project to add the forked definition to.
-  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0)
+  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0) (spec name: version)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1069,11 +1096,11 @@ export def "fork-api" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
   if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1113,7 +1140,7 @@ export def "get-integrations" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/integrations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,9 +1182,9 @@ export def "create-integration" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/integrations") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1199,7 +1226,7 @@ export def "delete-integration" [
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integrationId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1241,7 +1268,7 @@ export def "get-integration-by-id" [
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integrationId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1285,9 +1312,9 @@ export def "patch-integration" [
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integrationId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1331,9 +1358,9 @@ export def "update-integration" [
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integrationId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1377,7 +1404,7 @@ export def "execute-integration" [
   let qp = [(serialize-qp "commitMessage" $commit_message "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version), integration_id: (encode-path-segment $integration_id)} | format pattern "/apis/{owner}/{api}/{version}/integrations/{integration_id}/execute") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1417,7 +1444,7 @@ export def "get-lifecycle-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1461,9 +1488,9 @@ export def "set-lifecycle-settings" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/lifecycle") $qp $auth.query)
   let req_body = {"published": $published} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1503,7 +1530,7 @@ export def "get-private-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/private") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1545,10 +1572,10 @@ export def "set-private-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/settings/private") $auth.query)
   let req_body = {"private": $private} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1588,7 +1615,7 @@ export def "get-standardization-errors" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/standardization") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1631,7 +1658,7 @@ export def "get-json-definition" [
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1674,7 +1701,7 @@ export def "get-yaml-definition" [
   let qp = [(serialize-qp "resolved" $resolved "scalar") (serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/swagger.yaml") $qp $auth.query)
   let accept_val = "application/yaml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1716,7 +1743,7 @@ export def "get-validation" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/apis/{owner}/{api}/{version}/validation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1757,7 +1784,7 @@ export def "search-domains" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1798,7 +1825,7 @@ export def "get-owner-domains" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/domains/{owner}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1838,7 +1865,7 @@ export def "delete-domain" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1876,7 +1903,7 @@ export def "get-domain-versions" [
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1920,9 +1947,9 @@ export def "save-domain-definition" [
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1964,7 +1991,7 @@ export def "rename-domain" [
   let qp = [(serialize-qp "newName" $new_name "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/rename") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2002,7 +2029,7 @@ export def "get-domain-default-version" [
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/settings/default") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2042,9 +2069,9 @@ export def "set-domain-default-version" [
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain)} | format pattern "/domains/{owner}/{domain}/settings/default") $auth.query)
   let req_body = {"version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2086,7 +2113,7 @@ export def "delete-domain-version" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2127,7 +2154,7 @@ export def "get-domain-definition" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2160,7 +2187,7 @@ export def "clone-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --private: oneof<nothing, bool> # Whether the new version should be public (`false`) or private (`true`) (e.g. false)
-  --body-version: string # The version identifier for the new version (e.g. 1.0.1)
+  --body-version: string # The version identifier for the new version (e.g. 1.0.1) (spec name: version)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2170,10 +2197,10 @@ export def "clone-domain" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/clone") $auth.query)
   let req_body = {"private": $private, "version": $body_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2213,7 +2240,7 @@ export def "get-domain-comments-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2257,9 +2284,9 @@ export def "add-domain-comment-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments") $auth.query)
   let req_body = {"body": $body, "position": $position, "replies": $replies} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2307,9 +2334,9 @@ export def "update-domain-comments-v2" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/comments/batch") $auth.query)
   let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2351,7 +2378,7 @@ export def "delete-domain-comment-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2396,9 +2423,9 @@ export def "update-domain-comment-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}") $auth.query)
   let req_body = {"body": $body, "position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2442,9 +2469,9 @@ export def "add-domain-comment-reply-v2" [
   if ($comment | is-empty) { error make --unspanned { msg: "path parameter 'comment' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2488,7 +2515,7 @@ export def "delete-domain-comment-reply-v2" [
   if ($reply | is-empty) { error make --unspanned { msg: "path parameter 'reply' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2534,9 +2561,9 @@ export def "update-domain-comment-reply-v2" [
   if ($reply | is-empty) { error make --unspanned { msg: "path parameter 'reply' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), reply: (encode-path-segment $reply)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/replies/{reply}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2580,7 +2607,7 @@ export def "set-domain-comment-status-v2" [
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version), comment: (encode-path-segment $comment), status: (encode-path-segment $status)} | format pattern "/domains/{owner}/{domain}/{version}/comments/{comment}/status/{status}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2620,7 +2647,7 @@ export def "get-domain-json-definition" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/domain.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2660,7 +2687,7 @@ export def "get-domain-yaml-definition" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/domain.yaml") $auth.query)
   let accept_val = "application/yaml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2693,10 +2720,10 @@ export def "fork-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/creating-api.html). Can be the name of an existing definition, in which case the fork will become a new version in that definition, unless that version already exists. (e.g. api-fork)
-  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme)
+  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme) (spec name: owner)
   --private: oneof<nothing, bool> # Whether the forked version should be public (`false`) or private (`true`). If the value is not set, the original version's setting will be used.
   --project: string # If forking into an organization, you can optionally specify an existing project to add the forked definition to.
-  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0)
+  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0) (spec name: version)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2706,11 +2733,11 @@ export def "fork-domain" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
   if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2750,7 +2777,7 @@ export def "get-domain-lifecycle-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2794,9 +2821,9 @@ export def "set-domain-lifecycle-settings" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/lifecycle") $qp $auth.query)
   let req_body = {"published": $published} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2836,7 +2863,7 @@ export def "get-domain-private-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/private") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2880,10 +2907,10 @@ export def "set-domain-private-settings" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), domain: (encode-path-segment $domain), version: (encode-path-segment $version)} | format pattern "/domains/{owner}/{domain}/{version}/settings/private") $qp $auth.query)
   let req_body = {"private": $private} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2923,7 +2950,7 @@ export def "get-user-projects" [
   let qp = [(serialize-qp "nameOnly" $name_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2964,7 +2991,7 @@ export def "get-org-projects-v2" [
   let qp = [(serialize-qp "nameOnly" $name_only "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/projects/{owner}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3005,9 +3032,9 @@ export def "create-project" [
   if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/projects/{owner}") $auth.query)
   let req_body = {"apis": $apis, "description": $description, "domains": $domains, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3045,7 +3072,7 @@ export def "delete-project-v2" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3083,7 +3110,7 @@ export def "get-project-v2" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3126,9 +3153,9 @@ export def "save-project-v2" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}") $auth.query)
   let req_body = {"apis": $apis, "description": $description, "domains": $domains, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3166,7 +3193,7 @@ export def "get-project-members-v2" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}/members") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3206,9 +3233,9 @@ export def "update-project-members-v2" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id)} | format pattern "/projects/{owner}/{project_id}/members") $auth.query)
   let req_body = {"members": $members} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3250,7 +3277,7 @@ export def "add-spec-to-project-v2" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), project_id: (encode-path-segment $project_id), spec_type: (encode-path-segment $spec_type), name: (encode-path-segment $name)} | format pattern "/projects/{owner}/{project_id}/{spec_type}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3294,7 +3321,7 @@ export def "search-apis-and-domains" [
   let qp = [(serialize-qp "specType" $spec_type "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/specs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3330,7 +3357,7 @@ export def "get-templates" [
   let qp = [(serialize-qp "owner" $owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3368,7 +3395,7 @@ export def "delete-template" [
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3406,7 +3433,7 @@ export def "get-template-versions" [
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3451,9 +3478,9 @@ export def "save-template-definition" [
   let qp = [(serialize-qp "isPrivate" $is_private "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "projectName" $project_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3494,7 +3521,7 @@ export def "rename-template" [
   let qp = [(serialize-qp "newName" $new_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id)} | format pattern "/templates/{owner}/{template_id}/rename") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3534,7 +3561,7 @@ export def "delete-template-version" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3576,7 +3603,7 @@ export def "get-template-definition" [
   let qp = [(serialize-qp "flatten" $flatten "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3616,7 +3643,7 @@ export def "get-template-comments" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3664,9 +3691,9 @@ export def "update-template-comments" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/comments/batch") $auth.query)
   let req_body = {"addComment": $add_comment, "addReply": $add_reply, "deleteComment": $delete_comment, "deleteReply": $delete_reply, "updateComment": $update_comment, "updateReply": $update_reply, "updateStatus": $update_status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3699,10 +3726,10 @@ export def "fork-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/creating-api.html). Can be the name of an existing definition, in which case the fork will become a new version in that definition, unless that version already exists. (e.g. api-fork)
-  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme)
+  --body-owner: string # The account to fork into. Can be an organization or user name. Case-sensitive. The authenticated user must have permissions to create definitions in this account. (e.g. acme) (spec name: owner)
   --private: oneof<nothing, bool> # Whether the forked version should be public (`false`) or private (`true`). If the value is not set, the original version's setting will be used.
   --project: string # If forking into an organization, you can optionally specify an existing project to add the forked definition to.
-  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0)
+  --body-version: string # Version identifier for the forked definition. Must follow the [naming rules](https://support.smartbear.com/swaggerhub/docs/apis/versioning.html#format). If forking into an existing definition, this version must not already exist. (e.g. 1.0.0) (spec name: version)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3712,11 +3739,11 @@ export def "fork-template" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/fork") $auth.query)
   let req_body = {"name": $name, "owner": $body_owner, "private": $private, "project": $project, "version": $body_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "owner") == null) { error make --unspanned { msg: "required body field 'owner' missing: pass --body-owner or pipe a record" } }
   if (($req_body | get -o "version") == null) { error make --unspanned { msg: "required body field 'version' missing: pass --body-version or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3756,7 +3783,7 @@ export def "get-template-lifecycle-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3800,9 +3827,9 @@ export def "set-template-lifecycle-settings" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/lifecycle") $qp $auth.query)
   let req_body = {"published": $published} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3842,7 +3869,7 @@ export def "get-template-private-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3884,10 +3911,10 @@ export def "set-template-private-settings" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), template_id: (encode-path-segment $template_id), version: (encode-path-segment $version)} | format pattern "/templates/{owner}/{template_id}/{version}/settings/private") $auth.query)
   let req_body = {"private": $private} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "private") == null) { error make --unspanned { msg: "required body field 'private' missing: pass --private or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

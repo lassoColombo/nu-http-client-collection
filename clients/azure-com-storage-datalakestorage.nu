@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -210,9 +237,9 @@ export def "filesystem-list" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -257,9 +284,9 @@ export def "filesystem-delete" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -308,9 +335,9 @@ export def "path-list" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "upn" $upn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -353,9 +380,9 @@ export def "filesystem-get-properties" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -401,9 +428,9 @@ export def "filesystem-set-properties" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -447,9 +474,9 @@ export def "filesystem-create" [
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -499,9 +526,9 @@ export def "path-delete" [
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -552,9 +579,9 @@ export def "path-read" [
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Range": $range, "x-ms-lease-id": $x_ms_lease_id, "x-ms-range-get-content-md5": $x_ms_range_get_content_md5, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -605,9 +632,9 @@ export def "path-get-properties" [
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "upn" $upn "scalar") (serialize-qp "fsAction" $fs_action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -675,11 +702,11 @@ export def "path-update" [
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "retainUncommittedData" $retain_uncommitted_data "scalar") (serialize-qp "close" $close "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-ms-lease-id": $x_ms_lease_id, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-md5": $x_ms_content_md5, "x-ms-properties": $x_ms_properties, "x-ms-owner": $x_ms_owner, "x-ms-group": $x_ms_group, "x-ms-permissions": $x_ms_permissions, "x-ms-acl": $x_ms_acl, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -732,9 +759,9 @@ export def "path-lease" [
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-action": $x_ms_lease_action, "x-ms-lease-duration": $x_ms_lease_duration, "x-ms-lease-break-period": $x_ms_lease_break_period, "x-ms-lease-id": $x_ms_lease_id, "x-ms-proposed-lease-id": $x_ms_proposed_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -803,9 +830,9 @@ export def "path-create" [
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Cache-Control": $cache_control, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Disposition": $content_disposition, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-rename-source": $x_ms_rename_source, "x-ms-lease-id": $x_ms_lease_id, "x-ms-source-lease-id": $x_ms_source_lease_id, "x-ms-properties": $x_ms_properties, "x-ms-permissions": $x_ms_permissions, "x-ms-umask": $x_ms_umask, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since, "x-ms-source-if-match": $x_ms_source_if_match, "x-ms-source-if-none-match": $x_ms_source_if_none_match, "x-ms-source-if-modified-since": $x_ms_source_if_modified_since, "x-ms-source-if-unmodified-since": $x_ms_source_if_unmodified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

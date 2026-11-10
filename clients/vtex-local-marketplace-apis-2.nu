@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -189,7 +216,7 @@ export def "getsuggestions" [
   --matcherid: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
   --from: int # Define your pagination range, by adding the pagination starting value. Values should be bigger than 0, with a maximum of 50 records per page. (format: int32, default: 1)
   --to: int # Define your pagination range, by adding the pagination ending value. Values should be bigger than 0, with a maximum of 50 records per page. (format: int32, default: 50)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -200,9 +227,9 @@ export def "getsuggestions" [
   let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "seller" $seller "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "hasmapping" $hasmapping "scalar") (serialize-qp "matcherid" $matcherid "scalar") (serialize-qp "_from" $from "scalar") (serialize-qp "_to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -232,7 +259,7 @@ export def "getaccountconfig" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> oneof<record<MatchFlux: string, Matchers: list<any>, Rules: record, Score: record, SpecificationsMapping: list<any>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -243,9 +270,9 @@ export def "getaccountconfig" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -275,7 +302,7 @@ export def "saveaccountconfig" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   match_flux: string # This field determines the type of approval configuration applied to SKUs received from a seller. The possible values include: - `default` where the Matcher reviews the SKU, and approves it based on its score - `manual` for manual approvals through the Received SKU UI or Match API - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
   matchers: list # Matchers for approving and rejecting SKUs received from sellers. — item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
@@ -291,13 +318,13 @@ export def "saveaccountconfig" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp $auth.query)
   let req_body = {"MatchFlux": $match_flux, "Matchers": $matchers, "Score": $score, "SpecificationsMapping": $specifications_mapping} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -328,7 +355,7 @@ export def "getauto-approvevaluefromconfig" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (required, default: seller123)
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> oneof<record<Enabled: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -340,9 +367,9 @@ export def "getauto-approvevaluefromconfig" [
   let qp = [(serialize-qp "sellerId" $seller_id "scalar") (serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -372,7 +399,7 @@ export def "saveautoapproveforaccount" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for an entire marketplace account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all received SKUs will be automatically approved on your store, regardless of the seller, or the Matcher Score. (default: true)
 ]: any -> oneof<record<Enabled: bool>, string, nothing> {
@@ -385,14 +412,14 @@ export def "saveautoapproveforaccount" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp $auth.query)
   let req_body = {"Enabled": $enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Enabled") == null) { error make --unspanned { msg: "required body field 'Enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -423,7 +450,7 @@ export def "saveautoapproveforaccountseller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for that specific seller account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all SKUs received from this seller will be automatically approved on your store regardless of the Matcher Score. (default: true)
 ]: any -> any {
@@ -437,14 +464,14 @@ export def "saveautoapproveforaccountseller" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/autoapproval/toggle/seller/{seller_id}") $qp $auth.query)
   let req_body = {"Enabled": $enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Enabled") == null) { error make --unspanned { msg: "required body field 'Enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -475,7 +502,7 @@ export def "getselleraccountconfig" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -487,9 +514,9 @@ export def "getselleraccountconfig" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -520,11 +547,11 @@ export def "putselleraccountconfig" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   --mapping: record # Mapping of SKU and product Specifications. This object should be sent in the following format for all fields you wish to map: {specificationName}:{specificationValue}, Example: Choose voltage: Voltage, Choose size: Size (nullable, default: {Choose size: Size, Choose type: Type, Choose voltage: Voltage, Choose volume: Volume})
   match_flux: string # This field determines the type of approval configuration applied to SKUs received from a seller. The possible values include: - `default` where the Matcher reviews the SKU, and approves it based on its score - `manual` for manual approvals through the Received SKU UI or Match API - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
-  --body-seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
+  --body-seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123) (spec name: sellerId)
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -536,14 +563,14 @@ export def "putselleraccountconfig" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp $auth.query)
   let req_body = {"mapping": $mapping, "matchFlux": $match_flux, "sellerId": $body_seller_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "sellerId") == null) { error make --unspanned { msg: "required body field 'sellerId' missing: pass --body-seller-id or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -575,7 +602,7 @@ export def "match-multiple" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json) (spec name: Accept)
   --body: record
 ]: any -> any {
   let input = $in
@@ -588,13 +615,13 @@ export def "match-multiple" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({action_name: (encode-path-segment $action_name)} | format pattern "/suggestions/matches/action/{action_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -626,7 +653,7 @@ export def "delete-suggestion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -639,9 +666,9 @@ export def "delete-suggestion" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -673,7 +700,7 @@ export def "get-suggestion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -686,9 +713,9 @@ export def "get-suggestion" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -720,7 +747,7 @@ export def "save-suggestion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account to which the seller wants to suggest a new SKU. It is used as part of the request URL. (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json, e.g. application/vnd.vtex.suggestion.v0+json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json, e.g. application/vnd.vtex.suggestion.v0+json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   available_quantity: int # format: int32
   brand_name: string # Name of the brand to which this SKU belongs. It must match the brand created in the marketplace.
@@ -736,7 +763,7 @@ export def "save-suggestion" [
   product_name: string # Name of the suggested product. This field has a limit of 150 characters. (default: "")
   --product-specifications: list # Array containing the names and values of the product specifications. — item shape: {fieldName?: string, fieldValues?: list<string>}
   ref_id: string # SKU reference code. Mandotory if the EAN is not informed. (default: REF10)
-  --body-seller-id: string # ID of the seller in the marketplace. This ID must be created by the marketplace and informed to the seller before the integration is built. (default: 1)
+  --body-seller-id: string # ID of the seller in the marketplace. This ID must be created by the marketplace and informed to the seller before the integration is built. (default: 1) (spec name: SellerId)
   --seller-stock-keeping-unit-id: int # ID of the SKU registered in the seller. (format: int32)
   sku_name: string # Name of the suggested SKU.
   --sku-specifications: list # Array containing the names and values of the SKU specifications. — item shape: {fieldName?: string, fieldValues?: list<string>}
@@ -755,14 +782,14 @@ export def "save-suggestion" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp $auth.query)
   let req_body = {"AvailableQuantity": $available_quantity, "BrandName": $brand_name, "CategoryFullPath": $category_full_path, "EAN": $ean, "Height": $height, "Images": $images, "Length": $length, "MeasurementUnit": $measurement_unit, "Pricing": $pricing, "ProductDescription": $product_description, "ProductId": $product_id, "ProductName": $product_name, "ProductSpecifications": $product_specifications, "RefId": $ref_id, "SellerId": $body_seller_id, "SellerStockKeepingUnitId": $seller_stock_keeping_unit_id, "SkuName": $sku_name, "SkuSpecifications": $sku_specifications, "UnitMultiplier": $unit_multiplier, "Weight": $weight, "Width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "SellerId") == null) { error make --unspanned { msg: "required body field 'SellerId' missing: pass --body-seller-id or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -794,7 +821,7 @@ export def "get-versions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -807,9 +834,9 @@ export def "get-versions" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -842,7 +869,7 @@ export def "get-suggestionbyversion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUGGESTIONS_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUGGESTIONS_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -856,9 +883,9 @@ export def "get-suggestionbyversion" [
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid), version: (encode-path-segment $version)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -892,7 +919,7 @@ export def "put-suggestions-seller-id-sellerskuid-versions-version-matches-match
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # Name of the VTEX account. Used as part of the URL (required, default: apiexamples)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
   match_type: string # Define the action you want to apply to each SKU. Values include: 1. `newproduct`: match the SKU as a new product. 2. `itemMatch`: associate the received SKU to an existing SKU. 3. `productMatch`: associate the received SKU to an existing product. 4. `deny`: deny the received SKU. 5. `pending`: the received SKU requires attention. 6. `incomplete`: the received SKU is lacking information to be matched. 7. `insufficientScore`: the score given by the Matcher to this received SKU doesn't qualify it to be matched. Note that if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: itemMatch)
   matcher_id: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
@@ -915,13 +942,13 @@ export def "put-suggestions-seller-id-sellerskuid-versions-version-matches-match
   let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), sellerskuid: (encode-path-segment $sellerskuid), version: (encode-path-segment $version), matchid: (encode-path-segment $matchid)} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}/matches/{matchid}") $qp $auth.query)
   let req_body = {"matchType": $match_type, "matcherId": $matcher_id, "product": $product, "productRef": $product_ref, "score": $score, "sku": $sku, "skuRef": $sku_ref} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url

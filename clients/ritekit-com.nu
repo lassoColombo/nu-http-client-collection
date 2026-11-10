@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -163,7 +190,7 @@ export def "auto-emojify" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/emoji/auto-emojify" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -200,7 +227,7 @@ export def "emoji-suggestions" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/emoji/suggestions" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -239,7 +266,7 @@ export def "animate-image" [
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/animate" $qp $auth.query)
   let accept_val = "image/gif"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -276,7 +303,7 @@ export def "company-logo" [
   let qp = [(serialize-qp "domain" $domain "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/logo" $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -344,7 +371,7 @@ export def "text-to-image" [
   let qp = [(serialize-qp "quote" $quote "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "fontSize" $font_size "scalar") (serialize-qp "quoteFont" $quote_font "scalar") (serialize-qp "quoteFontColor" $quote_font_color "scalar") (serialize-qp "authorFont" $author_font "scalar") (serialize-qp "authorFontColor" $author_font_color "scalar") (serialize-qp "enableHighlight" $enable_highlight "scalar") (serialize-qp "highlightColor" $highlight_color "scalar") (serialize-qp "bgType" $bg_type "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "gradientType" $gradient_type "scalar") (serialize-qp "gradientColor1" $gradient_color1 "scalar") (serialize-qp "gradientColor2" $gradient_color2 "scalar") (serialize-qp "brandLogo" $brand_logo "scalar") (serialize-qp "animation" $animation "scalar") (serialize-qp "showQuoteMark" $show_quote_mark "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/images/quote" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -378,7 +405,7 @@ export def "list-of-ct-as" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/link/cta" $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -417,7 +444,7 @@ export def "shorten-link" [
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "cta" $cta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/link/short-link" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -454,7 +481,7 @@ export def "trending-hashtags" [
   let qp = [(serialize-qp "green" $green "scalar") (serialize-qp "latin" $latin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/search/trending" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -493,7 +520,7 @@ export def "auto-hashtag" [
   let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "maxHashtags" $max_hashtags "scalar") (serialize-qp "hashtagPosition" $hashtag_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/auto-hashtag" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -530,7 +557,7 @@ export def "hashtag-suggestions" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/hashtag-suggestions" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -566,7 +593,7 @@ export def "hashtag-history" [
   if ($hashtag | is-empty) { error make --unspanned { msg: "path parameter 'hashtag' must be non-empty" } }
   let full_url = (build-url $base ({hashtag: (encode-path-segment $hashtag)} | format pattern "/v1/stats/history/{hashtag}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "hashtag-stats" [
   let qp = [(serialize-qp "tags" $tags "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/stats/multiple-hashtags" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -640,7 +667,7 @@ export def "hashtags-cleaner" [
   let qp = [(serialize-qp "post" $post "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/instagram/hashtags-cleaner" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -205,7 +232,7 @@ export def "servicebroker-projects-brokers-v2-service-instances-service-bindings
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -255,7 +282,7 @@ export def "servicebroker-projects-brokers-v2-service-instances-service-bindings
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -317,9 +344,9 @@ export def "servicebroker-projects-brokers-v2-service-instances-patch" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let req_body = {"context": $context, "createTime": $create_time, "deploymentName": $deployment_name, "description": $description, "instance_id": $instance_id, "organization_guid": $organization_guid, "parameters": $parameters, "plan_id": $plan_id, "previous_values": $previous_values, "resourceName": $resource_name, "service_id": $service_id, "space_guid": $space_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -370,7 +397,7 @@ export def "servicebroker-projects-brokers-v2-service-instances-service-bindings
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "planId" $plan_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/last_operation") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -420,7 +447,7 @@ export def "servicebroker-projects-brokers-instances-bindings-list" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/bindings") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -470,7 +497,7 @@ export def "servicebroker-projects-brokers-list" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -523,9 +550,9 @@ export def "servicebroker-projects-brokers-create" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/brokers") $qp $auth.query)
   let req_body = {"createTime": $create_time, "name": $name, "title": $title, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -575,7 +602,7 @@ export def "servicebroker-projects-brokers-instances-list" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/instances") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "servicebroker-projects-brokers-v2-service-instances-service-bindings
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --accepts-incomplete: oneof<nothing, bool> # See CreateServiceInstanceRequest for details.
   --bind-resource: record # A JSON object that contains data for platform resources associated with the binding to be created.
-  --body-binding-id: string # The id of the binding. Must be unique within GCP project. Maximum length is 64, GUID recommended. Required.
+  --body-binding-id: string # The id of the binding. Must be unique within GCP project. Maximum length is 64, GUID recommended. Required. (spec name: binding_id)
   --create-time: string # Output only. Timestamp for when the binding was created. (format: google-datetime)
   --deployment-name: string # Output only. String containing the Deployment Manager deployment name that was created for this binding,
   --parameters: record # Configuration options for the service binding.
@@ -635,9 +662,9 @@ export def "servicebroker-projects-brokers-v2-service-instances-service-bindings
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent), binding_id: (encode-path-segment $binding_id)} | format pattern "/v1beta1/{parent}/service_bindings/{binding_id}") $qp $auth.query)
   let req_body = {"bind_resource": $bind_resource, "binding_id": $body_binding_id, "createTime": $create_time, "deploymentName": $deployment_name, "parameters": $parameters, "plan_id": $plan_id, "resourceName": $resource_name, "service_id": $service_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -687,7 +714,7 @@ export def "servicebroker-projects-brokers-v2-catalog-list" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/v2/catalog") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -734,7 +761,7 @@ export def "servicebroker-projects-brokers-v2-service-instances-create" [
   --create-time: string # Output only. Timestamp for when the instance was created. (format: google-datetime)
   --deployment-name: string # Output only. String containing the Deployment Manager deployment name that was created for this instance,
   --description: string # To return errors when GetInstance call is done via HTTP to be unified with other methods.
-  --body-instance-id: string # The id of the service instance. Must be unique within GCP project. Maximum length is 64, GUID recommended. Required.
+  --body-instance-id: string # The id of the service instance. Must be unique within GCP project. Maximum length is 64, GUID recommended. Required. (spec name: instance_id)
   --organization-guid: string # The platform GUID for the organization under which the service is to be provisioned. Required.
   --parameters: record # Configuration options for the service instance. Parameters is JSON object serialized to string.
   --plan-id: string # The ID of the plan. See `Service` and `Plan` resources for details. Maximum length is 64, GUID recommended. Required.
@@ -751,9 +778,9 @@ export def "servicebroker-projects-brokers-v2-service-instances-create" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "acceptsIncomplete" $accepts_incomplete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent), instance_id: (encode-path-segment $instance_id)} | format pattern "/v1beta1/{parent}/v2/service_instances/{instance_id}") $qp $auth.query)
   let req_body = {"context": $context, "createTime": $create_time, "deploymentName": $deployment_name, "description": $description, "instance_id": $body_instance_id, "organization_guid": $organization_guid, "parameters": $parameters, "plan_id": $plan_id, "previous_values": $previous_values, "resourceName": $resource_name, "service_id": $service_id, "space_guid": $space_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -802,7 +829,7 @@ export def "servicebroker-get-iam-policy" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "options.requestedPolicyVersion" $options_requested_policy_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:getIamPolicy") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -852,9 +879,9 @@ export def "servicebroker-set-iam-policy" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:setIamPolicy") $qp $auth.query)
   let req_body = {"policy": $policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -904,9 +931,9 @@ export def "servicebroker-test-iam-permissions" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/v1beta1/{resource}:testIamPermissions") $qp $auth.query)
   let req_body = {"permissions": $permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

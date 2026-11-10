@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -201,7 +228,7 @@ export def "get-addresses-output-format" [
   let qp = [(serialize-qp "addressString" $address_string "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "interpolation" $interpolation "scalar") (serialize-qp "echo" $echo "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "autoComplete" $auto_complete "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minScore" $min_score "scalar") (serialize-qp "matchPrecision" $match_precision "scalar") (serialize-qp "matchPrecisionNot" $match_precision_not "scalar") (serialize-qp "siteName" $site_name "scalar") (serialize-qp "unitDesignator" $unit_designator "scalar") (serialize-qp "unitNumber" $unit_number "scalar") (serialize-qp "unitNumberSuffix" $unit_number_suffix "scalar") (serialize-qp "civicNumber" $civic_number "scalar") (serialize-qp "civicNumberSuffix" $civic_number_suffix "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "streetType" $street_type "scalar") (serialize-qp "streetDirection" $street_direction "scalar") (serialize-qp "streetQualifier" $street_qualifier "scalar") (serialize-qp "localityName" $locality_name "scalar") (serialize-qp "provinceCode" $province_code "scalar") (serialize-qp "localities" $localities "scalar") (serialize-qp "notLocalities" $not_localities "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "centre" $centre "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "extrapolate" $extrapolate "scalar") (serialize-qp "parcelPoint" $parcel_point "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/addresses.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -245,7 +272,7 @@ export def "get-intersections-near-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -287,7 +314,7 @@ export def "get-intersections-nearest-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -329,7 +356,7 @@ export def "get-intersections-within-output-format" [
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minDegree" $min_degree "scalar") (serialize-qp "maxDegree" $max_degree "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/intersections/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -368,7 +395,7 @@ export def "get-intersections-intersection-id-output-format" [
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({intersection_id: (encode-path-segment $intersection_id), output_format: (encode-path-segment $output_format)} | format pattern "/intersections/{intersection_id}.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -436,7 +463,7 @@ export def "get-occupants-addresses-output-format" [
   let qp = [(serialize-qp "addressString" $address_string "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "interpolation" $interpolation "scalar") (serialize-qp "echo" $echo "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "autoComplete" $auto_complete "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "minScore" $min_score "scalar") (serialize-qp "matchPrecision" $match_precision "scalar") (serialize-qp "matchPrecisionNot" $match_precision_not "scalar") (serialize-qp "siteName" $site_name "scalar") (serialize-qp "unitDesignator" $unit_designator "scalar") (serialize-qp "unitNumber" $unit_number "scalar") (serialize-qp "unitNumberSuffix" $unit_number_suffix "scalar") (serialize-qp "civicNumber" $civic_number "scalar") (serialize-qp "civicNumberSuffix" $civic_number_suffix "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "streetType" $street_type "scalar") (serialize-qp "streetDirection" $street_direction "scalar") (serialize-qp "streetQualifier" $street_qualifier "scalar") (serialize-qp "localityName" $locality_name "scalar") (serialize-qp "provinceCode" $province_code "scalar") (serialize-qp "localities" $localities "scalar") (serialize-qp "notLocalities" $not_localities "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "centre" $centre "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "extrapolate" $extrapolate "scalar") (serialize-qp "parcelPoint" $parcel_point "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/addresses.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -481,7 +508,7 @@ export def "get-occupants-near-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -525,7 +552,7 @@ export def "get-occupants-nearest-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -569,7 +596,7 @@ export def "get-occupants-within-output-format" [
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/occupants/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -611,7 +638,7 @@ export def "get-occupants-occupant-id-output-format" [
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({occupant_id: (encode-path-segment $occupant_id), output_format: (encode-path-segment $output_format)} | format pattern "/occupants/{occupant_id}.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -648,7 +675,7 @@ export def "get-parcels-pids-site-id-output-format" [
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/parcels/pids/{site_id}.{output_format}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -694,7 +721,7 @@ export def "get-sites-near-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/near.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -739,7 +766,7 @@ export def "get-sites-nearest-output-format" [
   let qp = [(serialize-qp "point" $point "scalar") (serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/nearest.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -784,7 +811,7 @@ export def "get-sites-within-output-format" [
   let qp = [(serialize-qp "bbox" $bbox "scalar") (serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "setBack" $set_back "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "excludeUnits" $exclude_units "scalar") (serialize-qp "onlyCivic" $only_civic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({output_format: (encode-path-segment $output_format)} | format pattern "/sites/within.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -826,7 +853,7 @@ export def "get-sites-site-id-output-format" [
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/sites/{site_id}.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -868,7 +895,7 @@ export def "get-sites-site-id-subsites-output-format" [
   let qp = [(serialize-qp "outputSRS" $output_srs "scalar") (serialize-qp "locationDescriptor" $location_descriptor "scalar") (serialize-qp "brief" $brief "scalar") (serialize-qp "setBack" $set_back "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id), output_format: (encode-path-segment $output_format)} | format pattern "/sites/{site_id}/subsites.{output_format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

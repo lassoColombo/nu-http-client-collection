@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -198,7 +225,7 @@ export def "adexchangebuyer-accounts-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -242,7 +269,7 @@ export def "adexchangebuyer-accounts-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -284,7 +311,7 @@ export def "adexchangebuyer-accounts-patch" [
   --bidder-location: list # Your bidder locations that have distinct URLs. — item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
   --cookie-matching-nid: string # The nid parameter value used in cookie match requests. Please contact your technical account manager if you need to change this.
   --cookie-matching-url: string # The base URL used in cookie match requests.
-  --body-id: int # Account id. (format: int32)
+  --body-id: int # Account id. (format: int32) (spec name: id)
   --kind: string # Resource type. (default: adexchangebuyer#account)
   --maximum-active-creatives: int # The maximum number of active creatives that an account can have, where a creative is active if it was inserted or bid with in the last 30 days. Please contact your technical account manager if you need to change this. (format: int32)
   --maximum-total-qps: int # The sum of all bidderLocation.maximumQps values cannot exceed this. Please contact your technical account manager if you need to change this. (format: int32)
@@ -297,9 +324,9 @@ export def "adexchangebuyer-accounts-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "confirmUnsafeAccountChange" $confirm_unsafe_account_change "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $qp $auth.query)
   let req_body = {"applyPretargetingToNonGuaranteedDeals": $apply_pretargeting_to_non_guaranteed_deals, "bidderLocation": $bidder_location, "cookieMatchingNid": $cookie_matching_nid, "cookieMatchingUrl": $cookie_matching_url, "id": $body_id, "kind": $kind, "maximumActiveCreatives": $maximum_active_creatives, "maximumTotalQps": $maximum_total_qps, "numberActiveCreatives": $number_active_creatives} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -341,7 +368,7 @@ export def "adexchangebuyer-accounts-update" [
   --bidder-location: list # Your bidder locations that have distinct URLs. — item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
   --cookie-matching-nid: string # The nid parameter value used in cookie match requests. Please contact your technical account manager if you need to change this.
   --cookie-matching-url: string # The base URL used in cookie match requests.
-  --body-id: int # Account id. (format: int32)
+  --body-id: int # Account id. (format: int32) (spec name: id)
   --kind: string # Resource type. (default: adexchangebuyer#account)
   --maximum-active-creatives: int # The maximum number of active creatives that an account can have, where a creative is active if it was inserted or bid with in the last 30 days. Please contact your technical account manager if you need to change this. (format: int32)
   --maximum-total-qps: int # The sum of all bidderLocation.maximumQps values cannot exceed this. Please contact your technical account manager if you need to change this. (format: int32)
@@ -354,9 +381,9 @@ export def "adexchangebuyer-accounts-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "confirmUnsafeAccountChange" $confirm_unsafe_account_change "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $qp $auth.query)
   let req_body = {"applyPretargetingToNonGuaranteedDeals": $apply_pretargeting_to_non_guaranteed_deals, "bidderLocation": $bidder_location, "cookieMatchingNid": $cookie_matching_nid, "cookieMatchingUrl": $cookie_matching_url, "id": $body_id, "kind": $kind, "maximumActiveCreatives": $maximum_active_creatives, "maximumTotalQps": $maximum_total_qps, "numberActiveCreatives": $number_active_creatives} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -398,7 +425,7 @@ export def "adexchangebuyer-billing-info-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/billinginfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -442,7 +469,7 @@ export def "adexchangebuyer-billing-info-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/billinginfo/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -488,7 +515,7 @@ export def "adexchangebuyer-budget-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), billing_id: (encode-path-segment $billing_id)} | format pattern "/billinginfo/{account_id}/{billing_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -526,8 +553,8 @@ export def "adexchangebuyer-budget-patch" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --body-account-id: string # The id of the account. This is required for get and update requests. (format: int64)
-  --body-billing-id: string # The billing id to determine which adgroup to provide budget information for. This is required for get and update requests. (format: int64)
+  --body-account-id: string # The id of the account. This is required for get and update requests. (format: int64) (spec name: accountId)
+  --body-billing-id: string # The billing id to determine which adgroup to provide budget information for. This is required for get and update requests. (format: int64) (spec name: billingId)
   --budget-amount: string # The daily budget amount in unit amount of the account currency to apply for the billingId provided. This is required for update requests. (format: int64)
   --currency-code: string # The currency code for the buyer. This cannot be altered here.
   --id: string # The unique id that describes this item.
@@ -541,9 +568,9 @@ export def "adexchangebuyer-budget-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), billing_id: (encode-path-segment $billing_id)} | format pattern "/billinginfo/{account_id}/{billing_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "billingId": $body_billing_id, "budgetAmount": $budget_amount, "currencyCode": $currency_code, "id": $id, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -581,8 +608,8 @@ export def "adexchangebuyer-budget-update" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-  --body-account-id: string # The id of the account. This is required for get and update requests. (format: int64)
-  --body-billing-id: string # The billing id to determine which adgroup to provide budget information for. This is required for get and update requests. (format: int64)
+  --body-account-id: string # The id of the account. This is required for get and update requests. (format: int64) (spec name: accountId)
+  --body-billing-id: string # The billing id to determine which adgroup to provide budget information for. This is required for get and update requests. (format: int64) (spec name: billingId)
   --budget-amount: string # The daily budget amount in unit amount of the account currency to apply for the billingId provided. This is required for update requests. (format: int64)
   --currency-code: string # The currency code for the buyer. This cannot be altered here.
   --id: string # The unique id that describes this item.
@@ -596,9 +623,9 @@ export def "adexchangebuyer-budget-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), billing_id: (encode-path-segment $billing_id)} | format pattern "/billinginfo/{account_id}/{billing_id}") $qp $auth.query)
   let req_body = {"accountId": $body_account_id, "billingId": $body_billing_id, "budgetAmount": $budget_amount, "currencyCode": $currency_code, "id": $id, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -646,7 +673,7 @@ export def "adexchangebuyer-creatives-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "accountId" $account_id "multi") (serialize-qp "buyerCreativeId" $buyer_creative_id "multi") (serialize-qp "dealsStatusFilter" $deals_status_filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "openAuctionStatusFilter" $open_auction_status_filter "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/creatives" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -720,9 +747,9 @@ export def "adexchangebuyer-creatives-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/creatives" $qp $auth.query)
   let req_body = {"HTMLSnippet": $html_snippet, "accountId": $account_id, "adChoicesDestinationUrl": $ad_choices_destination_url, "adTechnologyProviders": $ad_technology_providers, "advertiserId": $advertiser_id, "advertiserName": $advertiser_name, "agencyId": $agency_id, "apiUploadTimestamp": $api_upload_timestamp, "attribute": $attribute, "buyerCreativeId": $buyer_creative_id, "clickThroughUrl": $click_through_url, "corrections": $corrections, "creativeStatusIdentityType": $creative_status_identity_type, "dealsStatus": $deals_status, "detectedDomains": $detected_domains, "filteringReasons": $filtering_reasons, "height": $height, "impressionTrackingUrl": $impression_tracking_url, "kind": $kind, "languages": $languages, "nativeAd": $native_ad, "openAuctionStatus": $open_auction_status, "productCategories": $product_categories, "restrictedCategories": $restricted_categories, "sensitiveCategories": $sensitive_categories, "servingRestrictions": $serving_restrictions, "vendorType": $vendor_type, "version": $version, "videoURL": $video_url, "videoVastXML": $video_vast_xml, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -768,7 +795,7 @@ export def "adexchangebuyer-creatives-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), buyer_creative_id: (encode-path-segment $buyer_creative_id)} | format pattern "/creatives/{account_id}/{buyer_creative_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -816,7 +843,7 @@ export def "adexchangebuyer-creatives-add-deal" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), buyer_creative_id: (encode-path-segment $buyer_creative_id), deal_id: (encode-path-segment $deal_id)} | format pattern "/creatives/{account_id}/{buyer_creative_id}/addDeal/{deal_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -862,7 +889,7 @@ export def "adexchangebuyer-creatives-list-deals" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), buyer_creative_id: (encode-path-segment $buyer_creative_id)} | format pattern "/creatives/{account_id}/{buyer_creative_id}/listDeals") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -910,7 +937,7 @@ export def "adexchangebuyer-creatives-remove-deal" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), buyer_creative_id: (encode-path-segment $buyer_creative_id), deal_id: (encode-path-segment $deal_id)} | format pattern "/creatives/{account_id}/{buyer_creative_id}/removeDeal/{deal_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -960,7 +987,7 @@ export def "adexchangebuyer-performance-report-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/performancereport" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1004,7 +1031,7 @@ export def "adexchangebuyer-pretargeting-config-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/pretargetingconfigs/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1076,9 +1103,9 @@ export def "adexchangebuyer-pretargeting-config-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/pretargetingconfigs/{account_id}") $qp $auth.query)
   let req_body = {"billingId": $billing_id, "configId": $config_id, "configName": $config_name, "creativeType": $creative_type, "dimensions": $dimensions, "excludedContentLabels": $excluded_content_labels, "excludedGeoCriteriaIds": $excluded_geo_criteria_ids, "excludedPlacements": $excluded_placements, "excludedUserLists": $excluded_user_lists, "excludedVerticals": $excluded_verticals, "geoCriteriaIds": $geo_criteria_ids, "isActive": $is_active, "kind": $kind, "languages": $languages, "maximumQps": $maximum_qps, "minimumViewabilityDecile": $minimum_viewability_decile, "mobileCarriers": $mobile_carriers, "mobileDevices": $mobile_devices, "mobileOperatingSystemVersions": $mobile_operating_system_versions, "placements": $placements, "platforms": $platforms, "supportedCreativeAttributes": $supported_creative_attributes, "userIdentifierDataRequired": $user_identifier_data_required, "userLists": $user_lists, "vendorTypes": $vendor_types, "verticals": $verticals, "videoPlayerSizes": $video_player_sizes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1124,7 +1151,7 @@ export def "adexchangebuyer-pretargeting-config-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), config_id: (encode-path-segment $config_id)} | format pattern "/pretargetingconfigs/{account_id}/{config_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1170,7 +1197,7 @@ export def "adexchangebuyer-pretargeting-config-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), config_id: (encode-path-segment $config_id)} | format pattern "/pretargetingconfigs/{account_id}/{config_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1209,7 +1236,7 @@ export def "adexchangebuyer-pretargeting-config-patch" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --billing-id: string # The id for billing purposes, provided for reference. Leave this field blank for insert requests; the id will be generated automatically. (format: int64)
-  --body-config-id: string # The config id; generated automatically. Leave this field blank for insert requests. (format: int64)
+  --body-config-id: string # The config id; generated automatically. Leave this field blank for insert requests. (format: int64) (spec name: configId)
   --config-name: string # The name of the config. Must be unique. Required for all requests.
   --creative-type: list<string> # List must contain exactly one of PRETARGETING_CREATIVE_TYPE_HTML or PRETARGETING_CREATIVE_TYPE_VIDEO.
   --dimensions: list # Requests which allow one of these (width, height) pairs will match. All pairs must be supported ad dimensions. — item shape: {height?: string, width?: string}
@@ -1244,9 +1271,9 @@ export def "adexchangebuyer-pretargeting-config-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), config_id: (encode-path-segment $config_id)} | format pattern "/pretargetingconfigs/{account_id}/{config_id}") $qp $auth.query)
   let req_body = {"billingId": $billing_id, "configId": $body_config_id, "configName": $config_name, "creativeType": $creative_type, "dimensions": $dimensions, "excludedContentLabels": $excluded_content_labels, "excludedGeoCriteriaIds": $excluded_geo_criteria_ids, "excludedPlacements": $excluded_placements, "excludedUserLists": $excluded_user_lists, "excludedVerticals": $excluded_verticals, "geoCriteriaIds": $geo_criteria_ids, "isActive": $is_active, "kind": $kind, "languages": $languages, "maximumQps": $maximum_qps, "minimumViewabilityDecile": $minimum_viewability_decile, "mobileCarriers": $mobile_carriers, "mobileDevices": $mobile_devices, "mobileOperatingSystemVersions": $mobile_operating_system_versions, "placements": $placements, "platforms": $platforms, "supportedCreativeAttributes": $supported_creative_attributes, "userIdentifierDataRequired": $user_identifier_data_required, "userLists": $user_lists, "vendorTypes": $vendor_types, "verticals": $verticals, "videoPlayerSizes": $video_player_sizes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1285,7 +1312,7 @@ export def "adexchangebuyer-pretargeting-config-update" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --billing-id: string # The id for billing purposes, provided for reference. Leave this field blank for insert requests; the id will be generated automatically. (format: int64)
-  --body-config-id: string # The config id; generated automatically. Leave this field blank for insert requests. (format: int64)
+  --body-config-id: string # The config id; generated automatically. Leave this field blank for insert requests. (format: int64) (spec name: configId)
   --config-name: string # The name of the config. Must be unique. Required for all requests.
   --creative-type: list<string> # List must contain exactly one of PRETARGETING_CREATIVE_TYPE_HTML or PRETARGETING_CREATIVE_TYPE_VIDEO.
   --dimensions: list # Requests which allow one of these (width, height) pairs will match. All pairs must be supported ad dimensions. — item shape: {height?: string, width?: string}
@@ -1320,9 +1347,9 @@ export def "adexchangebuyer-pretargeting-config-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), config_id: (encode-path-segment $config_id)} | format pattern "/pretargetingconfigs/{account_id}/{config_id}") $qp $auth.query)
   let req_body = {"billingId": $billing_id, "configId": $body_config_id, "configName": $config_name, "creativeType": $creative_type, "dimensions": $dimensions, "excludedContentLabels": $excluded_content_labels, "excludedGeoCriteriaIds": $excluded_geo_criteria_ids, "excludedPlacements": $excluded_placements, "excludedUserLists": $excluded_user_lists, "excludedVerticals": $excluded_verticals, "geoCriteriaIds": $geo_criteria_ids, "isActive": $is_active, "kind": $kind, "languages": $languages, "maximumQps": $maximum_qps, "minimumViewabilityDecile": $minimum_viewability_decile, "mobileCarriers": $mobile_carriers, "mobileDevices": $mobile_devices, "mobileOperatingSystemVersions": $mobile_operating_system_versions, "placements": $placements, "platforms": $platforms, "supportedCreativeAttributes": $supported_creative_attributes, "userIdentifierDataRequired": $user_identifier_data_required, "userLists": $user_lists, "vendorTypes": $vendor_types, "verticals": $verticals, "videoPlayerSizes": $video_player_sizes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1371,9 +1398,9 @@ export def "adexchangebuyer-marketplaceprivateauction-updateproposal" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({private_auction_id: (encode-path-segment $private_auction_id)} | format pattern "/privateauction/{private_auction_id}/updateproposal") $qp $auth.query)
   let req_body = {"externalDealId": $external_deal_id, "note": $note, "proposalRevisionNumber": $proposal_revision_number, "updateAction": $update_action} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1416,7 +1443,7 @@ export def "adexchangebuyer-products-search" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pqlQuery" $pql_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1460,7 +1487,7 @@ export def "adexchangebuyer-products-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/products/{product_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1505,9 +1532,9 @@ export def "adexchangebuyer-proposals-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/proposals/insert" $qp $auth.query)
   let req_body = {"proposals": $proposals, "webPropertyCode": $web_property_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1550,7 +1577,7 @@ export def "adexchangebuyer-proposals-search" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pqlQuery" $pql_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/proposals/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1594,7 +1621,7 @@ export def "adexchangebuyer-proposals-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1639,7 +1666,7 @@ export def "adexchangebuyer-marketplacedeals-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pqlQuery" $pql_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/deals") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1687,9 +1714,9 @@ export def "adexchangebuyer-marketplacedeals-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/deals/delete") $qp $auth.query)
   let req_body = {"dealIds": $deal_ids, "proposalRevisionNumber": $proposal_revision_number, "updateAction": $update_action} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1737,9 +1764,9 @@ export def "adexchangebuyer-marketplacedeals-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/deals/insert") $qp $auth.query)
   let req_body = {"deals": $deals, "proposalRevisionNumber": $proposal_revision_number, "updateAction": $update_action} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1788,9 +1815,9 @@ export def "adexchangebuyer-marketplacedeals-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/deals/update") $qp $auth.query)
   let req_body = {"deals": $deals, "proposal": $proposal, "proposalRevisionNumber": $proposal_revision_number, "updateAction": $update_action} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1835,7 +1862,7 @@ export def "adexchangebuyer-marketplacenotes-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pqlQuery" $pql_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/notes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1881,9 +1908,9 @@ export def "adexchangebuyer-marketplacenotes-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/notes/insert") $qp $auth.query)
   let req_body = {"notes": $notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1927,7 +1954,7 @@ export def "adexchangebuyer-proposals-setupcomplete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id)} | format pattern "/proposals/{proposal_id}/setupcomplete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1983,9 +2010,9 @@ export def "adexchangebuyer-proposals-patch" [
   --negotiation-id: string # Optional negotiation id if this proposal is a preferred deal proposal.
   --originator-role: string # Indicates whether the buyer/seller created the proposal.(readonly)
   --private-auction-id: string # Optional private auction id if this proposal is a private auction proposal.
-  --body-proposal-id: string # The unique id of the proposal. (readonly).
+  --body-proposal-id: string # The unique id of the proposal. (readonly). (spec name: proposalId)
   --proposal-state: string # The current state of the proposal. (readonly)
-  --body-revision-number: string # The revision number for the proposal (readonly). (format: int64)
+  --body-revision-number: string # The revision number for the proposal (readonly). (format: int64) (spec name: revisionNumber)
   --revision-time-ms: string # The time (ms since epoch) when the proposal was last revised (readonly). (format: int64)
   --seller: record # shape: {accountId?: string, subAccountId?: string}
   --seller-contacts: list # Optional contact information of the seller (buyer-readonly). — item shape: {email?: string, name?: string}
@@ -1999,9 +2026,9 @@ export def "adexchangebuyer-proposals-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id), revision_number: (encode-path-segment $revision_number), update_action: (encode-path-segment $update_action)} | format pattern "/proposals/{proposal_id}/{revision_number}/{update_action}") $qp $auth.query)
   let req_body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "dbmAdvertiserIds": $dbm_advertiser_ids, "hasBuyerSignedOff": $has_buyer_signed_off, "hasSellerSignedOff": $has_seller_signed_off, "inventorySource": $inventory_source, "isRenegotiating": $is_renegotiating, "isSetupComplete": $is_setup_complete, "kind": $kind, "labels": $labels, "lastUpdaterOrCommentorRole": $last_updater_or_commentor_role, "name": $name, "negotiationId": $negotiation_id, "originatorRole": $originator_role, "privateAuctionId": $private_auction_id, "proposalId": $body_proposal_id, "proposalState": $proposal_state, "revisionNumber": $body_revision_number, "revisionTimeMs": $revision_time_ms, "seller": $seller, "sellerContacts": $seller_contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2057,9 +2084,9 @@ export def "adexchangebuyer-proposals-update" [
   --negotiation-id: string # Optional negotiation id if this proposal is a preferred deal proposal.
   --originator-role: string # Indicates whether the buyer/seller created the proposal.(readonly)
   --private-auction-id: string # Optional private auction id if this proposal is a private auction proposal.
-  --body-proposal-id: string # The unique id of the proposal. (readonly).
+  --body-proposal-id: string # The unique id of the proposal. (readonly). (spec name: proposalId)
   --proposal-state: string # The current state of the proposal. (readonly)
-  --body-revision-number: string # The revision number for the proposal (readonly). (format: int64)
+  --body-revision-number: string # The revision number for the proposal (readonly). (format: int64) (spec name: revisionNumber)
   --revision-time-ms: string # The time (ms since epoch) when the proposal was last revised (readonly). (format: int64)
   --seller: record # shape: {accountId?: string, subAccountId?: string}
   --seller-contacts: list # Optional contact information of the seller (buyer-readonly). — item shape: {email?: string, name?: string}
@@ -2073,9 +2100,9 @@ export def "adexchangebuyer-proposals-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({proposal_id: (encode-path-segment $proposal_id), revision_number: (encode-path-segment $revision_number), update_action: (encode-path-segment $update_action)} | format pattern "/proposals/{proposal_id}/{revision_number}/{update_action}") $qp $auth.query)
   let req_body = {"billedBuyer": $billed_buyer, "buyer": $buyer, "buyerContacts": $buyer_contacts, "buyerPrivateData": $buyer_private_data, "dbmAdvertiserIds": $dbm_advertiser_ids, "hasBuyerSignedOff": $has_buyer_signed_off, "hasSellerSignedOff": $has_seller_signed_off, "inventorySource": $inventory_source, "isRenegotiating": $is_renegotiating, "isSetupComplete": $is_setup_complete, "kind": $kind, "labels": $labels, "lastUpdaterOrCommentorRole": $last_updater_or_commentor_role, "name": $name, "negotiationId": $negotiation_id, "originatorRole": $originator_role, "privateAuctionId": $private_auction_id, "proposalId": $body_proposal_id, "proposalState": $proposal_state, "revisionNumber": $body_revision_number, "revisionTimeMs": $revision_time_ms, "seller": $seller, "sellerContacts": $seller_contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2119,7 +2146,7 @@ export def "adexchangebuyer-pubprofiles-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/publisher/{account_id}/profiles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

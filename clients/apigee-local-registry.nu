@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,7 +221,7 @@ export def "registry-list-apis" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -243,9 +270,9 @@ export def "registry-create-api" [
   let qp = [(serialize-qp "apiId" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp $auth.query)
   let req_body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -287,7 +314,7 @@ export def "registry-delete-api" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -327,7 +354,7 @@ export def "registry-get-api" [
   if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -379,9 +406,9 @@ export def "registry-update-api" [
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp $auth.query)
   let req_body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -425,7 +452,7 @@ export def "registry-list-api-deployments" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -478,9 +505,9 @@ export def "registry-create-api-deployment" [
   let qp = [(serialize-qp "apiDeploymentId" $api_deployment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp $auth.query)
   let req_body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -524,7 +551,7 @@ export def "registry-delete-api-deployment" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -566,7 +593,7 @@ export def "registry-get-api-deployment" [
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -622,9 +649,9 @@ export def "registry-update-api-deployment" [
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp $auth.query)
   let req_body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -666,7 +693,7 @@ export def "registry-delete-api-deployment-revision" [
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:deleteRevision") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -711,7 +738,7 @@ export def "registry-list-api-deployment-revisions" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:listRevisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -756,9 +783,9 @@ export def "registry-rollback-api-deployment" [
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:rollback") $auth.query)
   let req_body = {"name": $name, "revisionId": $revision_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -803,9 +830,9 @@ export def "registry-tag-api-deployment-revision" [
   if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:tagRevision") $auth.query)
   let req_body = {"name": $name, "tag": $tag} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -849,7 +876,7 @@ export def "registry-list-api-versions" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -898,9 +925,9 @@ export def "registry-create-api-version" [
   let qp = [(serialize-qp "apiVersionId" $api_version_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp $auth.query)
   let req_body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -944,7 +971,7 @@ export def "registry-delete-api-version" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -986,7 +1013,7 @@ export def "registry-get-api-version" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1038,9 +1065,9 @@ export def "registry-update-api-version" [
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp $auth.query)
   let req_body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1086,7 +1113,7 @@ export def "registry-list-api-specs" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1139,9 +1166,9 @@ export def "registry-create-api-spec" [
   let qp = [(serialize-qp "apiSpecId" $api_spec_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp $auth.query)
   let req_body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1187,7 +1214,7 @@ export def "registry-delete-api-spec" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1231,7 +1258,7 @@ export def "registry-get-api-spec" [
   if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1287,9 +1314,9 @@ export def "registry-update-api-spec" [
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp $auth.query)
   let req_body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1333,7 +1360,7 @@ export def "registry-delete-api-spec-revision" [
   if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:deleteRevision") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1378,7 +1405,7 @@ export def "registry-get-api-spec-contents" [
   if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:getContents") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1425,7 +1452,7 @@ export def "registry-list-api-spec-revisions" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:listRevisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1472,9 +1499,9 @@ export def "registry-rollback-api-spec" [
   if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:rollback") $auth.query)
   let req_body = {"name": $name, "revisionId": $revision_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1521,9 +1548,9 @@ export def "registry-tag-api-spec-revision" [
   if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:tagRevision") $auth.query)
   let req_body = {"name": $name, "tag": $tag} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1565,7 +1592,7 @@ export def "registry-list-artifacts" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "registry-create-artifact" [
   let qp = [(serialize-qp "artifactId" $artifact_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp $auth.query)
   let req_body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1651,7 +1678,7 @@ export def "registry-delete-artifact" [
   if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1691,7 +1718,7 @@ export def "registry-get-artifact" [
   if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1735,9 +1762,9 @@ export def "registry-replace-artifact" [
   if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}") $auth.query)
   let req_body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1778,7 +1805,7 @@ export def "registry-get-artifact-contents" [
   if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}:getContents") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

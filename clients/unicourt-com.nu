@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -61,9 +84,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -86,9 +111,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +177,9 @@ def case-status-completer [] { ["closed" "open"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attorney-by-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-attorney-by-id" "get-attorney-associated-parties" "get-billing-usage-by-billing-cycle" "get-billing-cycles" "get-callbacks" "get-case" "get-case-attorneys" "get-case-docket-entries" "get-primary-documents-for-docket-entries" "get-secondary-documents-for-docket-entries" "get-case-documents" "get-case-hearings" "get-case-judges" "get-case-parties" "get-case-related-cases" "get-case-count-analytics-by-area-of-law" "get-case-count-analytics-by-case-class" "get-case-count-analytics-by-case-filed-date" "get-case-count-analytics-by-case-type" "get-case-count-analytics-by-case-type-group" "get-case-count-analytics-by-court" "get-case-count-analytics-by-court-location" "get-case-count-analytics-by-court-system" "get-case-count-analytics-by-court-type" "get-case-count-analytics-by-jurisdiction-geo" "get-case-count-analytics-by-norm-attorney" "get-case-count-analytics-by-norm-judge" "get-case-count-analytics-by-norm-law-firm" "get-case-count-analytics-by-norm-party" "get-case-count-analytics-by-party-role" "get-case-count-analytics-by-party-role-group" "get-document-by-id" "get-case-document-download-by-id" "order-case-document" "get-case-document-order-callbacks" "get-case-document-order-callback-by-id" "get-case-export-callbacks" "get-case-export-callback-by-id" "export-case" "search-cases" "search-cases-by-id" "track-case" "remove-case-track-by-id" "get-case-track-by-id" "get-case-tracks" "update-case" "get-case-update-by-case-id" "get-case-updates" "get-court-coverage" "get-daily-usage-by-date" "generate-new-token" "invalidate-all-tokens" "invalidate-token" "get-judge-by-id" "list-all-token-ids" "get-areas-of-law" "get-area-of-law" "get-attorney-representation-types" "get-attorney-representation-type" "get-attorney-types" "get-attorney-type" "get-cases-class" "get-case-class" "get-case-relationship-types" "get-case-relationship-type" "get-cases-status" "get-case-status" "get-case-status-groups" "get-case-status-group" "get-case-types" "get-case-type" "get-case-type-groups" "get-case-type-group" "get-causes-of-action" "get-cause-of-action" "get-causes-of-action-additional-data" "get-cause-of-action-additional-data" "get-causes-of-action-group" "get-cause-of-action-group" "get-charges" "get-charge" "get-charges-additional-data" "get-charge-additional-data" "get-charges-degree" "get-charge-degree" "get-charge-groups" "get-charge-group" "get-charges-severity" "get-charge-severity" "get-courts" "get-court" "get-appeal-courts-for-court" "get-court-locations-for-court" "get-jurisdiction-geo-for-court" "get-court-locations" "get-court-location" "get-courts-for-court-location" "get-courts-service-status" "get-court-service-status" "get-court-systems" "get-court-system" "get-court-types" "get-court-type" "get-judge-types" "get-judge-type" "get-jurisdictions-geo" "get-jurisdiction-geo" "get-courts-for-jurisdiction-geo" "get-party-roles" "get-party-role" "get-party-role-groups" "get-party-role-group" "get-norm-attorney-by-id" "get-norm-judges-associated-with-norm-attorney" "get-norm-law-firms-associated-with-norm-attorney" "get-norm-parties-associated-with-norm-attorney" "get-case-count-analytics-by-opposing-norm-attorney-for-a-norm-attorney" "search-normalized-attorneys" "search-normalized-attorneys-by-id" "get-norm-judge-by-id" "get-norm-attorneys-associated-with-norm-judge" "get-norm-law-firms-associated-with-norm-judge" "get-norm-parties-associated-with-norm-judge" "search-normalized-judges" "search-normalized-judges-by-id" "get-norm-law-firm-by-id" "get-norm-attorneys-associated-with-norm-law-firm" "get-norm-judges-associated-with-norm-law-firm" "get-norm-parties-associated-with-norm-law-firm" "get-case-count-analytics-by-opposing-norm-law-firm-for-a-norm-law-firm" "search-normalized-law-firms" "search-normalized-law-firms-by-id" "get-norm-party-by-id" "get-norm-attorneys-associated-with-norm-party" "get-norm-judges-associated-with-norm-party" "get-norm-law-firms-associated-with-norm-party" "get-case-count-analytics-by-opposing-norm-party-for-a-norm-party" "search-normalized-parties" "search-normalized-parties-by-id" "import-pacer-case-by-court-using-case-number" "all-courts-pacer-case-locator-case-search" "appeal-courts-pacer-case-locator-case-search" "bankruptcy-courts-pacer-case-locator-case-search" "civil-courts-pacer-case-locator-case-search" "criminal-courts-pacer-case-locator-case-search" "multi-district-courts-pacer-case-locator-case-search" "all-courts-pacer-case-locator-party-search" "appeal-courts-pacer-case-locator-party-search" "bankruptcy-courts-pacer-case-locator-party-search" "civil-courts-pacer-case-locator-party-search" "criminal-courts-pacer-case-locator-party-search" "multi-district-courts-pacer-case-locator-party-search" "get-pacer-credential" "add-pacer-credential" "remove-pacer-credential-by-id" "get-pacer-credential-by-id" "get-party-by-id" "get-party-associated-attorneys" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,13 +212,13 @@ export def "get-attorney-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneyId: string, attorneyLawFirmArray: table<attorneyLawFirmId: string, firstFetchDate: string, isVisible: bool, lastFetchDate: string, name: string, object: string>, attorneyType: record<attorneyTypeId: string, createdDate: string, name: string, object: string>, barNumber: string, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyRoleGroupIdArray: list<string>, partyRoleIdArray: list<string>, possibleNormAttorneyArray: table<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, confidenceScore: float, normAttorneyAPI: string, normAttorneyId: string, normAttorneyName: string, object: string, scoreConstituents: record>, possibleNormLawFirmArray: table<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, confidenceScore: float, normLawFirmAPI: string, normLawFirmId: string, normLawFirmName: string, object: string, scoreConstituents: record, sourceDetails: record>, sourceAttorneyType: string> {
+]: nothing -> oneof<record<attorneyId: string, attorneyLawFirmArray: table<attorneyLawFirmId: string, firstFetchDate: string, isVisible: bool, lastFetchDate: string, name: string, object: string>, attorneyType: record<attorneyTypeId: string, createdDate: string, name: string, object: string>, barNumber: string, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyRoleGroupIdArray: list<string>, partyRoleIdArray: list<string>, possibleNormAttorneyArray: table<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, confidenceScore: float, normAttorneyAPI: string, normAttorneyId: string, normAttorneyName: string, object: string, scoreConstituents: record>, possibleNormLawFirmArray: table<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, confidenceScore: float, normLawFirmAPI: string, normLawFirmId: string, normLawFirmName: string, object: string, scoreConstituents: record, sourceDetails: record>, sourceAttorneyType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyId' must be non-empty" } }
   let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -198,14 +249,14 @@ export def "get-attorney-associated-parties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: table<attorneyId: string, isVisible: bool, object: string, partyAttorneyAssociationId: string, partyId: string>, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: table<attorneyId: string, isVisible: bool, object: string, partyAttorneyAssociationId: string, partyId: string>, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({attorney_id: (encode-path-segment $attorney_id)} | format pattern "/attorney/{attorney_id}/associatedParties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -235,13 +286,13 @@ export def "get-billing-usage-by-billing-cycle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, billingCycle: record<endDate: string, startDate: string>, days: record, object: string, totalCasesTracked: int> {
+]: nothing -> oneof<record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, billingCycle: record<endDate: string, startDate: string>, days: record, object: string, totalCasesTracked: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_cycle | is-empty) { error make --unspanned { msg: "path parameter 'billingCycle' must be non-empty" } }
   let full_url = (build-url $base ({billing_cycle: (encode-path-segment $billing_cycle)} | format pattern "/billingCycleUsage/{billing_cycle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -270,12 +321,12 @@ export def "get-billing-cycles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingCycleArray: list<string>, object: string> {
+]: nothing -> oneof<record<billingCycleArray: list<string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/billingCycles" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -306,13 +357,13 @@ export def "get-callbacks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date for which fetch the callback type list. By default, the date will be set to current date. (format: date-time)
   --status: string@status-completer # Status of the callbacks. Default status will fetch all callbacks.
-]: nothing -> record<caseDocumentOrderCallbacks: record<count: int, link: string>, caseExportCallbacks: record<count: int, link: string>, object: string> {
+]: nothing -> oneof<record<caseDocumentOrderCallbacks: record<count: int, link: string>, caseExportCallbacks: record<count: int, link: string>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/callbacks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -342,13 +393,13 @@ export def "get-case" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneys: record<attorneyArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: table<causeOfAction: record, causeOfActionAdditionalDataArray: list, object: string>, chargeArray: table<charge: record, chargeAdditionalDataArray: list, chargeDegree: record, chargeSeverity: record, object: string>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list<record>, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list<record>, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list<record>, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list<record>, sourceChargeArray: list<record>, sourceCourt: string, sourcePageData: list<record>>, sourceDataStatus: string, url: string> {
+]: nothing -> oneof<record<attorneys: record<attorneyArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: table<causeOfAction: record, causeOfActionAdditionalDataArray: list, object: string>, chargeArray: table<charge: record, chargeAdditionalDataArray: list, chargeDegree: record, chargeSeverity: record, object: string>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list<record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list<record>, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list<record>, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list<record>, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list<record>, sourceChargeArray: list<record>, sourceCourt: string, sourcePageData: list<record>>, sourceDataStatus: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -380,14 +431,14 @@ export def "get-case-attorneys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-visible: oneof<nothing, bool> # Retrieve attorneys in the case with the specified caseId value whose isVisible flag is set to the specified value. (allows empty value)
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<attorneyArray: table<attorneyId: string, attorneyLawFirmArray: list, attorneyType: record, barNumber: string, contact: record, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record, partyRoleGroupIdArray: list, partyRoleIdArray: list, possibleNormAttorneyArray: list, possibleNormLawFirmArray: list, sourceAttorneyType: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<attorneyArray: table<attorneyId: string, attorneyLawFirmArray: list, attorneyType: record, barNumber: string, contact: record, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record, partyRoleGroupIdArray: list, partyRoleIdArray: list, possibleNormAttorneyArray: list, possibleNormLawFirmArray: list, sourceAttorneyType: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/attorneys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -420,14 +471,14 @@ export def "get-case-docket-entries" [
   --docket-number: int # Retrieve the docket entry witih the specified docket number in the case with the specified caseId value.
   --sort-by: string@sort-by-completer # Sort the retrieved docket entries in ascending order or descending order of date.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<docketEntryArray: table<boundary: string, docketBadge: string, docketEntryDate: string, docketEntryPrimaryDocuments: record, docketEntrySecondaryDocuments: record, docketNumber: int, lastFetchDate: string, object: string, referencedDocketNumberArray: list, sortOrder: int, text: string, textStructured: record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<docketEntryArray: table<boundary: string, docketBadge: string, docketEntryDate: string, docketEntryPrimaryDocuments: record, docketEntrySecondaryDocuments: record, docketNumber: int, lastFetchDate: string, object: string, referencedDocketNumberArray: list, sortOrder: int, text: string, textStructured: record>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -457,19 +508,20 @@ export def "get-primary-documents-for-docket-entries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docket-number: int # Retrieve the primary documents associated with the specified docket number in the case with the specified caseId value.
+  --docket-number: int # Retrieve the primary documents associated with the specified docket number in the case with the specified caseId value. (required)
   --in-library: oneof<nothing, bool> # Retrieve the primary documents in the with the specified inLibrary flag in the case with the specified caseId value. (allows empty value)
   --after-first-fetch-date: string # Retrieve all primary documents in the case with the specified caseId value that were first fetched by UniCourt on the specified date or within the specified date. (nullable, format: date-time)
   --library-date: string # Retrieve all primary documents in the case with the specified caseId value that were added to the Crowdsourced Library on the specified date or within the specified date. (nullable, format: date-time)
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
+  if ($docket_number == null) { error make --unspanned { msg: "required query parameter 'docketNumber' missing: pass --docket-number" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/primaryDocuments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -499,19 +551,20 @@ export def "get-secondary-documents-for-docket-entries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --docket-number: int # Retrieve the secondary documents associated with the specified docket number in the case with the specified caseId value.
+  --docket-number: int # Retrieve the secondary documents associated with the specified docket number in the case with the specified caseId value. (required)
   --in-library: oneof<nothing, bool> # Retrieve the secondary documents in the with the specified inLibrary flag in the case with the specified caseId value. (allows empty value)
   --after-first-fetch-date: string # Retrieve all secondary documents in the case with the specified caseId value that were first fetched by UniCourt on the specified date or within the specified date. (nullable, format: date-time)
   --library-date: string # Retrieve all secondary documents in the case with the specified caseId value that were added to the Crowdsourced Library on the specified date or within the specified date. (nullable, format: date-time)
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
+  if ($docket_number == null) { error make --unspanned { msg: "required query parameter 'docketNumber' missing: pass --docket-number" } }
   let qp = [(serialize-qp "docketNumber" $docket_number "scalar") (serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/docketEntries/secondaryDocuments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -547,14 +600,14 @@ export def "get-case-documents" [
   --first-fetch-date: string # Sort all the documents based on the date it was fetched from the source site. (nullable, format: date-time)
   --sort-by: string@sort-by-completer # Sort documents with document order.
   --page-number: int # The page for which the result should be retrieved.
-]: nothing -> record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseDocumentArray: table<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record, price: float, sortOrder: int, sourceDataStatus: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "inLibrary" $in_library "scalar") (serialize-qp "afterFirstFetchDate" $after_first_fetch_date "scalar") (serialize-qp "libraryDate" $library_date "scalar") (serialize-qp "firstFetchDate" $first_fetch_date "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/documents") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -586,14 +639,14 @@ export def "get-case-hearings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sort-by: string@sort-by-completer # Specify the sort order of hearings in the case with the specified caseId.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. (e.g. 1)
-]: nothing -> record<hearingArray: table<firstFetchDate: string, hearingDate: string, hearingDescription: string, hearingStructured: record, lastFetchDate: string, location: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<hearingArray: table<firstFetchDate: string, hearingDate: string, hearingDescription: string, hearingStructured: record, lastFetchDate: string, location: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/hearings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -625,14 +678,14 @@ export def "get-case-judges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-visible: oneof<nothing, bool> # Retrieve attorneys judges in the case with the specified caseId value whose isVisible flag is set to the specified value. (allows empty value)
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<judgeArray: table<contact: record, firstFetchDate: string, firstName: string, isVisible: bool, judgeId: string, judgeType: record, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, possibleNormJudgeArray: list, sourceJudgeType: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<judgeArray: table<contact: record, firstFetchDate: string, firstName: string, isVisible: bool, judgeId: string, judgeType: record, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, possibleNormJudgeArray: list, sourceJudgeType: string>, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/judges") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -668,14 +721,14 @@ export def "get-case-parties" [
   --party-role-group-id: string # Retrieve all parties with the specified partyRoleGroupId value in the case with the specified caseId value. (allows empty value)
   --attorney-representation-type-id: string # Retrieve all parties with the specified attorneyRepresentationTypeId value in the case with the specified caseId value. (allows empty value)
   --party-classification-type: string@party-classification-type-completer # Retrieve all parties with the specified partyClassificationType value in the case with the specified caseId value. (allows empty value)
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyArray: table<attorneyRepresentationType: record, contact: record, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record, partyClassificationType: string, partyId: string, partyRole: record, possibleNormPartyArray: list, sourcePartyRole: string>, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, partyArray: table<attorneyRepresentationType: record, contact: record, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record, partyClassificationType: string, partyId: string, partyRole: record, possibleNormPartyArray: list, sourcePartyRole: string>, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "isVisible" $is_visible "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "partyRoleId" $party_role_id "scalar") (serialize-qp "partyRoleGroupId" $party_role_group_id "scalar") (serialize-qp "attorneyRepresentationTypeId" $attorney_representation_type_id "scalar") (serialize-qp "partyClassificationType" $party_classification_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/parties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -706,14 +759,14 @@ export def "get-case-related-cases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: table<additionalSourceData: record, caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseRelationshipType: record, isVisible: bool, object: string, sourceCaseRelationshipType: string>, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: table<additionalSourceData: record, caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseRelationshipType: record, isVisible: bool, object: string, sourceCaseRelationshipType: string>, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/case/{case_id}/relatedCases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -743,14 +796,15 @@ export def "get-case-count-analytics-by-area-of-law" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<areaOfLaw: record, caseCount: int, caseSearchAPI: string, object: string>, totalAreaOfLawCount: int, totalCaseCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<areaOfLaw: record, caseCount: int, caseSearchAPI: string, object: string>, totalAreaOfLawCount: int, totalCaseCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByAreaOfLaw" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -780,14 +834,15 @@ export def "get-case-count-analytics-by-case-class" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseClass: record, caseCount: int, caseSearchAPI: string, object: string>, totalCaseClassCount: int, totalCaseCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseClass: record, caseCount: int, caseSearchAPI: string, object: string>, totalCaseClassCount: int, totalCaseCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCaseClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -817,15 +872,17 @@ export def "get-case-count-analytics-by-case-filed-date" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-  --group-by: string@group-by-completer # GroupBy
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, groupedBy: string, monthInt: int, monthString: string, object: string, quarter: string, weekOfMonth: int, weekOfYear: int, year: int>, totalCaseCount: int, totalCaseFiledDateCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+  --group-by: string@group-by-completer # GroupBy (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, groupedBy: string, monthInt: int, monthString: string, object: string, quarter: string, weekOfMonth: int, weekOfYear: int, year: int>, totalCaseCount: int, totalCaseFiledDateCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
+  if ($group_by == null) { error make --unspanned { msg: "required query parameter 'groupBy' missing: pass --group-by" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCaseFiledDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -855,14 +912,15 @@ export def "get-case-count-analytics-by-case-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, caseType: record, object: string>, totalCaseCount: int, totalCaseTypeCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, caseType: record, object: string>, totalCaseCount: int, totalCaseTypeCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCaseType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -892,14 +950,15 @@ export def "get-case-count-analytics-by-case-type-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, caseTypeGroup: record, object: string>, totalCaseCount: int, totalCaseTypeGroupCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, caseTypeGroup: record, object: string>, totalCaseCount: int, totalCaseTypeGroupCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCaseTypeGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -929,14 +988,15 @@ export def "get-case-count-analytics-by-court" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, court: record, object: string>, totalCaseCount: int, totalCourtCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, court: record, object: string>, totalCaseCount: int, totalCourtCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCourt" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -966,14 +1026,15 @@ export def "get-case-count-analytics-by-court-location" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, court: record, courtLocation: record, object: string>, totalCaseCount: int, totalCourtLocationCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, court: record, courtLocation: record, object: string>, totalCaseCount: int, totalCourtLocationCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCourtLocation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1003,14 +1064,15 @@ export def "get-case-count-analytics-by-court-system" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, courtSystem: record, object: string>, totalCaseCount: int, totalCourtSystemCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, courtSystem: record, object: string>, totalCaseCount: int, totalCourtSystemCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCourtSystem" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1040,14 +1102,15 @@ export def "get-case-count-analytics-by-court-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, courtType: record, object: string>, totalCaseCount: int, totalCourtTypeCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, courtType: record, object: string>, totalCaseCount: int, totalCourtTypeCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByCourtType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1077,14 +1140,15 @@ export def "get-case-count-analytics-by-jurisdiction-geo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, jurisdictionGeo: record, object: string>, totalCaseCount: int, totalJurisdictionGeoCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<Geo: record, caseCount: int, caseSearchAPI: string, jurisdictionGeo: record, object: string>, totalCaseCount: int, totalJurisdictionGeoCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByJurisdictionGeo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1114,14 +1178,15 @@ export def "get-case-count-analytics-by-norm-attorney" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normAttorneyId: string, normAttorneyName: string, object: string>, totalCaseCount: int, totalNormAttorneyCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normAttorneyId: string, normAttorneyName: string, object: string>, totalCaseCount: int, totalNormAttorneyCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByNormAttorney" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1151,14 +1216,15 @@ export def "get-case-count-analytics-by-norm-judge" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normJudgeId: string, normJudgeName: string, object: string>, totalCaseCount: int, totalNormJudgeCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normJudgeId: string, normJudgeName: string, object: string>, totalCaseCount: int, totalNormJudgeCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByNormJudge" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1188,14 +1254,15 @@ export def "get-case-count-analytics-by-norm-law-firm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normLawFirmId: string, normLawFirmName: string, object: string>, totalCaseCount: int, totalNormLawFirmCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normLawFirmId: string, normLawFirmName: string, object: string>, totalCaseCount: int, totalNormLawFirmCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByNormLawFirm" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1225,14 +1292,15 @@ export def "get-case-count-analytics-by-norm-party" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normPartyId: string, normPartyName: string, object: string>, totalCaseCount: int, totalNormPartyCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normPartyId: string, normPartyName: string, object: string>, totalCaseCount: int, totalNormPartyCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByNormParty" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1262,14 +1330,15 @@ export def "get-case-count-analytics-by-party-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, object: string, partyRole: record>, totalCaseCount: int, totalPages: int, totalPartyRoleCount: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, object: string, partyRole: record>, totalCaseCount: int, totalPages: int, totalPartyRoleCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByPartyRole" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1299,14 +1368,15 @@ export def "get-case-count-analytics-by-party-role-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, object: string, partyRoleGroup: record>, totalCaseCount: int, totalPages: int, totalPartyRoleGroupCount: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, object: string, partyRoleGroup: record>, totalCaseCount: int, totalPages: int, totalPartyRoleGroupCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseCountAnalyticsByPartyRoleGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1336,13 +1406,13 @@ export def "get-document-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string> {
+]: nothing -> oneof<record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_document_id | is-empty) { error make --unspanned { msg: "path parameter 'caseDocumentId' must be non-empty" } }
   let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocument/{case_document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1380,7 +1450,7 @@ export def "get-case-document-download-by-id" [
   let qp = [(serialize-qp "isPreviewDocument" $is_preview_document "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_document_id: (encode-path-segment $case_document_id)} | format pattern "/caseDocumentDownload/{case_document_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1399,7 +1469,6 @@ export def "get-case-document-download-by-id" [
 #
 # PUT /caseDocumentOrder
 # operationId: orderCaseDocument
-# --pacerOptions shape: {pacerClientCode?: string, pacerUserId: string}
 export def "order-case-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1413,15 +1482,16 @@ export def "order-case-document" [
   case_document_id: string # Document ID which you want to order. (e.g. CDOCcre989d654fa05)
   --is-preview-only: oneof<nothing, bool> # Flag value to determine if the document order is a preview order or no. (e.g. true)
   --pacer-options: record # **Applicable for PACER cases.** — shape: {pacerClientCode?: string, pacerUserId: string}
-]: any -> record<callbackGeneratedDate: string, caseDocument: record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
+]: any -> oneof<record<callbackGeneratedDate: string, caseDocument: record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseDocumentOrder" $auth.query)
   let req_body = {"caseDocumentId": $case_document_id, "isPreviewOnly": $is_preview_only, "pacerOptions": $pacer_options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "isPreviewOnly") == null) { error make --unspanned { msg: "required body field 'isPreviewOnly' missing: pass --is-preview-only or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1453,13 +1523,13 @@ export def "get-case-document-order-callbacks" [
   --date: string # Date for which fetch the Case Document Order Callback list. By default, the date will be set to current date. (format: date-time)
   --status: string@status-completer # Status of Document Order callbacks. Default status will fetch all callbacks.
   --page-number: int # Page to fetch the Case Document Order Callback list. - Minimum: 1 (default: 1)
-]: nothing -> record<callbackArray: table<callbackGeneratedDate: string, caseDocument: record, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<callbackArray: table<callbackGeneratedDate: string, caseDocument: record, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseDocumentOrder/callbacks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1489,13 +1559,13 @@ export def "get-case-document-order-callback-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callbackGeneratedDate: string, caseDocument: record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
+]: nothing -> oneof<record<callbackGeneratedDate: string, caseDocument: record<addedToLibraryDate: string, caseDocumentId: string, childDocumentIdArray: list<string>, description: string, documentFiledDate: string, downloadAPI: string, estimatedOrderDuration: string, firstFetchDate: string, inLibrary: bool, isPreviewAvailable: bool, name: string, object: string, pages: int, parentDocumentId: string, previewDocument: record<addedToLibraryDate: string, downloadAPI: string, inLibrary: bool, object: string>, price: float, sortOrder: int, sourceDataStatus: string>, caseDocumentId: string, caseDocumentOrderCallbackAPI: string, caseDocumentOrderCallbackId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_document_order_callback_id | is-empty) { error make --unspanned { msg: "path parameter 'caseDocumentOrderCallbackId' must be non-empty" } }
   let full_url = (build-url $base ({case_document_order_callback_id: (encode-path-segment $case_document_order_callback_id)} | format pattern "/caseDocumentOrder/callbacks/{case_document_order_callback_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1527,13 +1597,13 @@ export def "get-case-export-callbacks" [
   --date: string # The date for which callbacks are to be retrieved. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
   --status: string@status-completer # The status code of the callbacks to be retrieved.
   --page-number: int # The page number of the callbacks to be retrieved. - Minimum: 1 (default: 1, e.g. 1)
-]: nothing -> record<callbackArray: table<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<callbackArray: table<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record, file: record, object: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseExport/callbacks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1563,13 +1633,13 @@ export def "get-case-export-callback-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
+]: nothing -> oneof<record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_export_callback_id | is-empty) { error make --unspanned { msg: "path parameter 'caseExportCallbackId' must be non-empty" } }
   let full_url = (build-url $base ({case_export_callback_id: (encode-path-segment $case_export_callback_id)} | format pattern "/caseExport/callbacks/{case_export_callback_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1599,13 +1669,13 @@ export def "export-case" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string> {
+]: nothing -> oneof<record<callbackGeneratedDate: string, caseExportCallbackAPI: string, caseExportCallbackId: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, file: record<expiryDate: string, fileUrl: string, name: string, object: string>, object: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseExport/{case_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1634,21 +1704,22 @@ export def "search-cases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --q: string # Query parameter for keyword expressions.
-  --qp-sort: string@sort-completer # Query parameter specifying how results are to be sorted. Results can be sorted according to filedDate or relevancy. (default: filedDate, e.g. filedDate)
+  --q: string # Query parameter for keyword expressions. (required)
+  --sort: string@sort-completer # Query parameter specifying how results are to be sorted. Results can be sorted according to filedDate or relevancy. (default: filedDate, e.g. filedDate)
   --order: string@order-completer # Query parameter specifying whether search result are sorted in ascending or descending order. (default: desc, e.g. desc)
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
+  if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseSearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "sort": $qp_sort, "order": $order, "pageNumber": $page_number} | compact)
+    query: ({"q": $q, "sort": $sort, "order": $order, "pageNumber": $page_number} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1675,14 +1746,14 @@ export def "search-cases-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseSearchId: string, caseSearchResultArray: table<caseAPI: string, caseId: string, caseName: string, caseNumber: string, caseStatus: record, caseType: record, court: record, courtLocation: record, filedDate: string, firstFetchDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, matchedObjectArray: list, object: string, participantsLastFetchDate: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_search_id | is-empty) { error make --unspanned { msg: "path parameter 'caseSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({case_search_id: (encode-path-segment $case_search_id)} | format pattern "/caseSearch/{case_search_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1701,8 +1772,6 @@ export def "search-cases-by-id" [
 #
 # PUT /caseTrack
 # operationId: trackCase
-# --caseTrackParams shape: {caseId: string, pacerOptions?: record}
-# --schedule shape: {days: list<int>, type: "daily"|"weekly"|"monthly"}
 export def "track-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,15 +1784,15 @@ export def "track-case" [
   --dry-run(-n) # Return the request that would be sent without executing it
   case_track_params: record # shape: {caseId: string, pacerOptions?: record}
   schedule: record # shape: {days: list<int>, type: "daily"|"weekly"|"monthly"}
-]: any -> record<message: string, object: string> {
+]: any -> oneof<record<message: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseTrack" $auth.query)
   let req_body = {"caseTrackParams": $case_track_params, "schedule": $schedule} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1753,13 +1822,13 @@ export def "remove-case-track-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, object: string> {
+]: nothing -> oneof<record<message: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1789,13 +1858,13 @@ export def "get-case-track-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record<lastTrackDate: string, lastTrackException: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, schedule: record<days: list<int>, object: string, type: string>> {
+]: nothing -> oneof<record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record<lastTrackDate: string, lastTrackException: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, schedule: record<days: list<int>, object: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseTrack/{case_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1827,13 +1896,13 @@ export def "get-case-tracks" [
   --last-fetch-date: string # The lastFetchDate value of the tracked case. The date value should be entered in the format YYYY-MM-DDTHH:MM:SS+ZZ:zz. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
   --last-fetch-date-with-updates: string # The date on which changes were last found in the case information. (format: date-time, e.g. 2022-03-08T10:17:56+00:00)
   --page-number: int # The page number of the results to be retrieved. - Minimum: 1 (e.g. 1)
-]: nothing -> record<caseTrackPreviewArray: table<caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record, object: string, pacerOptions: record, schedule: record>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseTrackPreviewArray: table<caseAPI: string, caseId: string, lastFetchDate: string, lastFetchDateWithUpdates: string, lastTrackedDetails: record, object: string, pacerOptions: record, schedule: record>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lastFetchDate" $last_fetch_date "scalar") (serialize-qp "lastFetchDateWithUpdates" $last_fetch_date_with_updates "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseTracks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1852,7 +1921,6 @@ export def "get-case-tracks" [
 #
 # PUT /caseUpdate
 # operationId: updateCase
-# --pacerOptions shape: {additionalPageArray?: list, fetchParticipantsIfOlderThanDays?: int, pacerClientCode?: string, pacerUserId: string, refreshType?: "fetchNewDocketEntries"|"fetchAllDocketEntries"}
 export def "update-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1865,15 +1933,15 @@ export def "update-case" [
   --dry-run(-n) # Return the request that would be sent without executing it
   case_id: string # UniCourt's Case Id for update. (e.g. CASEhq9d8b72d0800c)
   --pacer-options: record # Applicable for PACER cases. — shape: {additionalPageArray?: list, fetchParticipantsIfOlderThanDays?: int, pacerClientCode?: string, pacerUserId: string, refreshType?: "fetchNewDocketEntries"|"fetchAllDocketEntries"}
-]: any -> record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, requestedDate: string, status: string> {
+]: any -> oneof<record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, requestedDate: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/caseUpdate" $auth.query)
   let req_body = {"caseId": $case_id, "pacerOptions": $pacer_options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1903,13 +1971,13 @@ export def "get-case-update-by-case-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, requestedDate: string, status: string> {
+]: nothing -> oneof<record<case: record<attorneys: record<attorneyArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseDocuments: record<caseDocumentArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, caseId: string, caseName: string, caseNumber: string, caseStats: record<allCaseDocumentCount: int, attorneyCount: int, caseDocumentInLibraryCount: int, docketEntryCount: int, freeCaseDocumentCount: int, hearingCount: int, judgeCount: int, object: string, paidCaseDocumentCount: int, partyCount: int, relatedCaseCount: int>, caseStatus: record<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, caseType: record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, causeOfActionArray: list<record>, chargeArray: list<record>, court: record<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, courtLocation: record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, courtServiceStatusAPI: string, courtServiceStatusId: string, docketEntries: record<docketEntryArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, exportAPI: string, filedDate: string, firstFetchDate: string, hasDocumentsWithPreview: bool, hasOnlyMetaInfo: bool, hearings: record<hearingArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, judges: record<judgeArray: list, nextPageAPI: string, object: string, pageNumber: int, totalCount: int, totalPages: int>, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, participantsLastFetchDate: string, parties: record<nextPageAPI: string, object: string, pageNumber: int, partyArray: list, totalCount: int, totalPages: int>, relatedCases: record<nextPageAPI: string, object: string, pageNumber: int, relatedCaseArray: list, totalCount: int, totalPages: int>, sourceCaseData: record<natureOfSuitArray: list, object: string, sourceCaseStatus: string, sourceCaseType: string, sourceCauseOfActionArray: list, sourceChargeArray: list, sourceCourt: string, sourcePageData: list>, sourceDataStatus: string, url: string>, caseAPI: string, caseId: string, exception: record<code: string, details: string, message: string, object: string>, object: string, pacerOptions: record<additionalPageArray: list<record>, fetchParticipantsIfOlderThanDays: int, object: string, pacerClientCode: string, pacerUserId: string, refreshType: string>, requestedDate: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_id | is-empty) { error make --unspanned { msg: "path parameter 'caseId' must be non-empty" } }
   let full_url = (build-url $base ({case_id: (encode-path-segment $case_id)} | format pattern "/caseUpdate/{case_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1942,13 +2010,13 @@ export def "get-case-updates" [
   --requested-date: string # The date for which case updates are to be retrieved. (format: date-time)
   --status: string@status-completer # Status of the case updates to be retrieved.
   --page-number: int # The page number of the callbacks to be retrieved. - Minimum: 1 (default: 1, e.g. 1)
-]: nothing -> record<caseUpdatePreviewArray: table<caseAPI: string, caseId: string, exception: record, object: string, pacerOptions: record, requestedDate: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseUpdatePreviewArray: table<caseAPI: string, caseId: string, exception: record, object: string, pacerOptions: record, requestedDate: string, status: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "caseId" $case_id "scalar") (serialize-qp "requestedDate" $requested_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/caseUpdates" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1978,13 +2046,13 @@ export def "get-court-coverage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseClassCoverageArray: table<caseClass: record, caseCount: int, caseDocumentInLibraryCount: int, caseDocumentInLibraryInLastThirtyDaysCount: int, casesInLastThirtyDaysCount: int, courtServiceStatusAPI: string, freeCaseDocumentCount: int, freeCaseDocumentsInLastThirtyDaysCount: int, object: string, paidCaseDocumentCount: int, paidCaseDocumentsInLastThirtyDaysCount: int>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, lastUpdateCountDate: string, object: string, totalCaseCount: int, totalCaseDocumentInLibraryCount: int, totalCaseDocumentInLibraryInLastThirtyDaysCount: int, totalCasesInLastThirtyDaysCount: int, totalFreeCaseDocumentCount: int, totalFreeCaseDocumentsInLastThirtyDaysCount: int, totalPaidCaseDocumentCount: int, totalPaidCaseDocumentsInLastThirtyDaysCount: int> {
+]: nothing -> oneof<record<caseClassCoverageArray: table<caseClass: record, caseCount: int, caseDocumentInLibraryCount: int, caseDocumentInLibraryInLastThirtyDaysCount: int, casesInLastThirtyDaysCount: int, courtServiceStatusAPI: string, freeCaseDocumentCount: int, freeCaseDocumentsInLastThirtyDaysCount: int, object: string, paidCaseDocumentCount: int, paidCaseDocumentsInLastThirtyDaysCount: int>, court: record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, lastUpdateCountDate: string, object: string, totalCaseCount: int, totalCaseDocumentInLibraryCount: int, totalCaseDocumentInLibraryInLastThirtyDaysCount: int, totalCasesInLastThirtyDaysCount: int, totalFreeCaseDocumentCount: int, totalFreeCaseDocumentsInLastThirtyDaysCount: int, totalPaidCaseDocumentCount: int, totalPaidCaseDocumentsInLastThirtyDaysCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
   let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/courtCoverage/{court_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2014,13 +2082,13 @@ export def "get-daily-usage-by-date" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, object: string, usageEndTime: string, usageStartTime: string> {
+]: nothing -> oneof<record<apiCallsBillable: record<count: int, lastUpdated: string>, apiCallsCredited: record<count: int, lastUpdated: string>, apiCallsMade: record<count: int, lastUpdated: string>, apiUsage: record, object: string, usageEndTime: string, usageStartTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({date: (encode-path-segment $date)} | format pattern "/dailyUsage/{date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2051,15 +2119,15 @@ export def "generate-new-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # Your Client ID obtainable by logging into your UniCourt account. (e.g. G3cfixgetVzfaoszGOBp5LPGtih1nMJ9)
   client_secret: string # Your Client Secret ID obtainable by logging into your UniCourt account. (e.g. u6PTti57IjPlrwU5MzOwLBD2MCwx-IEbo8sTStTivh1I-EqQ8Jcm27Gfo2GhpHCw)
-]: any -> record<accessToken: string, object: string, tokenId: string, tokenType: string> {
+]: any -> oneof<record<accessToken: string, object: string, tokenId: string, tokenType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generateNewToken" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2090,15 +2158,15 @@ export def "invalidate-all-tokens" [
   --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # Your Client ID obtainable by logging into your UniCourt account. (e.g. G3cfixgetVzfaoszGOBp5LPGtih1nMJ9)
   client_secret: string # Your Client Secret ID obtainable by logging into your UniCourt account. (e.g. u6PTti57IjPlrwU5MzOwLBD2MCwx-IEbo8sTStTivh1I-EqQ8Jcm27Gfo2GhpHCw)
-]: any -> record<message: string, object: string> {
+]: any -> oneof<record<message: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invalidateAllTokens" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2130,15 +2198,15 @@ export def "invalidate-token" [
   client_id: string # Your Client ID obtainable by logging into your UniCourt account. (e.g. G3cfixgetVzfaoszGOBp5LPGtih1nMJ9)
   client_secret: string # Your Client Secret ID obtainable by logging into your UniCourt account. (e.g. u6PTti57IjPlrwU5MzOwLBD2MCwx-IEbo8sTStTivh1I-EqQ8Jcm27Gfo2GhpHCw)
   token_id: string # The Token ID of token being invalidated (e.g. TKID384a057WFC3Dp3)
-]: any -> record<message: string, object: string> {
+]: any -> oneof<record<message: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invalidateToken" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "tokenId": $token_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2168,13 +2236,13 @@ export def "get-judge-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, judgeId: string, judgeType: record<createdDate: string, judgeTypeId: string, name: string, object: string>, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, possibleNormJudgeArray: table<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormJudgeAPI: string, confidenceScore: float, normJudgeAPI: string, normJudgeId: string, normJudgeName: string, object: string, scoreConstituents: record>, sourceJudgeType: string> {
+]: nothing -> oneof<record<contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, judgeId: string, judgeType: record<createdDate: string, judgeTypeId: string, name: string, object: string>, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, possibleNormJudgeArray: table<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, bestMatch: bool, caseCountAnalyticsByNormJudgeAPI: string, confidenceScore: float, normJudgeAPI: string, normJudgeId: string, normJudgeName: string, object: string, scoreConstituents: record>, sourceJudgeType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($judge_id | is-empty) { error make --unspanned { msg: "path parameter 'judgeId' must be non-empty" } }
   let full_url = (build-url $base ({judge_id: (encode-path-segment $judge_id)} | format pattern "/judge/{judge_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2205,15 +2273,15 @@ export def "list-all-token-ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # Your Client ID obtainable by logging into your UniCourt account. (e.g. G3cfixgetVzfaoszGOBp5LPGtih1nMJ9)
   client_secret: string # Your Client Secret ID obtainable by logging into your UniCourt account. (e.g. u6PTti57IjPlrwU5MzOwLBD2MCwx-IEbo8sTStTivh1I-EqQ8Jcm27Gfo2GhpHCw)
-]: any -> record<AccessTokenIdArray: table<issueAddress: string, issuedDate: string, object: string, tokenId: string>, object: string> {
+]: any -> oneof<record<AccessTokenIdArray: table<issueAddress: string, issuedDate: string, object: string, tokenId: string>, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllTokenIds" $auth.query)
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2244,19 +2312,19 @@ export def "get-areas-of-law" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<areaOfLawArray: table<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<areaOfLawArray: table<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/areaOfLaw" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2282,13 +2350,13 @@ export def "get-area-of-law" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<areaOfLawId: string, caseClass: string, caseClassId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($area_of_law_id | is-empty) { error make --unspanned { msg: "path parameter 'areaOfLawId' must be non-empty" } }
   let full_url = (build-url $base ({area_of_law_id: (encode-path-segment $area_of_law_id)} | format pattern "/masterData/areaOfLaw/{area_of_law_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2319,19 +2387,19 @@ export def "get-attorney-representation-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<attorneyRepresentationTypeArray: table<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<attorneyRepresentationTypeArray: table<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/attorneyRepresentationType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2357,13 +2425,13 @@ export def "get-attorney-representation-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_representation_type_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyRepresentationTypeId' must be non-empty" } }
   let full_url = (build-url $base ({attorney_representation_type_id: (encode-path-segment $attorney_representation_type_id)} | format pattern "/masterData/attorneyRepresentationType/{attorney_representation_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2394,19 +2462,19 @@ export def "get-attorney-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<attorneyTypeArray: table<attorneyTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<attorneyTypeArray: table<attorneyTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/attorneyType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2432,13 +2500,13 @@ export def "get-attorney-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneyTypeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<attorneyTypeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attorney_type_id | is-empty) { error make --unspanned { msg: "path parameter 'attorneyTypeId' must be non-empty" } }
   let full_url = (build-url $base ({attorney_type_id: (encode-path-segment $attorney_type_id)} | format pattern "/masterData/attorneyType/{attorney_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2469,19 +2537,19 @@ export def "get-cases-class" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseClassArray: table<caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseClassArray: table<caseClassId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2507,13 +2575,13 @@ export def "get-case-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseClassId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<caseClassId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_class_id | is-empty) { error make --unspanned { msg: "path parameter 'caseClassId' must be non-empty" } }
   let full_url = (build-url $base ({case_class_id: (encode-path-segment $case_class_id)} | format pattern "/masterData/caseClass/{case_class_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2544,19 +2612,19 @@ export def "get-case-relationship-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseRelationshipTypeArray: table<caseRelationshipTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseRelationshipTypeArray: table<caseRelationshipTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseRelationshipType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2582,13 +2650,13 @@ export def "get-case-relationship-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseRelationshipTypeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<caseRelationshipTypeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_relationship_type_id | is-empty) { error make --unspanned { msg: "path parameter 'caseRelationshipTypeId' must be non-empty" } }
   let full_url = (build-url $base ({case_relationship_type_id: (encode-path-segment $case_relationship_type_id)} | format pattern "/masterData/caseRelationshipType/{case_relationship_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2619,19 +2687,19 @@ export def "get-cases-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseStatusArray: table<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseStatusArray: table<caseClassArray: list, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2657,13 +2725,13 @@ export def "get-case-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<caseClassArray: list<string>, caseStatusGroup: string, caseStatusGroupId: string, caseStatusId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_status_id | is-empty) { error make --unspanned { msg: "path parameter 'caseStatusId' must be non-empty" } }
   let full_url = (build-url $base ({case_status_id: (encode-path-segment $case_status_id)} | format pattern "/masterData/caseStatus/{case_status_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2694,19 +2762,19 @@ export def "get-case-status-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseStatusGroupArray: table<caseStatusGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseStatusGroupArray: table<caseStatusGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseStatusGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2732,13 +2800,13 @@ export def "get-case-status-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseStatusGroupId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<caseStatusGroupId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_status_group_id | is-empty) { error make --unspanned { msg: "path parameter 'caseStatusGroupId' must be non-empty" } }
   let full_url = (build-url $base ({case_status_group_id: (encode-path-segment $case_status_group_id)} | format pattern "/masterData/caseStatusGroup/{case_status_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2769,19 +2837,19 @@ export def "get-case-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseTypeArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseTypeArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2807,13 +2875,13 @@ export def "get-case-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string> {
+]: nothing -> oneof<record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroup: string, caseTypeGroupId: string, caseTypeId: string, caseTypeTag: string, createdDate: string, name: string, object: string, saliCode: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_type_id | is-empty) { error make --unspanned { msg: "path parameter 'caseTypeId' must be non-empty" } }
   let full_url = (build-url $base ({case_type_id: (encode-path-segment $case_type_id)} | format pattern "/masterData/caseType/{case_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2844,19 +2912,19 @@ export def "get-case-type-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<caseTypeGroupArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<caseTypeGroupArray: table<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/caseTypeGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2882,13 +2950,13 @@ export def "get-case-type-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<areaOfLaw: string, areaOfLawId: string, caseClass: string, caseClassId: string, caseTypeGroupId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($case_type_group_id | is-empty) { error make --unspanned { msg: "path parameter 'caseTypeGroupId' must be non-empty" } }
   let full_url = (build-url $base ({case_type_group_id: (encode-path-segment $case_type_group_id)} | format pattern "/masterData/caseTypeGroup/{case_type_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2919,19 +2987,19 @@ export def "get-causes-of-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<causeOfActionArray: table<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<causeOfActionArray: table<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/causeOfAction" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2957,13 +3025,13 @@ export def "get-cause-of-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<causeOfActionGroup: string, causeOfActionGroupId: string, causeOfActionId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionId' must be non-empty" } }
   let full_url = (build-url $base ({cause_of_action_id: (encode-path-segment $cause_of_action_id)} | format pattern "/masterData/causeOfAction/{cause_of_action_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2994,19 +3062,19 @@ export def "get-causes-of-action-additional-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<causeOfActionAdditionalDataArray: table<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<causeOfActionAdditionalDataArray: table<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/causeOfActionAdditionalData" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3032,13 +3100,13 @@ export def "get-cause-of-action-additional-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string> {
+]: nothing -> oneof<record<causeOfActionAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_additional_data_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionAdditionalDataId' must be non-empty" } }
   let full_url = (build-url $base ({cause_of_action_additional_data_id: (encode-path-segment $cause_of_action_additional_data_id)} | format pattern "/masterData/causeOfActionAdditionalData/{cause_of_action_additional_data_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3069,19 +3137,19 @@ export def "get-causes-of-action-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<causeOfActionGroupArray: table<causeOfActionGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<causeOfActionGroupArray: table<causeOfActionGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/causeOfActionGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3107,13 +3175,13 @@ export def "get-cause-of-action-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<causeOfActionGroupId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<causeOfActionGroupId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cause_of_action_group_id | is-empty) { error make --unspanned { msg: "path parameter 'causeOfActionGroupId' must be non-empty" } }
   let full_url = (build-url $base ({cause_of_action_group_id: (encode-path-segment $cause_of_action_group_id)} | format pattern "/masterData/causeOfActionGroup/{cause_of_action_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3144,19 +3212,19 @@ export def "get-charges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<chargeArray: table<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<chargeArray: table<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/charge" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3182,13 +3250,13 @@ export def "get-charge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<chargeGroup: string, chargeGroupId: string, chargeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeId' must be non-empty" } }
   let full_url = (build-url $base ({charge_id: (encode-path-segment $charge_id)} | format pattern "/masterData/charge/{charge_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3219,19 +3287,19 @@ export def "get-charges-additional-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<chargeAdditionalDataArray: table<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<chargeAdditionalDataArray: table<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/chargeAdditionalData" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3257,13 +3325,13 @@ export def "get-charge-additional-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string> {
+]: nothing -> oneof<record<chargeAdditionalDataId: string, createdDate: string, object: string, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_additional_data_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeAdditionalDataId' must be non-empty" } }
   let full_url = (build-url $base ({charge_additional_data_id: (encode-path-segment $charge_additional_data_id)} | format pattern "/masterData/chargeAdditionalData/{charge_additional_data_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3294,19 +3362,19 @@ export def "get-charges-degree" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<chargeDegreeArray: table<chargeDegreeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<chargeDegreeArray: table<chargeDegreeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/chargeDegree" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3332,13 +3400,13 @@ export def "get-charge-degree" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chargeDegreeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<chargeDegreeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_degree_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeDegreeId' must be non-empty" } }
   let full_url = (build-url $base ({charge_degree_id: (encode-path-segment $charge_degree_id)} | format pattern "/masterData/chargeDegree/{charge_degree_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3369,19 +3437,19 @@ export def "get-charge-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<chargeGroupArray: table<chargeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<chargeGroupArray: table<chargeGroupId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/chargeGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3407,13 +3475,13 @@ export def "get-charge-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chargeGroupId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<chargeGroupId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_group_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeGroupId' must be non-empty" } }
   let full_url = (build-url $base ({charge_group_id: (encode-path-segment $charge_group_id)} | format pattern "/masterData/chargeGroup/{charge_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3444,19 +3512,19 @@ export def "get-charges-severity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<chargeSeverityArray: table<chargeSeverityId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<chargeSeverityArray: table<chargeSeverityId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/chargeSeverity" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3482,13 +3550,13 @@ export def "get-charge-severity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chargeSeverityId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<chargeSeverityId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_severity_id | is-empty) { error make --unspanned { msg: "path parameter 'chargeSeverityId' must be non-empty" } }
   let full_url = (build-url $base ({charge_severity_id: (encode-path-segment $charge_severity_id)} | format pattern "/masterData/chargeSeverity/{charge_severity_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3519,19 +3587,19 @@ export def "get-courts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/court" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3557,13 +3625,13 @@ export def "get-court" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string> {
+]: nothing -> oneof<record<additionalLevels: record<level1: string, level2: string, level3: string, level4: string, object: string>, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
   let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3594,20 +3662,20 @@ export def "get-appeal-courts-for-court" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
-  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/appealCourts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3634,20 +3702,20 @@ export def "get-court-locations-for-court" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
-  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/courtLocations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3674,20 +3742,20 @@ export def "get-jurisdiction-geo-for-court" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
+  --sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_id | is-empty) { error make --unspanned { msg: "path parameter 'courtId' must be non-empty" } }
-  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({court_id: (encode-path-segment $court_id)} | format pattern "/masterData/court/{court_id}/jurisdictionGeo") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3714,19 +3782,19 @@ export def "get-court-locations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtLocationArray: table<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/courtLocation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3752,13 +3820,13 @@ export def "get-court-location" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string> {
+]: nothing -> oneof<record<city: string, courtLocationId: string, courtServiceStatusAPI: string, courtsForCourtLocationAPI: string, createdDate: string, name: string, object: string, stateName: string, streetAddress1: string, streetAddress2: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_location_id | is-empty) { error make --unspanned { msg: "path parameter 'courtLocationId' must be non-empty" } }
   let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3789,20 +3857,20 @@ export def "get-courts-for-court-location" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_location_id | is-empty) { error make --unspanned { msg: "path parameter 'courtLocationId' must be non-empty" } }
-  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({court_location_id: (encode-path-segment $court_location_id)} | format pattern "/masterData/courtLocation/{court_location_id}/courts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3829,19 +3897,19 @@ export def "get-courts-service-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtServiceStatusArray: table<caseClassIdArray: list, caseDocumentOrderServiceStatus: record, caseTrackServiceStatus: record, caseUpdateServiceStatus: record, courtIdArray: list, courtLocationIdArray: list, courtServiceStatusId: string, object: string, serviceStatusAsOn: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtServiceStatusArray: table<caseClassIdArray: list, caseDocumentOrderServiceStatus: record, caseTrackServiceStatus: record, caseUpdateServiceStatus: record, courtIdArray: list, courtLocationIdArray: list, courtServiceStatusId: string, object: string, serviceStatusAsOn: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/courtServiceStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3867,13 +3935,13 @@ export def "get-court-service-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseClassIdArray: list<string>, caseDocumentOrderServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseTrackServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseUpdateServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, courtIdArray: list<string>, courtLocationIdArray: list<string>, courtServiceStatusId: string, object: string, serviceStatusAsOn: string> {
+]: nothing -> oneof<record<caseClassIdArray: list<string>, caseDocumentOrderServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseTrackServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, caseUpdateServiceStatus: record<object: string, serviceDetails: string, serviceStatusDownDetails: record<details: string, eta: string, object: string, reason: string>, serviceUp: bool>, courtIdArray: list<string>, courtLocationIdArray: list<string>, courtServiceStatusId: string, object: string, serviceStatusAsOn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_service_status_id | is-empty) { error make --unspanned { msg: "path parameter 'courtServiceStatusId' must be non-empty" } }
   let full_url = (build-url $base ({court_service_status_id: (encode-path-segment $court_service_status_id)} | format pattern "/masterData/courtServiceStatus/{court_service_status_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3904,19 +3972,19 @@ export def "get-court-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtSystemArray: table<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtSystemArray: table<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/courtSystem" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3942,13 +4010,13 @@ export def "get-court-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<courtSystemId: string, courtType: string, courtTypeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_system_id | is-empty) { error make --unspanned { msg: "path parameter 'courtSystemId' must be non-empty" } }
   let full_url = (build-url $base ({court_system_id: (encode-path-segment $court_system_id)} | format pattern "/masterData/courtSystem/{court_system_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3979,19 +4047,19 @@ export def "get-court-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtTypeArray: table<courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtTypeArray: table<courtTypeId: string, createdDate: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/courtType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4017,13 +4085,13 @@ export def "get-court-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<courtTypeId: string, createdDate: string, name: string, object: string> {
+]: nothing -> oneof<record<courtTypeId: string, createdDate: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($court_type_id | is-empty) { error make --unspanned { msg: "path parameter 'courtTypeId' must be non-empty" } }
   let full_url = (build-url $base ({court_type_id: (encode-path-segment $court_type_id)} | format pattern "/masterData/courtType/{court_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4054,19 +4122,19 @@ export def "get-judge-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<judgeTypeArray: table<createdDate: string, judgeTypeId: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<judgeTypeArray: table<createdDate: string, judgeTypeId: string, name: string, object: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/judgeType" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4092,13 +4160,13 @@ export def "get-judge-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, judgeTypeId: string, name: string, object: string> {
+]: nothing -> oneof<record<createdDate: string, judgeTypeId: string, name: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($judge_type_id | is-empty) { error make --unspanned { msg: "path parameter 'judgeTypeId' must be non-empty" } }
   let full_url = (build-url $base ({judge_type_id: (encode-path-segment $judge_type_id)} | format pattern "/masterData/judgeType/{judge_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4129,19 +4197,19 @@ export def "get-jurisdictions-geo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
+  --sort: string@sort-completer-2 # Sort field. (default: state, e.g. state)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<jurisdictionGeoArray: table<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/jurisdictionGeo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4167,13 +4235,13 @@ export def "get-jurisdiction-geo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list<string>> {
+]: nothing -> oneof<record<city: string, country: string, county: string, courtsForJurisdictionGeoAPI: string, createdDate: string, fipsCode: string, jurisdictionGeoId: string, object: string, state: string, zipCodeArray: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_geo_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionGeoId' must be non-empty" } }
   let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4204,20 +4272,20 @@ export def "get-courts-for-jurisdiction-geo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<courtArray: table<additionalLevels: record, appealCourtsForCourtAPI: string, container: string, containerType: string, courtId: string, courtLocationsForCourtAPI: string, courtServiceStatusAPI: string, courtSystemId: string, courtTypeId: string, createdDate: string, jurisdictionGeoForCourtAPI: string, name: string, nameAka: string, object: string, system: string, type: string>, nextPageAPI: string, object: string, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jurisdiction_geo_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionGeoId' must be non-empty" } }
-  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({jurisdiction_geo_id: (encode-path-segment $jurisdiction_geo_id)} | format pattern "/masterData/jurisdictionGeo/{jurisdiction_geo_id}/courts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4244,19 +4312,19 @@ export def "get-party-roles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyRoleArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, partyRoleArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/partyRole" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4282,13 +4350,13 @@ export def "get-party-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string> {
+]: nothing -> oneof<record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_role_id | is-empty) { error make --unspanned { msg: "path parameter 'partyRoleId' must be non-empty" } }
   let full_url = (build-url $base ({party_role_id: (encode-path-segment $party_role_id)} | format pattern "/masterData/partyRole/{party_role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4319,19 +4387,19 @@ export def "get-party-role-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
   --page-number: int # Page number. - minimum: 1 - maximum: 100 (e.g. 1)
-  --qp-sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
+  --sort: string@sort-completer-1 # Sort field. (default: name, e.g. name)
   --order: string@order-completer # Sort order. (default: asc, e.g. asc)
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyRoleGroupArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string>, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, partyRoleGroupArray: table<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string>, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/masterData/partyRoleGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"q": $q, "pageNumber": $page_number, "sort": $qp_sort, "order": $order} | compact)
+    query: ({"q": $q, "pageNumber": $page_number, "sort": $sort, "order": $order} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4357,13 +4425,13 @@ export def "get-party-role-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string> {
+]: nothing -> oneof<record<createdDate: string, description: string, name: string, object: string, partyRoleGroupId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_role_group_id | is-empty) { error make --unspanned { msg: "path parameter 'partyRoleGroupId' must be non-empty" } }
   let full_url = (build-url $base ({party_role_group_id: (encode-path-segment $party_role_group_id)} | format pattern "/masterData/partyRoleGroup/{party_role_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4393,13 +4461,13 @@ export def "get-norm-attorney-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneyAnalyticsAPI: record<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normAttorneyAPI: string, object: string>, barRecordArray: table<admittedDate: string, barNumber: string, barSourceData: record, barSourceType: string, contact: record, firstFetchDate: string, inactivationDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, stateCode: string, status: string>, caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, lastName: string, middleName: string, name: string, normAttorneyId: string, object: string, similarNormAttorneyArray: table<barRecordPreviewArray: list, name: string, normAttorneyAPI: string, normAttorneyId: string, normAttorneySimilarityScore: float, object: string>> {
+]: nothing -> oneof<record<attorneyAnalyticsAPI: record<associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normAttorneyAPI: string, object: string>, barRecordArray: table<admittedDate: string, barNumber: string, barSourceData: record, barSourceType: string, contact: record, firstFetchDate: string, inactivationDate: string, lastFetchDate: string, lastFetchDateWithUpdates: string, object: string, stateCode: string, status: string>, caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, lastName: string, middleName: string, name: string, normAttorneyId: string, object: string, similarNormAttorneyArray: table<barRecordPreviewArray: list, name: string, normAttorneyAPI: string, normAttorneyId: string, normAttorneySimilarityScore: float, object: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
   let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4430,15 +4498,16 @@ export def "get-norm-judges-associated-with-norm-attorney" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4469,15 +4538,16 @@ export def "get-norm-law-firms-associated-with-norm-attorney" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4508,15 +4578,16 @@ export def "get-norm-parties-associated-with-norm-attorney" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4547,15 +4618,16 @@ export def "get-case-count-analytics-by-opposing-norm-attorney-for-a-norm-attorn
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normAttorneyId: string, normAttorneyName: string, object: string>, totalCaseCount: int, totalNormAttorneyCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normAttorneyId: string, normAttorneyName: string, object: string>, totalCaseCount: int, totalNormAttorneyCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_attorney_id: (encode-path-segment $norm_attorney_id)} | format pattern "/normAttorney/{norm_attorney_id}/caseCountAnalyticsByOpposingNormAttorney") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4586,13 +4658,13 @@ export def "search-normalized-attorneys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/normAttorneySearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4623,14 +4695,14 @@ export def "search-normalized-attorneys-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normAttorneySearchId: string, normAttorneySearchResultArray: table<firstFetchDate: string, hasAssociatedPublicData: bool, lastFetchDate: string, matchedObjectArray: list, name: string, normAttorneyDetailsAPI: string, normAttorneyId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_attorney_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normAttorneySearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_attorney_search_id: (encode-path-segment $norm_attorney_search_id)} | format pattern "/normAttorneySearch/{norm_attorney_search_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4660,13 +4732,13 @@ export def "get-norm-judge-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, judgeAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, normJudgeAPI: string, object: string>, judicialDataArray: table<abaRatings: record, aliasArray: list, bio: record, contact: record, educationArray: list, firstFetchDate: string, judicialSource: record, judicialStatus: string, lastFetchDate: string, lastFetchDateWithUpdates: string, nameHistoryArray: list, object: string, professionalCareerArray: list, serviceHistoryArray: list>, lastName: string, middleName: string, name: string, normJudgeId: string, object: string> {
+]: nothing -> oneof<record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, firstName: string, hasAssociatedPublicData: bool, judgeAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormLawFirmsAPI: string, associatedNormPartiesAPI: string, normJudgeAPI: string, object: string>, judicialDataArray: table<abaRatings: record, aliasArray: list, bio: record, contact: record, educationArray: list, firstFetchDate: string, judicialSource: record, judicialStatus: string, lastFetchDate: string, lastFetchDateWithUpdates: string, nameHistoryArray: list, object: string, professionalCareerArray: list, serviceHistoryArray: list>, lastName: string, middleName: string, name: string, normJudgeId: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
   let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4697,15 +4769,16 @@ export def "get-norm-attorneys-associated-with-norm-judge" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4736,15 +4809,16 @@ export def "get-norm-law-firms-associated-with-norm-judge" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4775,15 +4849,16 @@ export def "get-norm-parties-associated-with-norm-judge" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_judge_id: (encode-path-segment $norm_judge_id)} | format pattern "/normJudge/{norm_judge_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4814,13 +4889,13 @@ export def "search-normalized-judges" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/normJudgeSearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4851,14 +4926,14 @@ export def "search-normalized-judges-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normJudgeSearchId: string, normJudgeSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normJudgeDetailsAPI: string, normJudgeId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_judge_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normJudgeSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_judge_search_id: (encode-path-segment $norm_judge_search_id)} | format pattern "/normJudgeSearch/{norm_judge_search_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4888,13 +4963,13 @@ export def "get-norm-law-firm-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, lawFirmAnalyticsAPI: record<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normLawFirmAPI: string, object: string>, name: string, normLawFirmId: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, object: string> {
+]: nothing -> oneof<record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, lawFirmAnalyticsAPI: record<associatedNormAttorneyAPI: string, associatedNormJudgeAPI: string, associatedNormPartiesAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normLawFirmAPI: string, object: string>, name: string, normLawFirmId: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
   let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4925,15 +5000,16 @@ export def "get-norm-attorneys-associated-with-norm-law-firm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4964,15 +5040,16 @@ export def "get-norm-judges-associated-with-norm-law-firm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5003,15 +5080,16 @@ export def "get-norm-parties-associated-with-norm-law-firm" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormPartyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normPartyAPI: string, normPartyId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/associatedNormParties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5042,15 +5120,16 @@ export def "get-case-count-analytics-by-opposing-norm-law-firm-for-a-norm-law-fi
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normLawFirmId: string, normLawFirmName: string, object: string>, totalCaseCount: int, totalNormLawFirmCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normLawFirmId: string, normLawFirmName: string, object: string>, totalCaseCount: int, totalNormLawFirmCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_law_firm_id: (encode-path-segment $norm_law_firm_id)} | format pattern "/normLawFirm/{norm_law_firm_id}/caseCountAnalyticsByOpposingNormLawFirm") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5081,13 +5160,13 @@ export def "search-normalized-law-firms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/normLawFirmSearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5118,14 +5197,14 @@ export def "search-normalized-law-firms-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normLawFirmSearchId: string, normLawFirmSearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normLawFirmDetailsAPI: string, normLawFirmId: string, object: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_law_firm_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normLawFirmSearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_law_firm_search_id: (encode-path-segment $norm_law_firm_search_id)} | format pattern "/normLawFirmSearch/{norm_law_firm_search_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5155,13 +5234,13 @@ export def "get-norm-party-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, individualData: record<firstName: string, lastName: string, middleName: string, name: string>, name: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, normPartyId: string, object: string, partyAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normPartyAPI: string, object: string>, partyClassificationType: string, relatedNormPartyArray: table<normPartyId: string, object: string, relationshipType: string>> {
+]: nothing -> oneof<record<caseAnalyticsAPI: record<caseCountAnalyticsByAreaOfLawAPI: string, caseCountAnalyticsByCaseClassAPI: string, caseCountAnalyticsByCaseTypeAPI: string, caseCountAnalyticsByCaseTypeGroupAPI: string, caseCountAnalyticsByCourtAPI: string, caseCountAnalyticsByCourtLocationAPI: string, caseCountAnalyticsByCourtSystemAPI: string, caseCountAnalyticsByCourtTypeAPI: string, caseCountAnalyticsByJurisdictionGeoAPI: string, caseCountAnalyticsByPartyRoleAPI: string, caseCountAnalyticsByPartyRoleGroupAPI: string, object: string, totalCases: int>, caseSearchAPI: string, individualData: record<firstName: string, lastName: string, middleName: string, name: string>, name: string, normOrganizationData: record<cik: string, isInvolvedInLitigation: bool, lei: string, naics: string, naicsDescription: string, name: string, normCorporateGroupArray: list<record>, normOrganizationId: string, normPartyAPI: string, object: string, organizationType: string, sic: string, sicDescription: string, sosDataArray: list<record>, tickerArray: list<record>>, normPartyId: string, object: string, partyAnalyticsAPI: record<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, caseCountAnalyticsByOpposingNormAttorneyAPI: string, caseCountAnalyticsByOpposingNormLawFirmAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, normPartyAPI: string, object: string>, partyClassificationType: string, relatedNormPartyArray: table<normPartyId: string, object: string, relationshipType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
   let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5192,15 +5271,16 @@ export def "get-norm-attorneys-associated-with-norm-party" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormAttorneyArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normAttorneyAPI: string, normAttorneyId: string, object: string, stateBarDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormAttorneys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5231,15 +5311,16 @@ export def "get-norm-judges-associated-with-norm-party" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormJudgeArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, firstName: string, lastName: string, middleName: string, name: string, normJudgeAPI: string, normJudgeId: string, object: string, version: string>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormJudges") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5270,15 +5351,16 @@ export def "get-norm-law-firms-associated-with-norm-party" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<associatedNormLawFirmArray: table<caseCount: int, caseSearchAPI: string, caseTimeline: record, name: string, normLawFirmAPI: string, normLawFirmId: string, object: string, sosDataArray: list>, nextPageAPI: string, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/associatedNormLawFirms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5309,15 +5391,16 @@ export def "get-case-count-analytics-by-opposing-norm-party-for-a-norm-party" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters. All options are documented above.
-  --page-number: int # Page number. - minimum: 1
-]: nothing -> record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normPartyId: string, normPartyName: string, object: string>, totalCaseCount: int, totalNormPartyCount: int, totalPages: int> {
+  --page-number: int # Page number. - minimum: 1 (required)
+]: nothing -> oneof<record<nextPageAPI: string, object: string, previousPageAPI: string, results: table<caseCount: int, caseSearchAPI: string, normPartyId: string, normPartyName: string, object: string>, totalCaseCount: int, totalNormPartyCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartyId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_party_id: (encode-path-segment $norm_party_id)} | format pattern "/normParty/{norm_party_id}/caseCountAnalyticsByOpposingNormParty") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5348,13 +5431,13 @@ export def "search-normalized-parties" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The URL encoded query you are searching for. The query can be as simple as a keyword, but supports many additional options and filters.
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/normPartySearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5385,14 +5468,14 @@ export def "search-normalized-parties-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved. - Minimum: 1 - Maximum: 1000 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, normPartySearchId: string, normPartySearchResultArray: table<firstFetchDate: string, lastFetchDate: string, matchedObjectArray: list, name: string, normPartyDetailsAPI: string, normPartyId: string, object: string, partyClassificationType: string>, object: string, pageNumber: int, previousPageAPI: string, q: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($norm_party_search_id | is-empty) { error make --unspanned { msg: "path parameter 'normPartySearchId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({norm_party_search_id: (encode-path-segment $norm_party_search_id)} | format pattern "/normPartySearch/{norm_party_search_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5421,17 +5504,21 @@ export def "import-pacer-case-by-court-using-case-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
-  --case-number: string # Case Number which you would like to Find in PACER site and import it to UniCourt. (e.g. 2:15-mc-12345)
-  --court-id: string # Court Id of the Case number being provided.
-]: nothing -> record<courtFee: float, object: string, pacerImportCaseResultsArray: table<hasOnlyMetaInfo: bool, object: string, uniCourtContent: record>> {
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
+  --case-number: string # Case Number which you would like to Find in PACER site and import it to UniCourt. (required, e.g. 2:15-mc-12345)
+  --court-id: string # Court Id of the Case number being provided. (required)
+]: nothing -> oneof<record<courtFee: float, object: string, pacerImportCaseResultsArray: table<hasOnlyMetaInfo: bool, object: string, uniCourtContent: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
+  if ($case_number == null) { error make --unspanned { msg: "required query parameter 'caseNumber' missing: pass --case-number" } }
+  if ($court_id == null) { error make --unspanned { msg: "required query parameter 'courtId' missing: pass --court-id" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "courtId" $court_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacer/importCaseByCourtUsingCaseNumber" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5460,8 +5547,8 @@ export def "all-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
@@ -5477,13 +5564,15 @@ export def "all-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/allCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5512,8 +5601,8 @@ export def "appeal-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
@@ -5530,13 +5619,15 @@ export def "appeal-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make. (e.g. 1)
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "natureOfSuitsArray" $nature_of_suits_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/appealCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5565,8 +5656,8 @@ export def "bankruptcy-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
@@ -5587,13 +5678,15 @@ export def "bankruptcy-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "federalBankruptcyChapterArray" $federal_bankruptcy_chapter_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "caseDischargedStartDate" $case_discharged_start_date "scalar") (serialize-qp "caseDischargedEndDate" $case_discharged_end_date "scalar") (serialize-qp "caseDismissedStartDate" $case_dismissed_start_date "scalar") (serialize-qp "caseDismissedEndDate" $case_dismissed_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/bankruptcyCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5622,8 +5715,8 @@ export def "civil-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
@@ -5640,13 +5733,15 @@ export def "civil-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "natureOfSuitsArray" $nature_of_suits_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/civilCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5675,8 +5770,8 @@ export def "criminal-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --case-title: string # You can search using the case name even if you know one party. Examples: A search for case title john doe v will result in all cases with the case title John Doe v. A search for case title Acme, Inc. will result in all case titles starting with Acme, Inc. (nullable)
@@ -5692,13 +5787,15 @@ export def "criminal-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/criminalCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5727,8 +5824,8 @@ export def "multi-district-courts-pacer-case-locator-case-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --jpml-number: int # Master JPML Case Number.
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
@@ -5745,13 +5842,15 @@ export def "multi-district-courts-pacer-case-locator-case-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Case Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "jpmlNumber" $jpml_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/caseSearch/multiDistrictCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5780,8 +5879,8 @@ export def "all-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -5806,13 +5905,15 @@ export def "all-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/allCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5841,8 +5942,8 @@ export def "appeal-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -5867,13 +5968,15 @@ export def "appeal-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/appealCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5902,8 +6005,8 @@ export def "bankruptcy-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -5934,13 +6037,15 @@ export def "bankruptcy-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "ssnOrEin" $ssn_or_ein "scalar") (serialize-qp "fourDigitSsn" $four_digit_ssn "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "caseDischargedStartDate" $case_discharged_start_date "scalar") (serialize-qp "caseDischargedEndDate" $case_discharged_end_date "scalar") (serialize-qp "caseDismissedStartDate" $case_dismissed_start_date "scalar") (serialize-qp "caseDismissedEndDate" $case_dismissed_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/bankruptcyCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5969,8 +6074,8 @@ export def "civil-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -5995,13 +6100,15 @@ export def "civil-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/civilCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6030,8 +6137,8 @@ export def "criminal-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
   --last-name: string # The last name of a party to search. This can be person or non person entity. (nullable, e.g. John)
@@ -6056,13 +6163,15 @@ export def "criminal-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/criminalCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6091,8 +6200,8 @@ export def "multi-district-courts-pacer-case-locator-party-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (e.g. johndoe)
-  --pacer-client-code: string # Client Code used while signing in to PACER account. (e.g. john)
+  --pacer-user-id: string # User ID or User Name of the PACER Account used while signing in to PACER. (required, e.g. johndoe)
+  --pacer-client-code: string # Client Code used while signing in to PACER account. (required, e.g. john)
   --case-number: string # If the court type is selected as All or if you need data for a specific case number format, then you need to use this option. Case numbers may be entered in each of the following formats: yy-nnnnn yy-tp-nnnnn yy tp nnnnn yytpnnnnn o:yy-nnnnn o:yy-tp-nnnnn o:yy tp nnnnn o:yytpnnnnn where: yy case year (may be 2 or 4 digits) nnnnn case number (up to 5 digits) tp case type (up to 2 characters) o office where the case was filed (1 digit). (nullable, e.g. 12-1234)
   --jpml-number: int # Master JPML Case Number.
   --pacer-case-id: int # Sequentially generated number that identifies the case in PACER system.
@@ -6118,13 +6227,15 @@ export def "multi-district-courts-pacer-case-locator-party-search" [
   --sort-parameter-query: string # The criteria based on which the search results are to be sorted. Please use the APPENDIX C: Sort Parameter - Sortable Party Parameters mentioned in the API Documentation. The fields can be sorted either ASC or DESC. Scenario 1: When mulitple sort paramters needs to be requested. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of courtId and caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtId,ASC&caseId,ASC Scenario 2: When you want to sort the response using the case parameters in the party search. Imagine for a given case number 12-1234 I would like to sort the results in the Ascending order of caseOffice and descending order of caseId, My query in the request will look like the example mentioned below. Example: sortParameterQuery=courtCase.caseOffice,ASC&caseid,DESC (nullable, default: sort=caseYear,DESC)
   --case-status: string@case-status-completer # Status of a case. 'closed' for a Terminated case, 'open' for Pending cases. If this parameter is not sent both cases that fall in open and closed will be queried. (nullable)
   --page-number: int # Page Number for a given Job ID or for the search your going to make.
-]: nothing -> record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerPageInfo: record<first: bool, last: bool, number: int, numberOfElements: int, object: string, size: int, totalElements: int, totalPages: int>, pacerReceipt: record<billablePages: int, clientCode: string, csoId: int, description: string, firmId: string, loginId: string, object: string, reportId: string, search: string, searchFee: string, transactionDate: string>, pacerSearchResultsArray: table<hasOnlyMetaInfo: bool, object: string, pacerContent: record, uniCourtContent: record>, pageNumber: int, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pacer_user_id == null) { error make --unspanned { msg: "required query parameter 'pacerUserId' missing: pass --pacer-user-id" } }
+  if ($pacer_client_code == null) { error make --unspanned { msg: "required query parameter 'pacerClientCode' missing: pass --pacer-client-code" } }
   let qp = [(serialize-qp "pacerUserId" $pacer_user_id "scalar") (serialize-qp "pacerClientCode" $pacer_client_code "scalar") (serialize-qp "caseNumber" $case_number "scalar") (serialize-qp "jpmlNumber" $jpml_number "scalar") (serialize-qp "pacerCaseId" $pacer_case_id "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "middleName" $middle_name "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "partyType" $party_type "scalar") (serialize-qp "partyExactNameMatch" $party_exact_name_match "scalar") (serialize-qp "partyRoleArray" $party_role_array "multi") (serialize-qp "caseTitle" $case_title "scalar") (serialize-qp "caseOffice" $case_office "scalar") (serialize-qp "caseSequenceNumber" $case_sequence_number "scalar") (serialize-qp "caseYear" $case_year "scalar") (serialize-qp "caseTypeArray" $case_type_array "multi") (serialize-qp "courtRegionIdArray" $court_region_id_array "multi") (serialize-qp "caseYearFrom" $case_year_from "scalar") (serialize-qp "caseYearTo" $case_year_to "scalar") (serialize-qp "caseFiledStartDate" $case_filed_start_date "scalar") (serialize-qp "caseFiledEndDate" $case_filed_end_date "scalar") (serialize-qp "caseTerminatedStartDate" $case_terminated_start_date "scalar") (serialize-qp "caseTerminatedEndDate" $case_terminated_end_date "scalar") (serialize-qp "sortParameterQuery" $sort_parameter_query "scalar") (serialize-qp "caseStatus" $case_status "scalar") (serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCaseLocator/partySearch/multiDistrictCourts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6154,13 +6265,13 @@ export def "get-pacer-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The page number of the PACER credentials to be retrieved. - Minimum: 1 (e.g. 1)
-]: nothing -> record<nextPageAPI: string, object: string, pacerCredentialArray: table<defaultPacerClientCode: string, object: string, pacerUserId: string>, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pacerCredentialArray: table<defaultPacerClientCode: string, object: string, pacerUserId: string>, pageNumber: int, previousPageAPI: string, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pacerCredential" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6192,15 +6303,15 @@ export def "add-pacer-credential" [
   --default-pacer-client-code: string # Pacer Client Code. (nullable, e.g. Test UniCourt API)
   pacer_user_id: string # Pacer User Id. (e.g. URKYwer3tyh5r56gq2)
   password: string # Password. (e.g. your password)
-]: any -> record<message: string, object: string> {
+]: any -> oneof<record<message: string, object: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pacerCredential" $auth.query)
   let req_body = {"defaultPacerClientCode": $default_pacer_client_code, "pacerUserId": $pacer_user_id, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6230,13 +6341,13 @@ export def "remove-pacer-credential-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, object: string> {
+]: nothing -> oneof<record<message: string, object: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pacer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'pacerUserId' must be non-empty" } }
   let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6266,13 +6377,13 @@ export def "get-pacer-credential-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<defaultPacerClientCode: string, object: string, pacerUserId: string> {
+]: nothing -> oneof<record<defaultPacerClientCode: string, object: string, pacerUserId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pacer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'pacerUserId' must be non-empty" } }
   let full_url = (build-url $base ({pacer_user_id: (encode-path-segment $pacer_user_id)} | format pattern "/pacerCredential/{pacer_user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6302,13 +6413,13 @@ export def "get-party-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attorneyRepresentationType: record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyClassificationType: string, partyId: string, partyRole: record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, possibleNormPartyArray: table<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, bestMatch: bool, caseCountAnalyticsByNormPartyAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, confidenceScore: float, normPartyAPI: string, normPartyId: string, normPartyName: string, object: string, scoreConstituents: record>, sourcePartyRole: string> {
+]: nothing -> oneof<record<attorneyRepresentationType: record<attorneyRepresentationTypeId: string, createdDate: string, name: string, object: string>, contact: record<addressArray: list<record>, emailArray: list<record>, object: string, phoneNumberArray: list<record>>, firstFetchDate: string, firstName: string, isVisible: bool, lastFetchDate: string, lastName: string, middleName: string, name: string, namePrefix: string, nameSuffix: string, object: string, partyAttorneyAssociations: record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: list<record>, totalCount: int, totalPages: int>, partyClassificationType: string, partyId: string, partyRole: record<createdDate: string, description: string, name: string, object: string, partyRoleGroup: string, partyRoleGroupId: string, partyRoleId: string>, possibleNormPartyArray: table<associatedNormAttorneysAPI: string, associatedNormJudgesAPI: string, associatedNormLawFirmsAPI: string, bestMatch: bool, caseCountAnalyticsByNormPartyAPI: string, caseCountAnalyticsByOpposingNormPartyAPI: string, confidenceScore: float, normPartyAPI: string, normPartyId: string, normPartyName: string, object: string, scoreConstituents: record>, sourcePartyRole: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6339,14 +6450,14 @@ export def "get-party-associated-attorneys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # Query parameter specifying the page number of the search results to be retrieved.
-]: nothing -> record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: table<attorneyId: string, isVisible: bool, object: string, partyAttorneyAssociationId: string, partyId: string>, totalCount: int, totalPages: int> {
+]: nothing -> oneof<record<nextPageAPI: string, object: string, pageNumber: int, partyAttorneyAssociationArray: table<attorneyId: string, isVisible: bool, object: string, partyAttorneyAssociationId: string, partyId: string>, totalCount: int, totalPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($party_id | is-empty) { error make --unspanned { msg: "path parameter 'partyId' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/party/{party_id}/associatedAttorneys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

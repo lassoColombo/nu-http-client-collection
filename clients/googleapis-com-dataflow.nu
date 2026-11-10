@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -207,9 +234,9 @@ export def "dataflow-projects-worker-messages" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/WorkerMessages") $qp $auth.query)
   let req_body = {"location": $location, "workerMessages": $worker_messages} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -263,7 +290,7 @@ export def "dataflow-projects-jobs-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/jobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -317,11 +344,11 @@ export def "dataflow-projects-jobs-create" [
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
   --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
-  --location-body: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (body field)
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (spec name: location)
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
-  --replace-job-id-body: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job. (body field)
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to. (spec name: projectId)
+  --body-replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job. (spec name: replaceJobId)
   --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
   --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
   --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
@@ -339,10 +366,10 @@ export def "dataflow-projects-jobs-create" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "replaceJobId" $replace_job_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/jobs") $qp $auth.query)
-  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $location_body, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id_body, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $body_replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -394,7 +421,7 @@ export def "dataflow-projects-jobs-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -448,10 +475,10 @@ export def "dataflow-projects-jobs-update" [
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
   --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
-  --location-body: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (body field)
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (spec name: location)
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to. (spec name: projectId)
   --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
   --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
   --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
@@ -471,10 +498,10 @@ export def "dataflow-projects-jobs-update" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}") $qp $auth.query)
-  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $location_body, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -528,9 +555,9 @@ export def "dataflow-projects-jobs-debug-get-config" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/debug/getConfig") $qp $auth.query)
   let req_body = {"componentId": $component_id, "location": $location, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -586,9 +613,9 @@ export def "dataflow-projects-jobs-debug-send-capture" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/debug/sendCapture") $qp $auth.query)
   let req_body = {"componentId": $component_id, "data": $data, "dataFormat": $data_format, "location": $location, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -644,7 +671,7 @@ export def "dataflow-projects-jobs-messages-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "minimumImportance" $minimum_importance "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -696,7 +723,7 @@ export def "dataflow-projects-jobs-get-metrics" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/metrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -754,9 +781,9 @@ export def "dataflow-projects-jobs-work-items-lease" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/workItems:lease") $qp $auth.query)
   let req_body = {"currentWorkerTime": $current_worker_time, "location": $location, "requestedLeaseDuration": $requested_lease_duration, "unifiedWorkerRequest": $unified_worker_request, "workItemTypes": $work_item_types, "workerCapabilities": $worker_capabilities, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -812,9 +839,9 @@ export def "dataflow-projects-jobs-work-items-report-status" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/workItems:reportStatus") $qp $auth.query)
   let req_body = {"currentWorkerTime": $current_worker_time, "location": $location, "unifiedWorkerRequest": $unified_worker_request, "workItemStatuses": $work_item_statuses, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -869,9 +896,9 @@ export def "dataflow-projects-jobs-snapshot" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}:snapshot") $qp $auth.query)
   let req_body = {"description": $description, "location": $location, "snapshotSources": $snapshot_sources, "ttl": $ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -925,7 +952,7 @@ export def "dataflow-projects-jobs-aggregated" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/jobs:aggregated") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -967,7 +994,7 @@ export def "dataflow-projects-locations-worker-messages" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job. (spec name: location)
   --worker-messages: list # The WorkerMessages to send. — item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
 ]: any -> oneof<record<workerMessageResponses: table<workerHealthReportResponse: record, workerMetricsResponse: record, workerShutdownNoticeResponse: record, workerThreadScalingReportResponse: record>>, string, nothing> {
   let input = $in
@@ -978,9 +1005,9 @@ export def "dataflow-projects-locations-worker-messages" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/WorkerMessages") $qp $auth.query)
   let req_body = {"location": $body_location, "workerMessages": $worker_messages} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1033,9 +1060,9 @@ export def "dataflow-projects-locations-flex-templates-launch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/flexTemplates:launch") $qp $auth.query)
   let req_body = {"launchParameter": $launch_parameter, "validateOnly": $validate_only} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1090,7 +1117,7 @@ export def "dataflow-projects-locations-jobs-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1144,11 +1171,11 @@ export def "dataflow-projects-locations-jobs-create" [
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
   --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (spec name: location)
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
-  --replace-job-id-body: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job. (body field)
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to. (spec name: projectId)
+  --body-replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job. (spec name: replaceJobId)
   --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
   --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
   --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
@@ -1167,10 +1194,10 @@ export def "dataflow-projects-locations-jobs-create" [
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "replaceJobId" $replace_job_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs") $qp $auth.query)
-  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id_body, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $body_replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1223,7 +1250,7 @@ export def "dataflow-projects-locations-jobs-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1277,10 +1304,10 @@ export def "dataflow-projects-locations-jobs-update" [
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
   --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job. (spec name: location)
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to. (spec name: projectId)
   --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
   --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
   --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
@@ -1302,9 +1329,9 @@ export def "dataflow-projects-locations-jobs-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}") $qp $auth.query)
   let req_body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1348,7 +1375,7 @@ export def "dataflow-projects-locations-jobs-debug-get-config" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --component-id: string # The internal component id for which debug configuration is requested.
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id. (spec name: location)
   --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> oneof<record<config: string>, string, nothing> {
   let input = $in
@@ -1360,9 +1387,9 @@ export def "dataflow-projects-locations-jobs-debug-get-config" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/debug/getConfig") $qp $auth.query)
   let req_body = {"componentId": $component_id, "location": $body_location, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1408,7 +1435,7 @@ export def "dataflow-projects-locations-jobs-debug-send-capture" [
   --component-id: string # The internal component id for which debug information is sent.
   --data: string # The encoded debug information.
   --data-format: string@data-format-completer # Format for the data field above (id=5).
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id. (spec name: location)
   --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> oneof<record, string, nothing> {
   let input = $in
@@ -1420,9 +1447,9 @@ export def "dataflow-projects-locations-jobs-debug-send-capture" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/debug/sendCapture") $qp $auth.query)
   let req_body = {"componentId": $component_id, "data": $data, "dataFormat": $data_format, "location": $body_location, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1476,7 +1503,7 @@ export def "dataflow-projects-locations-jobs-get-execution-details" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/executionDetails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1533,7 +1560,7 @@ export def "dataflow-projects-locations-jobs-messages-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "minimumImportance" $minimum_importance "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1586,7 +1613,7 @@ export def "dataflow-projects-locations-jobs-get-metrics" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/metrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1638,7 +1665,7 @@ export def "dataflow-projects-locations-jobs-snapshots-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1696,7 +1723,7 @@ export def "dataflow-projects-locations-jobs-stages-get-execution-details" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id), stage_id: (encode-path-segment $stage_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/stages/{stage_id}/executionDetails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1740,7 +1767,7 @@ export def "dataflow-projects-locations-jobs-work-items-lease" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job. (spec name: location)
   --requested-lease-duration: string # The initial lease period. (format: google-duration)
   --unified-worker-request: record # Untranslated bag-of-bytes WorkRequest from UnifiedWorker.
   --work-item-types: list<string> # Filter for WorkItem type.
@@ -1756,9 +1783,9 @@ export def "dataflow-projects-locations-jobs-work-items-lease" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/workItems:lease") $qp $auth.query)
   let req_body = {"currentWorkerTime": $current_worker_time, "location": $body_location, "requestedLeaseDuration": $requested_lease_duration, "unifiedWorkerRequest": $unified_worker_request, "workItemTypes": $work_item_types, "workerCapabilities": $worker_capabilities, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1802,7 +1829,7 @@ export def "dataflow-projects-locations-jobs-work-items-report-status" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job. (spec name: location)
   --unified-worker-request: record # Untranslated bag-of-bytes WorkProgressUpdateRequest from UnifiedWorker.
   --work-item-statuses: list # The order is unimportant, except that the order of the WorkItemServiceState messages in the ReportWorkItemStatusResponse corresponds to the order of WorkItemStatus messages here. — item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
   --worker-id: string # The ID of the worker reporting the WorkItem status. If this does not match the ID of the worker which the Dataflow service believes currently has the lease on the WorkItem, the report will be dropped (with an error response).
@@ -1816,9 +1843,9 @@ export def "dataflow-projects-locations-jobs-work-items-report-status" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/workItems:reportStatus") $qp $auth.query)
   let req_body = {"currentWorkerTime": $current_worker_time, "location": $body_location, "unifiedWorkerRequest": $unified_worker_request, "workItemStatuses": $work_item_statuses, "workerId": $worker_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1862,7 +1889,7 @@ export def "dataflow-projects-locations-jobs-snapshot" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --description: string # User specified description of the snapshot. Maybe empty.
-  --body-location: string # The location that contains this job.
+  --body-location: string # The location that contains this job. (spec name: location)
   --snapshot-sources: oneof<nothing, bool> # If true, perform snapshots for sources which support this.
   --ttl: string # TTL for the snapshot. (format: google-duration)
 ]: any -> oneof<record<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: table<expireTime: string, snapshotName: string, topicName: string>, region: string, sourceJobId: string, state: string, ttl: string>, string, nothing> {
@@ -1875,9 +1902,9 @@ export def "dataflow-projects-locations-jobs-snapshot" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), job_id: (encode-path-segment $job_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}:snapshot") $qp $auth.query)
   let req_body = {"description": $description, "location": $body_location, "snapshotSources": $snapshot_sources, "ttl": $ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1928,7 +1955,7 @@ export def "dataflow-projects-locations-snapshots-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "jobId" $job_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1980,7 +2007,7 @@ export def "dataflow-projects-locations-snapshots-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2032,7 +2059,7 @@ export def "dataflow-projects-locations-snapshots-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2077,7 +2104,7 @@ export def "dataflow-projects-locations-templates-create" [
   --environment: record # The environment values to set at runtime. — shape: {additionalExperiments?: list<string>, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
   --gcs-path: string # Required. A Cloud Storage path to the template from which to create the job. Must be a valid Cloud Storage URL, beginning with `gs://`.
   --job-name: string # Required. The job name to use for the created job.
-  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request.
+  --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request. (spec name: location)
   --parameters: record # The runtime parameters to pass to the job.
 ]: any -> oneof<record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string>, string, nothing> {
   let input = $in
@@ -2088,9 +2115,9 @@ export def "dataflow-projects-locations-templates-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates") $qp $auth.query)
   let req_body = {"environment": $environment, "gcsPath": $gcs_path, "jobName": $job_name, "location": $body_location, "parameters": $parameters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2142,7 +2169,7 @@ export def "dataflow-projects-locations-templates-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates:get") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2202,9 +2229,9 @@ export def "dataflow-projects-locations-templates-launch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamic_template_gcs_path "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamic_template_staging_location "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), location: (encode-path-segment $location)} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates:launch") $qp $auth.query)
   let req_body = {"environment": $environment, "jobName": $job_name, "parameters": $parameters, "transformNameMapping": $transform_name_mapping, "update": $update} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2254,7 +2281,7 @@ export def "dataflow-projects-delete-snapshots" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "snapshotId" $snapshot_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2304,7 +2331,7 @@ export def "dataflow-projects-snapshots-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "jobId" $job_id "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2355,7 +2382,7 @@ export def "dataflow-projects-snapshots-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/v1b3/projects/{project_id}/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2409,9 +2436,9 @@ export def "dataflow-projects-templates-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/templates") $qp $auth.query)
   let req_body = {"environment": $environment, "gcsPath": $gcs_path, "jobName": $job_name, "location": $location, "parameters": $parameters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2462,7 +2489,7 @@ export def "dataflow-projects-templates-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/templates:get") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2521,9 +2548,9 @@ export def "dataflow-projects-templates-launch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamic_template_gcs_path "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamic_template_staging_location "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v1b3/projects/{project_id}/templates:launch") $qp $auth.query)
   let req_body = {"environment": $environment, "jobName": $job_name, "parameters": $parameters, "transformNameMapping": $transform_name_mapping, "update": $update} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

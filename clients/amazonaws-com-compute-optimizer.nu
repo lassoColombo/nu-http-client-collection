@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -202,11 +229,11 @@ export def "delete-recommendation-preferences" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.DeleteRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceType": $resource_type, "scope": $scope, "recommendationPreferenceNames": $recommendation_preference_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -247,8 +274,8 @@ export def "describe-recommendation-export-jobs" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   --job-ids: list<string> # The identification numbers of the export jobs to return. An export job ID is returned when you create an export using the ExportAutoScalingGroupRecommendations or ExportEC2InstanceRecommendations actions. All export jobs created in the last seven days are returned if this parameter is omitted.
   --filters: list # An array of objects to specify a filter that returns a more specific list of export jobs. — item shape: {name?: "ResourceType"|"JobStatus", values?: list<string>}
-  --next-token-body: string # The token to advance to the next page of export jobs. (body field)
-  --max-results-body: int # The maximum number of export jobs to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+  --body-next-token: string # The token to advance to the next page of export jobs. (spec name: nextToken)
+  --body-max-results: int # The maximum number of export jobs to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (spec name: maxResults)
 ]: any -> oneof<record<recommendationExportJobs: table<jobId: string, destination: record, resourceType: string, status: string, creationTimestamp: string, lastUpdatedTimestamp: string, failureReason: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -256,12 +283,12 @@ export def "describe-recommendation-export-jobs" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.DescribeRecommendationExportJobs")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"jobIds": $job_ids, "filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"jobIds": $job_ids, "filters": $filters, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -312,11 +339,11 @@ export def "export-auto-scaling-group-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportAutoScalingGroupRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts, "recommendationPreferences": $recommendation_preferences} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -366,11 +393,11 @@ export def "export-ebs-volume-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportEBSVolumeRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -421,11 +448,11 @@ export def "export-ec2-instance-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportEC2InstanceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts, "recommendationPreferences": $recommendation_preferences} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -475,11 +502,11 @@ export def "export-ecs-service-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportECSServiceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -529,11 +556,11 @@ export def "export-lambda-function-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.ExportLambdaFunctionRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "filters": $filters, "fieldsToExport": $fields_to_export, "s3DestinationConfig": $s3_destination_config, "fileFormat": $file_format, "includeMemberAccounts": $include_member_accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -583,11 +610,11 @@ export def "get-auto-scaling-group-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetAutoScalingGroupRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accountIds": $account_ids, "autoScalingGroupArns": $auto_scaling_group_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "recommendationPreferences": $recommendation_preferences} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -636,11 +663,11 @@ export def "get-ebs-volume-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEBSVolumeRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"volumeArns": $volume_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -690,11 +717,11 @@ export def "get-ec2-instance-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEC2InstanceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceArns": $instance_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids, "recommendationPreferences": $recommendation_preferences} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -744,11 +771,11 @@ export def "get-ec2-recommendation-projected-metrics" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEC2RecommendationProjectedMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"instanceArn": $instance_arn, "stat": $stat, "period": $period, "startTime": $start_time, "endTime": $end_time, "recommendationPreferences": $recommendation_preferences} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -797,11 +824,11 @@ export def "get-ecs-service-recommendation-projected-metrics" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetECSServiceRecommendationProjectedMetrics")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceArn": $service_arn, "stat": $stat, "period": $period, "startTime": $start_time, "endTime": $end_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -850,11 +877,11 @@ export def "get-ecs-service-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetECSServiceRecommendations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"serviceArns": $service_arns, "nextToken": $next_token, "maxResults": $max_results, "filters": $filters, "accountIds": $account_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -899,11 +926,11 @@ export def "get-effective-recommendation-preferences" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEffectiveRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -948,11 +975,11 @@ export def "get-enrollment-status" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEnrollmentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -992,8 +1019,8 @@ export def "get-enrollment-statuses-for-organization" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   --filters: list # An array of objects to specify a filter that returns a more specific list of account enrollment statuses. — item shape: {name?: "Status", values?: list<string>}
-  --next-token-body: string # The token to advance to the next page of account enrollment statuses. (body field)
-  --max-results-body: int # The maximum number of account enrollment statuses to return with a single request. You can specify up to 100 statuses to return with each request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+  --body-next-token: string # The token to advance to the next page of account enrollment statuses. (spec name: nextToken)
+  --body-max-results: int # The maximum number of account enrollment statuses to return with a single request. You can specify up to 100 statuses to return with each request. To retrieve the remaining results, make another request with the returned nextToken value. (spec name: maxResults)
 ]: any -> oneof<record<accountEnrollmentStatuses: table<accountId: string, status: string, statusReason: string, lastUpdatedTimestamp: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1001,12 +1028,12 @@ export def "get-enrollment-statuses-for-organization" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetEnrollmentStatusesForOrganization")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"filters": $filters, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1048,8 +1075,8 @@ export def "get-lambda-function-recommendations" [
   --function-arns: list<string> # The Amazon Resource Name (ARN) of the functions for which to return recommendations. You can specify a qualified or unqualified ARN. If you specify an unqualified ARN without a function version suffix, Compute Optimizer will return recommendations for the latest ($LATEST) version of the function. If you specify a qualified ARN with a version suffix, Compute Optimizer will return recommendations for the specified function version. For more information about using function versions, see Using versions (https://docs.aws.amazon.com/lambda/latest/dg/configuration-versions.html#versioning-versions-using) in the Lambda Developer Guide.
   --account-ids: list<string> # The ID of the Amazon Web Services account for which to return function recommendations. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return function recommendations. Only one account ID can be specified per request.
   --filters: list # An array of objects to specify a filter that returns a more specific list of function recommendations. — item shape: {name?: "Finding"|"FindingReasonCode", values?: list<string>}
-  --next-token-body: string # The token to advance to the next page of function recommendations. (body field)
-  --max-results-body: int # The maximum number of function recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+  --body-next-token: string # The token to advance to the next page of function recommendations. (spec name: nextToken)
+  --body-max-results: int # The maximum number of function recommendations to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (spec name: maxResults)
 ]: any -> oneof<record<nextToken: string, lambdaFunctionRecommendations: table<functionArn: string, functionVersion: string, accountId: string, currentMemorySize: int, numberOfInvocations: int, utilizationMetrics: list, lookbackPeriodInDays: float, lastRefreshTimestamp: string, finding: string, findingReasonCodes: list, memorySizeRecommendationOptions: list, currentPerformanceRisk: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1057,12 +1084,12 @@ export def "get-lambda-function-recommendations" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetLambdaFunctionRecommendations")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"functionArns": $function_arns, "accountIds": $account_ids, "filters": $filters, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"functionArns": $function_arns, "accountIds": $account_ids, "filters": $filters, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1103,8 +1130,8 @@ export def "get-recommendation-preferences" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_type: string@resource-type-completer # The target resource type of the recommendation preference for which to return preferences. The Ec2Instance option encompasses standalone instances and instances that are part of Auto Scaling groups. The AutoScalingGroup option encompasses only instances that are part of an Auto Scaling group. The valid values for this parameter are Ec2Instance and AutoScalingGroup.
   --scope: record # Describes the scope of a recommendation preference. Recommendation preferences can be created at the organization level (for management accounts of an organization only), account level, and resource level. For more information, see Activating enhanced infrastructure metrics (https://docs.aws.amazon.com/compute-optimizer/latest/ug/enhanced-infrastructure-metrics.html) in the Compute Optimizer User Guide. You cannot create recommendation preferences for Auto Scaling groups at the organization and account levels. You can create recommendation preferences for Auto Scaling groups only at the resource level by specifying a scope name of ResourceArn and a scope value of the Auto Scaling group Amazon Resource Name (ARN). This will configure the preference for all instances that are part of the specified Auto Scaling group. You also cannot create recommendation preferences at the resource level for instances that are part of an Auto Scaling group. You can create recommendation preferences at the resource level only for standalone instances. — shape: {name?: "Organization"|"AccountId"|"ResourceArn", value?: string}
-  --next-token-body: string # The token to advance to the next page of recommendation preferences. (body field)
-  --max-results-body: int # The maximum number of recommendation preferences to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+  --body-next-token: string # The token to advance to the next page of recommendation preferences. (spec name: nextToken)
+  --body-max-results: int # The maximum number of recommendation preferences to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (spec name: maxResults)
 ]: any -> oneof<record<nextToken: string, recommendationPreferencesDetails: table<scope: record, resourceType: string, enhancedInfrastructureMetrics: string, inferredWorkloadTypes: string, externalMetricsPreference: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1112,12 +1139,12 @@ export def "get-recommendation-preferences" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetRecommendationPreferences")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"resourceType": $resource_type, "scope": $scope, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"resourceType": $resource_type, "scope": $scope, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1157,8 +1184,8 @@ export def "get-recommendation-summaries" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   --account-ids: list<string> # The ID of the Amazon Web Services account for which to return recommendation summaries. If your account is the management account of an organization, use this parameter to specify the member account for which you want to return recommendation summaries. Only one account ID can be specified per request.
-  --next-token-body: string # The token to advance to the next page of recommendation summaries. (body field)
-  --max-results-body: int # The maximum number of recommendation summaries to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (body field)
+  --body-next-token: string # The token to advance to the next page of recommendation summaries. (spec name: nextToken)
+  --body-max-results: int # The maximum number of recommendation summaries to return with a single request. To retrieve the remaining results, make another request with the returned nextToken value. (spec name: maxResults)
 ]: any -> oneof<record<nextToken: string, recommendationSummaries: table<summaries: list, recommendationResourceType: string, accountId: string, savingsOpportunity: record, currentPerformanceRiskRatings: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,12 +1193,12 @@ export def "get-recommendation-summaries" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.GetRecommendationSummaries")
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"accountIds": $account_ids, "nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"accountIds": $account_ids, "nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1220,11 +1247,11 @@ export def "put-recommendation-preferences" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.PutRecommendationPreferences")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceType": $resource_type, "scope": $scope, "enhancedInfrastructureMetrics": $enhanced_infrastructure_metrics, "inferredWorkloadTypes": $inferred_workload_types, "externalMetricsPreference": $external_metrics_preference} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1270,11 +1297,11 @@ export def "update-enrollment-status" [
   let x_amz_target = ($x_amz_target | default "ComputeOptimizerService.UpdateEnrollmentStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"status": $status, "includeMemberAccounts": $include_member_accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

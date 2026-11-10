@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -202,7 +229,7 @@ export def "bigquery-projects-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -250,7 +277,7 @@ export def "bigquery-datasets-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -317,9 +344,9 @@ export def "bigquery-datasets-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/datasets") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -366,7 +393,7 @@ export def "bigquery-datasets-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "deleteContents" $delete_contents "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -412,7 +439,7 @@ export def "bigquery-datasets-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -481,9 +508,9 @@ export def "bigquery-datasets-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -552,9 +579,9 @@ export def "bigquery-datasets-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}") $qp $auth.query)
   let req_body = {"access": $access, "creationTime": $creation_time, "datasetReference": $dataset_reference, "defaultCollation": $default_collation, "defaultEncryptionConfiguration": $default_encryption_configuration, "defaultPartitionExpirationMs": $default_partition_expiration_ms, "defaultRoundingMode": $default_rounding_mode, "defaultTableExpirationMs": $default_table_expiration_ms, "description": $description, "etag": $etag, "friendlyName": $friendly_name, "id": $id, "isCaseInsensitive": $is_case_insensitive, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "maxTimeTravelHours": $max_time_travel_hours, "satisfiesPzs": $satisfies_pzs, "selfLink": $self_link, "storageBillingModel": $storage_billing_model, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -602,7 +629,7 @@ export def "bigquery-models-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -650,7 +677,7 @@ export def "bigquery-models-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -698,7 +725,7 @@ export def "bigquery-models-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -756,9 +783,9 @@ export def "bigquery-models-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), model_id: (encode-path-segment $model_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/models/{model_id}") $qp $auth.query)
   let req_body = {"bestTrialId": $best_trial_id, "description": $description, "encryptionConfiguration": $encryption_configuration, "expirationTime": $expiration_time, "friendlyName": $friendly_name, "hparamSearchSpaces": $hparam_search_spaces, "labels": $labels, "modelReference": $model_reference, "trainingRuns": $training_runs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -808,7 +835,7 @@ export def "bigquery-routines-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -868,9 +895,9 @@ export def "bigquery-routines-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines") $qp $auth.query)
   let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -918,7 +945,7 @@ export def "bigquery-routines-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -967,7 +994,7 @@ export def "bigquery-routines-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1029,9 +1056,9 @@ export def "bigquery-routines-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), routine_id: (encode-path-segment $routine_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/routines/{routine_id}") $qp $auth.query)
   let req_body = {"arguments": $arguments, "definitionBody": $definition_body, "description": $description, "determinismLevel": $determinism_level, "importedLibraries": $imported_libraries, "language": $language, "remoteFunctionOptions": $remote_function_options, "returnTableType": $return_table_type, "returnType": $return_type, "routineReference": $routine_reference, "routineType": $routine_type, "sparkOptions": $spark_options, "strictMode": $strict_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1079,7 +1106,7 @@ export def "bigquery-tables-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1167,9 +1194,9 @@ export def "bigquery-tables-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1217,7 +1244,7 @@ export def "bigquery-tables-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1267,7 +1294,7 @@ export def "bigquery-tables-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1358,9 +1385,9 @@ export def "bigquery-tables-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1451,9 +1478,9 @@ export def "bigquery-tables-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "autodetect_schema" $autodetect_schema "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}") $qp $auth.query)
   let req_body = {"cloneDefinition": $clone_definition, "clustering": $clustering, "creationTime": $creation_time, "defaultCollation": $default_collation, "defaultRoundingMode": $default_rounding_mode, "description": $description, "encryptionConfiguration": $encryption_configuration, "etag": $etag, "expirationTime": $expiration_time, "externalDataConfiguration": $external_data_configuration, "friendlyName": $friendly_name, "id": $id, "kind": $kind, "labels": $labels, "lastModifiedTime": $last_modified_time, "location": $location, "materializedView": $materialized_view, "maxStaleness": $max_staleness, "model": $model, "numBytes": $num_bytes, "numLongTermBytes": $num_long_term_bytes, "numPhysicalBytes": $num_physical_bytes, "numRows": $num_rows, "num_active_logical_bytes": $num_active_logical_bytes, "num_active_physical_bytes": $num_active_physical_bytes, "num_long_term_logical_bytes": $num_long_term_logical_bytes, "num_long_term_physical_bytes": $num_long_term_physical_bytes, "num_partitions": $num_partitions, "num_time_travel_physical_bytes": $num_time_travel_physical_bytes, "num_total_logical_bytes": $num_total_logical_bytes, "num_total_physical_bytes": $num_total_physical_bytes, "rangePartitioning": $range_partitioning, "requirePartitionFilter": $require_partition_filter, "schema": $schema, "selfLink": $self_link, "snapshotDefinition": $snapshot_definition, "streamingBuffer": $streaming_buffer, "tableReference": $table_reference, "timePartitioning": $time_partitioning, "type": $type, "view": $view} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1505,7 +1532,7 @@ export def "bigquery-tabledata-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/data") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1559,9 +1586,9 @@ export def "bigquery-tabledata-insert-all" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/insertAll") $qp $auth.query)
   let req_body = {"ignoreUnknownValues": $ignore_unknown_values, "kind": $kind, "rows": $rows, "skipInvalidRows": $skip_invalid_rows, "templateSuffix": $template_suffix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1611,7 +1638,7 @@ export def "bigquery-row-access-policies-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), dataset_id: (encode-path-segment $dataset_id), table_id: (encode-path-segment $table_id)} | format pattern "/projects/{project_id}/datasets/{dataset_id}/tables/{table_id}/rowAccessPolicies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1663,7 +1690,7 @@ export def "bigquery-jobs-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allUsers" $all_users "scalar") (serialize-qp "maxCreationTime" $max_creation_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minCreationTime" $min_creation_time "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parentJobId" $parent_job_id "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "stateFilter" $state_filter "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1709,9 +1736,9 @@ export def "bigquery-jobs-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/jobs") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1758,7 +1785,7 @@ export def "bigquery-jobs-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1805,7 +1832,7 @@ export def "bigquery-jobs-cancel" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/cancel") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1852,7 +1879,7 @@ export def "bigquery-jobs-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/jobs/{job_id}/delete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1893,7 +1920,7 @@ export def "bigquery-jobs-query" [
   --continuous: oneof<nothing, bool> # [Optional] Specifies whether the query should be executed as a continuous query. The default value is false.
   --create-session: oneof<nothing, bool> # If true, creates a new session, where session id will be a server generated random id. If false, runs query with an existing session_id passed in ConnectionProperty, otherwise runs query in non-session mode.
   --default-dataset: record # shape: {datasetId?: string, projectId?: string}
-  --body-dry-run: oneof<nothing, bool> # [Optional] If set to true, BigQuery doesn't run the job. Instead, if the query is valid, BigQuery returns statistics about the job such as how many bytes would be processed. If the query is invalid, an error returns. The default value is false.
+  --body-dry-run: oneof<nothing, bool> # [Optional] If set to true, BigQuery doesn't run the job. Instead, if the query is valid, BigQuery returns statistics about the job such as how many bytes would be processed. If the query is invalid, an error returns. The default value is false. (spec name: dryRun)
   --kind: string # The resource type of the request. (default: bigquery#queryRequest)
   --labels: record # The labels associated with this job. You can use these to organize and group your jobs. Label keys and values can be no longer than 63 characters, can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. Label values are optional. Label keys must start with a letter and each label in the list must have a different key.
   --location: string # The geographic location where the job should run. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
@@ -1915,9 +1942,9 @@ export def "bigquery-jobs-query" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/queries") $qp $auth.query)
   let req_body = {"connectionProperties": $connection_properties, "continuous": $continuous, "createSession": $create_session, "defaultDataset": $default_dataset, "dryRun": $body_dry_run, "kind": $kind, "labels": $labels, "location": $location, "maxResults": $max_results, "maximumBytesBilled": $maximum_bytes_billed, "parameterMode": $parameter_mode, "preserveNulls": $preserve_nulls, "query": $query, "queryParameters": $query_parameters, "requestId": $request_id, "timeoutMs": $timeout_ms, "useLegacySql": $use_legacy_sql, "useQueryCache": $use_query_cache} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1968,7 +1995,7 @@ export def "bigquery-jobs-get-query-results" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "timeoutMs" $timeout_ms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), job_id: (encode-path-segment $job_id)} | format pattern "/projects/{project_id}/queries/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2012,7 +2039,7 @@ export def "bigquery-projects-get-service-account" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2058,9 +2085,9 @@ export def "bigquery-tables-get-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:getIamPolicy") $qp $auth.query)
   let req_body = {"options": $options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2107,9 +2134,9 @@ export def "bigquery-tables-set-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:setIamPolicy") $qp $auth.query)
   let req_body = {"policy": $policy, "updateMask": $update_mask} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2155,9 +2182,9 @@ export def "bigquery-tables-test-iam-permissions" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/{resource}:testIamPermissions") $qp $auth.query)
   let req_body = {"permissions": $permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -198,9 +225,9 @@ export def "post-marketing-v3-marketing-events-attendance-create-create" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/create") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -243,9 +270,9 @@ export def "post-marketing-v3-marketing-events-attendance-email-create-create-by
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/attendance/{external_event_id}/{subscriber_state}/email-create") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -291,9 +318,9 @@ export def "post-marketing-v3-marketing-events-events-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events" $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $external_event_id, "startDateTime": $start_date_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -328,9 +355,9 @@ export def "post-marketing-v3-marketing-events-events-delete-archive-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/delete" $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -368,7 +395,7 @@ export def "get-marketing-v3-marketing-events-events-search-do-search" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -404,9 +431,9 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketing/v3/marketing-events/events/upsert" $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -444,7 +471,7 @@ export def "delete-marketing-v3-marketing-events-events-archive" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -483,7 +510,7 @@ export def "get-marketing-v3-marketing-events-events-get-by-id" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -532,9 +559,9 @@ export def "patch-marketing-v3-marketing-events-events-update" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $qp $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "startDateTime": $start_date_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -573,7 +600,7 @@ export def "put-marketing-v3-marketing-events-events-replace" [
   --event-type: string # Describes what type of event this is. For example: `WEBINAR`, `CONFERENCE`, `WORKSHOP`
   --event-url: string # A URL in the external event application where the marketing event can be managed.
   external_account_id: string # The accountId that is associated with this marketing event in the external event application.
-  --body-external-event-id: string # The id of the marketing event in the external event application.
+  --body-external-event-id: string # The id of the marketing event in the external event application. (spec name: externalEventId)
   --start-date-time: string # The start date and time of the marketing event. (format: date-time)
 ]: any -> oneof<record<createdAt: string, customProperties: table<name: string, persistenceTimestamp: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, source: string, sourceId: string, sourceLabel: string, sourceMetadata: string, sourceVid: list, timestamp: int, updatedByUserId: int, useTimestampAsPersistenceTimestamp: bool, value: string>, endDateTime: string, eventCancelled: bool, eventDescription: string, eventName: string, eventOrganizer: string, eventType: string, eventUrl: string, id: string, startDateTime: string, updatedAt: string>, string, nothing> {
   let input = $in
@@ -582,10 +609,10 @@ export def "put-marketing-v3-marketing-events-events-replace" [
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}") $auth.query)
   let req_body = {"customProperties": $custom_properties, "endDateTime": $end_date_time, "eventCancelled": $event_cancelled, "eventDescription": $event_description, "eventName": $event_name, "eventOrganizer": $event_organizer, "eventType": $event_type, "eventUrl": $event_url, "externalAccountId": $external_account_id, "externalEventId": $body_external_event_id, "startDateTime": $start_date_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "externalEventId") == null) { error make --unspanned { msg: "required body field 'externalEventId' missing: pass --body-external-event-id or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -624,7 +651,7 @@ export def "post-marketing-v3-marketing-events-events-cancel-do-cancel" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/cancel") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -666,9 +693,9 @@ export def "post-marketing-v3-marketing-events-events-complete-complete" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/complete") $qp $auth.query)
   let req_body = {"endDateTime": $end_date_time, "startDateTime": $start_date_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -710,9 +737,9 @@ export def "post-marketing-v3-marketing-events-events-email-upsert-do-email-upse
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/email-upsert") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -754,9 +781,9 @@ export def "post-marketing-v3-marketing-events-events-upsert-do-upsert-by-id" [
   let qp = [(serialize-qp "externalAccountId" $external_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id), subscriber_state: (encode-path-segment $subscriber_state)} | format pattern "/marketing/v3/marketing-events/events/{external_event_id}/{subscriber_state}/upsert") $qp $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -792,7 +819,7 @@ export def "get-marketing-v3-marketing-events-settings-get-all" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/marketing/v3/marketing-events/{app_id}/settings") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -830,9 +857,9 @@ export def "post-marketing-v3-marketing-events-settings-create" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/marketing/v3/marketing-events/{app_id}/settings") $auth.query)
   let req_body = {"eventDetailsUrl": $event_details_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

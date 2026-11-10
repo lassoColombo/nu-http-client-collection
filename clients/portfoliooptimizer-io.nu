@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -177,9 +204,9 @@ export def "post-assets-analysis-absorption-ratio" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/analysis/absorption-ratio" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsCovarianceMatrixEigenvectors": $assets_covariance_matrix_eigenvectors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -217,9 +244,9 @@ export def "post-assets-analysis-turbulence-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/analysis/turbulence-index" $auth.query)
   let req_body = {"assets": $assets, "assetsAverageReturns": $assets_average_returns, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -255,9 +282,9 @@ export def "post-assets-correlation-matrix" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -294,9 +321,9 @@ export def "post-assets-correlation-matrix-bounds" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/bounds" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsGroup": $assets_group} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -334,9 +361,9 @@ export def "post-assets-correlation-matrix-denoised" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/denoised" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsCorrelationMatrixAspectRatio": $assets_correlation_matrix_aspect_ratio, "denoisingMethod": $denoising_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -374,9 +401,9 @@ export def "post-assets-correlation-matrix-distance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/distance" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "distanceMetric": $distance_metric, "referenceCorrelationMatrix": $reference_correlation_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -412,9 +439,9 @@ export def "post-assets-correlation-matrix-effective-rank" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/effective-rank" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -451,9 +478,9 @@ export def "post-assets-correlation-matrix-informativeness" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/informativeness" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "distanceMetric": $distance_metric} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -490,9 +517,9 @@ export def "post-assets-correlation-matrix-nearest" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/nearest" $auth.query)
   let req_body = {"assets": $assets, "assetsApproximateCorrelationMatrix": $assets_approximate_correlation_matrix, "assetsFixedCorrelations": $assets_fixed_correlations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -527,9 +554,9 @@ export def "post-assets-correlation-matrix-random" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/random" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -568,9 +595,9 @@ export def "post-assets-correlation-matrix-shrinkage" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/shrinkage" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "shrinkageFactor": $shrinkage_factor, "targetEquicorrelationMatrix": $target_equicorrelation_matrix, "targetCorrelationMatrix": $target_correlation_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -607,9 +634,9 @@ export def "post-assets-correlation-matrix-theory-implied" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/theory-implied" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "clusteringMethod": $clustering_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -645,9 +672,9 @@ export def "post-assets-correlation-matrix-validation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/correlation/matrix/validation" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -685,9 +712,9 @@ export def "post-assets-covariance-matrix" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsVariances": $assets_variances, "assetsVolatilities": $assets_volatilities} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -723,9 +750,9 @@ export def "post-assets-covariance-matrix-effective-rank" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/effective-rank" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -761,9 +788,9 @@ export def "post-assets-covariance-matrix-exponentially-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/exponentially-weighted" $auth.query)
   let req_body = {"assets": $assets, "decayFactor": $decay_factor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -799,9 +826,9 @@ export def "post-assets-covariance-matrix-validation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/covariance/matrix/validation" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -836,9 +863,9 @@ export def "post-assets-kurtosis" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/kurtosis" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -873,9 +900,9 @@ export def "post-assets-prices-adjusted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/prices/adjusted" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -910,9 +937,9 @@ export def "post-assets-prices-adjusted-forward" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/prices/adjusted/forward" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -947,9 +974,9 @@ export def "post-assets-returns" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -984,9 +1011,9 @@ export def "post-assets-returns-average" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns/average" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1026,9 +1053,9 @@ export def "post-assets-returns-simulation-bootstrap" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/returns/simulation/bootstrap" $auth.query)
   let req_body = {"assets": $assets, "bootstrapAverageBlockLength": $bootstrap_average_block_length, "bootstrapBlockLength": $bootstrap_block_length, "bootstrapMethod": $bootstrap_method, "simulations": $simulations, "simulationsLength": $simulations_length} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1063,9 +1090,9 @@ export def "post-assets-skewness" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/skewness" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1101,9 +1128,9 @@ export def "post-assets-variance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/variance" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1139,9 +1166,9 @@ export def "post-assets-volatility" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assets/volatility" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1177,9 +1204,9 @@ export def "post-factors-residualization" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/factors/residualization" $auth.query)
   let req_body = {"factors": $factors, "residualizedFactor": $residualized_factor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1217,9 +1244,9 @@ export def "post-portfolio-analysis-alpha" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/alpha" $auth.query)
   let req_body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "riskFreeReturns": $risk_free_returns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1257,9 +1284,9 @@ export def "post-portfolio-analysis-beta" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/beta" $auth.query)
   let req_body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "riskFreeReturns": $risk_free_returns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1295,9 +1322,9 @@ export def "post-portfolio-analysis-conditional-value-at-risk" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/conditional-value-at-risk" $auth.query)
   let req_body = {"alpha": $alpha, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1335,9 +1362,9 @@ export def "post-portfolio-analysis-contributions-return" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/contributions/return" $auth.query)
   let req_body = {"assets": $assets, "assetsGroups": $assets_groups, "assetsReturns": $assets_returns, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1375,9 +1402,9 @@ export def "post-portfolio-analysis-contributions-risk" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/contributions/risk" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsGroups": $assets_groups, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1414,9 +1441,9 @@ export def "post-portfolio-analysis-correlation-spectrum" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/correlation-spectrum" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1453,9 +1480,9 @@ export def "post-portfolio-analysis-diversification-ratio" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/diversification-ratio" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1490,9 +1517,9 @@ export def "post-portfolio-analysis-drawdowns" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/drawdowns" $auth.query)
   let req_body = {"portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1530,9 +1557,9 @@ export def "post-portfolio-analysis-effective-number-of-bets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/effective-number-of-bets" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "factorsExtractionMethod": $factors_extraction_method, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1568,9 +1595,9 @@ export def "post-portfolio-analysis-factors-exposures" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/factors/exposures" $auth.query)
   let req_body = {"factors": $factors, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "post-portfolio-analysis-mean-variance-efficient-frontier" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/mean-variance/efficient-frontier" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1650,9 +1677,9 @@ export def "post-portfolio-analysis-mean-variance-minimum-variance-frontier" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/mean-variance/minimum-variance-frontier" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1689,9 +1716,9 @@ export def "post-portfolio-analysis-return" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/return" $auth.query)
   let req_body = {"assets": $assets, "assetsReturns": $assets_returns, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1726,9 +1753,9 @@ export def "post-portfolio-analysis-returns-average" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/returns/average" $auth.query)
   let req_body = {"portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1767,9 +1794,9 @@ export def "post-portfolio-analysis-sharpe-ratio" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1805,9 +1832,9 @@ export def "post-portfolio-analysis-sharpe-ratio-bias-adjusted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/bias-adjusted" $auth.query)
   let req_body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1845,9 +1872,9 @@ export def "post-portfolio-analysis-sharpe-ratio-confidence-interval" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/confidence-interval" $auth.query)
   let req_body = {"confidenceIntervalType": $confidence_interval_type, "confidenceLevel": $confidence_level, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1885,9 +1912,9 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/probabilistic" $auth.query)
   let req_body = {"benchmarkSharpeRatio": $benchmark_sharpe_ratio, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "benchmarkValues": $benchmark_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1926,9 +1953,9 @@ export def "post-portfolio-analysis-sharpe-ratio-probabilistic-minimum-track-rec
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/sharpe-ratio/probabilistic/minimum-track-record-length" $auth.query)
   let req_body = {"benchmarkSharpeRatio": $benchmark_sharpe_ratio, "confidenceLevel": $confidence_level, "portfolios": $portfolios, "riskFreeRate": $risk_free_rate, "benchmarkValues": $benchmark_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1964,9 +1991,9 @@ export def "post-portfolio-analysis-tracking-error" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/tracking-error" $auth.query)
   let req_body = {"benchmarkReturns": $benchmark_returns, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2002,9 +2029,9 @@ export def "post-portfolio-analysis-ulcer-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/ulcer-index" $auth.query)
   let req_body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2040,9 +2067,9 @@ export def "post-portfolio-analysis-ulcer-performance-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/ulcer-performance-index" $auth.query)
   let req_body = {"portfolios": $portfolios, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2078,9 +2105,9 @@ export def "post-portfolio-analysis-value-at-risk" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/value-at-risk" $auth.query)
   let req_body = {"alpha": $alpha, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2117,9 +2144,9 @@ export def "post-portfolio-analysis-volatility" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/analysis/volatility" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2163,9 +2190,9 @@ export def "post-portfolio-construction-investable" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/investable" $auth.query)
   let req_body = {"assets": $assets, "assetsGroups": $assets_groups, "assetsGroupsWeights": $assets_groups_weights, "assetsMinimumNotionalValues": $assets_minimum_notional_values, "assetsMinimumPositions": $assets_minimum_positions, "assetsPrices": $assets_prices, "assetsSizeLots": $assets_size_lots, "assetsWeights": $assets_weights, "maximumAssetsGroupsWeights": $maximum_assets_groups_weights, "portfolioValue": $portfolio_value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2202,9 +2229,9 @@ export def "post-portfolio-construction-mimicking" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/mimicking" $auth.query)
   let req_body = {"assets": $assets, "benchmarkReturns": $benchmark_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2241,9 +2268,9 @@ export def "post-portfolio-construction-random" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/construction/random" $auth.query)
   let req_body = {"assets": $assets, "constraints": $constraints, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2280,9 +2307,9 @@ export def "post-portfolio-optimization-equal-risk-contributions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-risk-contributions" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2320,9 +2347,9 @@ export def "post-portfolio-optimization-equal-sharpe-ratio-contributions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-sharpe-ratio-contributions" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2358,9 +2385,9 @@ export def "post-portfolio-optimization-equal-volatility-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-volatility-weighted" $auth.query)
   let req_body = {"assets": $assets, "assetsVolatilities": $assets_volatilities} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2395,9 +2422,9 @@ export def "post-portfolio-optimization-equal-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/equal-weighted" $auth.query)
   let req_body = {"assets": $assets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2436,9 +2463,9 @@ export def "post-portfolio-optimization-hierarchical-risk-parity" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/hierarchical-risk-parity" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "clusteringMethod": $clustering_method, "clusteringOrdering": $clustering_ordering, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2480,9 +2507,9 @@ export def "post-portfolio-optimization-hierarchical-risk-parity-clustering-base
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/hierarchical-risk-parity/clustering-based" $auth.query)
   let req_body = {"acrossClusterAllocationMethod": $across_cluster_allocation_method, "assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "clusteringMethod": $clustering_method, "clusteringOrdering": $clustering_ordering, "clusters": $clusters, "constraints": $constraints, "withinClusterAllocationMethod": $within_cluster_allocation_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2518,9 +2545,9 @@ export def "post-portfolio-optimization-inverse-variance-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/inverse-variance-weighted" $auth.query)
   let req_body = {"assets": $assets, "assetsVariances": $assets_variances} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2556,9 +2583,9 @@ export def "post-portfolio-optimization-inverse-volatility-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/inverse-volatility-weighted" $auth.query)
   let req_body = {"assets": $assets, "assetsVolatilities": $assets_volatilities} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2594,9 +2621,9 @@ export def "post-portfolio-optimization-market-capitalization-weighted" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/market-capitalization-weighted" $auth.query)
   let req_body = {"assets": $assets, "assetsMarketCapitalizations": $assets_market_capitalizations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2634,9 +2661,9 @@ export def "post-portfolio-optimization-maximum-decorrelation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-decorrelation" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2674,9 +2701,9 @@ export def "post-portfolio-optimization-maximum-return" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2714,9 +2741,9 @@ export def "post-portfolio-optimization-maximum-return-diversified" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return/diversified" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2758,9 +2785,9 @@ export def "post-portfolio-optimization-maximum-return-subset-resampling-based" 
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-return/subset-resampling-based" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2799,9 +2826,9 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2840,9 +2867,9 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-diversified" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio/diversified" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2885,9 +2912,9 @@ export def "post-portfolio-optimization-maximum-sharpe-ratio-subset-resampling-b
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-sharpe-ratio/subset-resampling-based" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "riskFreeRate": $risk_free_rate, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2924,9 +2951,9 @@ export def "post-portfolio-optimization-maximum-ulcer-performance-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/maximum-ulcer-performance-index" $auth.query)
   let req_body = {"assets": $assets, "constraints": $constraints, "riskFreeRate": $risk_free_rate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2964,9 +2991,9 @@ export def "post-portfolio-optimization-mean-variance-efficient" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3004,9 +3031,9 @@ export def "post-portfolio-optimization-mean-variance-efficient-diversified" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient/diversified" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3048,9 +3075,9 @@ export def "post-portfolio-optimization-mean-variance-efficient-subset-resamplin
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/mean-variance-efficient/subset-resampling-based" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3087,9 +3114,9 @@ export def "post-portfolio-optimization-minimum-correlation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-correlation" $auth.query)
   let req_body = {"assets": $assets, "assetsCorrelationMatrix": $assets_correlation_matrix, "assetsVolatilities": $assets_volatilities} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3125,9 +3152,9 @@ export def "post-portfolio-optimization-minimum-ulcer-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-ulcer-index" $auth.query)
   let req_body = {"assets": $assets, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3165,9 +3192,9 @@ export def "post-portfolio-optimization-minimum-variance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3205,9 +3232,9 @@ export def "post-portfolio-optimization-minimum-variance-diversified" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance/diversified" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3249,9 +3276,9 @@ export def "post-portfolio-optimization-minimum-variance-subset-resampling-based
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/minimum-variance/subset-resampling-based" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "assetsReturns": $assets_returns, "constraints": $constraints, "subsetPortfolios": $subset_portfolios, "subsetPortfoliosAggregationMethod": $subset_portfolios_aggregation_method, "subsetPortfoliosEnumerationMethod": $subset_portfolios_enumeration_method, "subsetSize": $subset_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3288,9 +3315,9 @@ export def "post-portfolio-optimization-most-diversified" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/optimization/most-diversified" $auth.query)
   let req_body = {"assets": $assets, "assetsCovarianceMatrix": $assets_covariance_matrix, "constraints": $constraints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3326,9 +3353,9 @@ export def "post-portfolio-simulation-rebalancing-drift-weight" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/drift-weight" $auth.query)
   let req_body = {"assets": $assets, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3364,9 +3391,9 @@ export def "post-portfolio-simulation-rebalancing-fixed-weight" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/fixed-weight" $auth.query)
   let req_body = {"assets": $assets, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3402,9 +3429,9 @@ export def "post-portfolio-simulation-rebalancing-random-weight" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/portfolio/simulation/rebalancing/random-weight" $auth.query)
   let req_body = {"assets": $assets, "portfolios": $portfolios} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

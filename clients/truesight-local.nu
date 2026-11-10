@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -191,7 +218,7 @@ export def "collect-now" [
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/collect-now") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -227,7 +254,7 @@ export def "rediscover" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/rediscover") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -273,9 +300,9 @@ export def "reinitialize" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/reinitialize") $auth.query)
   let req_body = {"resetAlertActions": $reset_alert_actions, "resetAlertAfterNTimes": $reset_alert_after_n_times, "resetDebugMode": $reset_debug_mode, "resetDiscoveryAndPollingIntervals": $reset_discovery_and_polling_intervals, "resetJavaSettings": $reset_java_settings, "resetOtherAlertSettings": $reset_other_alert_settings, "resetRemovedPausedObjectList": $reset_removed_paused_object_list, "resetReportSettings": $reset_report_settings, "resetThresholds": $reset_thresholds} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -316,7 +343,7 @@ export def "remove" [
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/remove") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -357,7 +384,7 @@ export def "reset" [
   let qp = [(serialize-qp "monitorClass" $monitor_class "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/actions/{device_id}/reset-error-count") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -396,7 +423,7 @@ export def "get-applications" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/applications" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -432,7 +459,7 @@ export def "get-one-application" [
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/hardware/applications/{application_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,7 +495,7 @@ export def "get-device-monitors" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/device-monitors/{device_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -510,7 +537,7 @@ export def "get-devices" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/devices" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -544,7 +571,7 @@ export def "get-devices-summary" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hardware/devices-summary" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -580,7 +607,7 @@ export def "get-device" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -616,7 +643,7 @@ export def "get-device-agent" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/agent") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -652,7 +679,7 @@ export def "get-agent-devices" [
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/agent-devices") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -696,7 +723,7 @@ export def "get-device-parameter-history" [
   let qp = [(serialize-qp "parameterName" $parameter_name "scalar") (serialize-qp "monitorType" $monitor_type "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "monitorSid" $monitor_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/devices/{device_id}/parameter-history") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -735,7 +762,7 @@ export def "get-device-energy-usage" [
   let qp = [(serialize-qp "rollPeriod" $roll_period "scalar") (serialize-qp "basis" $basis "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/hardware/energy-usage/{device_id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -774,7 +801,7 @@ export def "get-groups" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/groups" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -810,7 +837,7 @@ export def "get-one-group" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/hardware/groups/{group_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -850,9 +877,9 @@ export def "update-energy-cost" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/hardware/groups/{group_id}") $auth.query)
   let req_body = {"co2Emission": $co2_emission, "energyCost": $energy_cost, "groupNameFilter": $group_name_filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -895,7 +922,7 @@ export def "get-heating-margin-coverage" [
   let qp = [(serialize-qp "covered" $covered "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/heating-margin-devices" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -935,7 +962,7 @@ export def "get-history" [
   let qp = [(serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/history" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -977,7 +1004,7 @@ export def "search-devices" [
   let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/search-devices" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1016,7 +1043,7 @@ export def "get-services" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hardware/services" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1052,7 +1079,7 @@ export def "get-one-service" [
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/hardware/services/{service_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

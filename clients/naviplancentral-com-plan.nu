@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -169,7 +196,7 @@ export def "advisors-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Advisors" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -208,7 +235,7 @@ export def "advisors-get-by-householdid-clientid" [
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({household_id: (encode-path-segment $household_id), client_id: (encode-path-segment $client_id)} | format pattern "/api/Advisors/{household_id}/{client_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -245,7 +272,7 @@ export def "advisors-get-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Advisors/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "assumptions-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Assumptions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -321,7 +348,7 @@ export def "business-entities-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/BusinessEntities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -361,7 +388,7 @@ export def "business-entities-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/BusinessEntities/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -399,7 +426,7 @@ export def "calculations-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Calculations/MonteCarlo" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -437,7 +464,7 @@ export def "defined-benefit-pensions-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/DefinedBenefitPensions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -477,7 +504,7 @@ export def "defined-benefit-pensions-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/DefinedBenefitPensions/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -512,7 +539,7 @@ export def "eula-accept" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Eula/Accept" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -550,7 +577,7 @@ export def "family-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Family" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -591,7 +618,7 @@ export def "goal-adjustments-get-education-by-id-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Adjustments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -633,9 +660,9 @@ export def "goal-adjustments-post-education-by-id-goaladjustments-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/Education/{id}/Calculations") $qp $auth.query)
   let req_body = {"adjustedValues": $adjusted_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -674,7 +701,7 @@ export def "goal-adjustments-get-goal-success-rates-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/GoalSuccessRates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -715,7 +742,7 @@ export def "goal-adjustments-get-major-purchase-by-id-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Adjustments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -757,9 +784,9 @@ export def "goal-adjustments-post-major-purchase-by-id-goaladjustments-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/MajorPurchase/{id}/Calculations") $qp $auth.query)
   let req_body = {"adjustedValues": $adjusted_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -798,7 +825,7 @@ export def "goal-adjustments-get-goal-adjustment-restrictions-by-clientid-planid
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Restrictions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -837,7 +864,7 @@ export def "goal-adjustments-get-retirement-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Retirement/Adjustments" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -877,9 +904,9 @@ export def "goal-adjustments-post-retirement-by-goaladjustments-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/GoalAdjustments/Retirement/Calculations" $qp $auth.query)
   let req_body = {"adjustedValues": $adjusted_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -920,7 +947,7 @@ export def "goal-adjustments-get-what-are-my-options-by-id-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/GoalAdjustments/{id}/WhatAreMyOptions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -958,7 +985,7 @@ export def "goals-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Goals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -998,7 +1025,7 @@ export def "goals-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Goals/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1036,7 +1063,7 @@ export def "holding-companies-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/HoldingCompanies" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1076,7 +1103,7 @@ export def "holding-companies-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/HoldingCompanies/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1113,7 +1140,7 @@ export def "households-get-by-householdid" [
   let qp = [(serialize-qp "householdId" $household_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Households" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1151,7 +1178,7 @@ export def "liabilities-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1191,7 +1218,7 @@ export def "liabilities-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Liabilities/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1229,7 +1256,7 @@ export def "lifestyle-assets-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LifestyleAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1269,7 +1296,7 @@ export def "lifestyle-assets-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LifestyleAssets/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1308,7 +1335,7 @@ export def "live-plan-get-goals-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Goals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1347,7 +1374,7 @@ export def "live-plan-get-goal-funding-list-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Goals/Funding" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1388,7 +1415,7 @@ export def "live-plan-get-what-are-my-options-by-id-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Goals/{id}/WhatAreMyOptions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1427,7 +1454,7 @@ export def "live-plan-get-accounts-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/Accounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1466,7 +1493,7 @@ export def "live-plan-get-liabilities-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/Liabilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1505,7 +1532,7 @@ export def "live-plan-get-lifestyle-assets-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/LifestyleAssets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1544,7 +1571,7 @@ export def "live-plan-get-real-estate-assets-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/NetWorth/RealEstate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1583,7 +1610,7 @@ export def "live-plan-get-projected-net-worth-by-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/LivePlan/Projections/NetWorth" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1624,7 +1651,7 @@ export def "live-plan-get-projected-needs-vs-abilities-by-id-clientid-planid" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/LivePlan/Projections/{id}/NeedsVsAbilities") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1662,7 +1689,7 @@ export def "net-worth-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/NetWorth" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1697,7 +1724,7 @@ export def "password-has-user-set-password" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/HasUserSetPassword" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1732,7 +1759,7 @@ export def "password-password-requirements" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/PasswordRequirements" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1770,9 +1797,9 @@ export def "password-reset-by-model" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Reset" $auth.query)
   let req_body = {"locale": $locale, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1810,9 +1837,9 @@ export def "password-set-by-model" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Password/Set" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1850,7 +1877,7 @@ export def "plan-information-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PlanInformation" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1888,7 +1915,7 @@ export def "plan-statuses-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PlanStatuses" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1926,7 +1953,7 @@ export def "portfolio-accounts-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/PortfolioAccounts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1966,7 +1993,7 @@ export def "portfolio-accounts-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/PortfolioAccounts/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2004,7 +2031,7 @@ export def "projected-annual-summary-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedAnnualSummary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2044,7 +2071,7 @@ export def "projected-annual-summary-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedAnnualSummary/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2082,7 +2109,7 @@ export def "projected-cash-flow-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedCashFlow" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2122,7 +2149,7 @@ export def "projected-cash-flow-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedCashFlow/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2160,7 +2187,7 @@ export def "projected-goals-get-assets-funding-goals-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedGoals/AssetsFundingGoals" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2198,7 +2225,7 @@ export def "projected-goals-get-needs-vs-abilities-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedGoals/NeedsVsAbilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2236,7 +2263,7 @@ export def "projected-net-worth-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ProjectedNetWorth" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2276,7 +2303,7 @@ export def "projected-net-worth-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ProjectedNetWorth/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2314,7 +2341,7 @@ export def "restricted-stocks-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/RestrictedStocks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2354,7 +2381,7 @@ export def "restricted-stocks-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/RestrictedStocks/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2389,7 +2416,7 @@ export def "service-information-statistics" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ServiceInformation/Statistics" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2427,7 +2454,7 @@ export def "stock-options-get-by-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/StockOptions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2467,7 +2494,7 @@ export def "stock-options-get-by-id-planid" [
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/StockOptions/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2505,9 +2532,9 @@ export def "auth-login-by-model" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/Login" $auth.query)
   let req_body = {"password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2542,7 +2569,7 @@ export def "auth-password-requirements" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/LoginConfiguration" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2576,7 +2603,7 @@ export def "auth-logout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/Logout" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2611,7 +2638,7 @@ export def "auth-resume-session" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/auth/ResumeSession" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

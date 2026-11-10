@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -189,7 +216,7 @@ export def "list-workspace" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Workspaces" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -229,9 +256,9 @@ export def "create-workspace" [
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base "/v1/Workspaces" $auth.query)
   let req_body = {"EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "Template": $template} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -267,7 +294,7 @@ export def "delete-workspace" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -302,7 +329,7 @@ export def "fetch-workspace" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -345,9 +372,9 @@ export def "update-workspace" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}") $auth.query)
   let req_body = {"DefaultActivitySid": $default_activity_sid, "EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "TimeoutActivitySid": $timeout_activity_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -389,7 +416,7 @@ export def "list-activity" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -427,9 +454,9 @@ export def "create-activity" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities") $auth.query)
   let req_body = {"Available": $available, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -467,7 +494,7 @@ export def "delete-activity" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -504,7 +531,7 @@ export def "fetch-activity" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -543,9 +570,9 @@ export def "update-activity" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -587,7 +614,7 @@ export def "fetch-workspace-cumulative-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/CumulativeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -637,7 +664,7 @@ export def "list-event" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "EventType" $event_type "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "ReservationSid" $reservation_sid "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskSid" $task_sid "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "Sid" $sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -674,7 +701,7 @@ export def "fetch-event" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -711,7 +738,7 @@ export def "fetch-workspace-real-time-statistics" [
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/RealTimeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -752,7 +779,7 @@ export def "fetch-workspace-statistics" [
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -791,7 +818,7 @@ export def "list-task-channel" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -830,9 +857,9 @@ export def "create-task-channel" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels") $auth.query)
   let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -870,7 +897,7 @@ export def "delete-task-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -907,7 +934,7 @@ export def "fetch-task-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -947,9 +974,9 @@ export def "update-task-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}") $auth.query)
   let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -993,7 +1020,7 @@ export def "list-task-queue" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "EvaluateWorkerAttributes" $evaluate_worker_attributes "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1035,9 +1062,9 @@ export def "create-task-queue" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues") $auth.query)
   let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1083,7 +1110,7 @@ export def "list-task-queues-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1120,7 +1147,7 @@ export def "delete-task-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1157,7 +1184,7 @@ export def "fetch-task-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1201,9 +1228,9 @@ export def "update-task-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}") $auth.query)
   let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1247,7 +1274,7 @@ export def "fetch-task-queue-cumulative-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/CumulativeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1286,7 +1313,7 @@ export def "fetch-task-queue-real-time-statistics" [
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/RealTimeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1329,7 +1356,7 @@ export def "fetch-task-queue-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1377,7 +1404,7 @@ export def "list-task" [
   let qp = [(serialize-qp "Priority" $priority "scalar") (serialize-qp "AssignmentStatus" $assignment_status "multi") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "EvaluateTaskAttributes" $evaluate_task_attributes "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "HasAddons" $has_addons "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1418,9 +1445,9 @@ export def "create-task" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks") $auth.query)
   let req_body = {"Attributes": $attributes, "Priority": $priority, "TaskChannel": $task_channel, "Timeout": $timeout, "WorkflowSid": $workflow_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1459,9 +1486,9 @@ export def "delete-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1498,7 +1525,7 @@ export def "fetch-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1542,11 +1569,11 @@ export def "update-task" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}") $auth.query)
   let req_body = {"AssignmentStatus": $assignment_status, "Attributes": $attributes, "Priority": $priority, "Reason": $reason, "TaskChannel": $task_channel} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1590,7 +1617,7 @@ export def "list-task-reservation" [
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1629,7 +1656,7 @@ export def "fetch-task-reservation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1723,11 +1750,11 @@ export def "update-task-reservation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}") $auth.query)
   let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Supervisor": $supervisor, "SupervisorMode": $supervisor_mode, "Timeout": $timeout, "To": $to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1775,7 +1802,7 @@ export def "list-worker" [
   let qp = [(serialize-qp "ActivityName" $activity_name "scalar") (serialize-qp "ActivitySid" $activity_sid "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TargetWorkersExpression" $target_workers_expression "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1814,9 +1841,9 @@ export def "create-worker" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers") $auth.query)
   let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1857,7 +1884,7 @@ export def "fetch-workers-cumulative-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/CumulativeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1894,7 +1921,7 @@ export def "fetch-workers-real-time-statistics" [
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/RealTimeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1937,7 +1964,7 @@ export def "fetch-worker-statistics" [
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1975,9 +2002,9 @@ export def "delete-worker" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2014,7 +2041,7 @@ export def "fetch-worker" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2057,11 +2084,11 @@ export def "update-worker" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}") $auth.query)
   let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name, "RejectPendingReservations": $reject_pending_reservations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2103,7 +2130,7 @@ export def "list-worker-channel" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2142,7 +2169,7 @@ export def "fetch-worker-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2184,9 +2211,9 @@ export def "update-worker-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}") $auth.query)
   let req_body = {"Available": $available, "Capacity": $capacity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2229,7 +2256,7 @@ export def "list-worker-reservation" [
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2268,7 +2295,7 @@ export def "fetch-worker-reservation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2360,11 +2387,11 @@ export def "update-worker-reservation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}") $auth.query)
   let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Timeout": $timeout, "To": $to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2407,7 +2434,7 @@ export def "fetch-worker-instance-statistics" [
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2447,7 +2474,7 @@ export def "list-workflow" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2488,9 +2515,9 @@ export def "create-workflow" [
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows") $auth.query)
   let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "TaskReservationTimeout": $task_reservation_timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2528,7 +2555,7 @@ export def "delete-workflow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2565,7 +2592,7 @@ export def "fetch-workflow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2609,9 +2636,9 @@ export def "update-workflow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}") $auth.query)
   let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "ReEvaluateTasks": $re_evaluate_tasks, "TaskReservationTimeout": $task_reservation_timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2655,7 +2682,7 @@ export def "fetch-workflow-cumulative-statistics" [
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/CumulativeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2694,7 +2721,7 @@ export def "fetch-workflow-real-time-statistics" [
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/RealTimeStatistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2737,7 +2764,7 @@ export def "fetch-workflow-statistics" [
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/Statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

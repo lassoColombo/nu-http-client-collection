@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -225,7 +252,7 @@ export def "list-account-numbers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_numbers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -262,9 +289,9 @@ export def "create-an-account-number" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account_numbers" $auth.query)
   let req_body = {"account_id": $account_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -300,7 +327,7 @@ export def "retrieve-an-account-number" [
   if ($account_number_id | is-empty) { error make --unspanned { msg: "path parameter 'account_number_id' must be non-empty" } }
   let full_url = (build-url $base ({account_number_id: (encode-path-segment $account_number_id)} | format pattern "/account_numbers/{account_number_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -339,9 +366,9 @@ export def "update-an-account-number" [
   if ($account_number_id | is-empty) { error make --unspanned { msg: "path parameter 'account_number_id' must be non-empty" } }
   let full_url = (build-url $base ({account_number_id: (encode-path-segment $account_number_id)} | format pattern "/account_numbers/{account_number_id}") $auth.query)
   let req_body = {"name": $name, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -383,7 +410,7 @@ export def "list-account-statements" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "statement_period_start.after" $statement_period_start_after "scalar") (serialize-qp "statement_period_start.before" $statement_period_start_before "scalar") (serialize-qp "statement_period_start.on_or_after" $statement_period_start_on_or_after "scalar") (serialize-qp "statement_period_start.on_or_before" $statement_period_start_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_statements" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -419,7 +446,7 @@ export def "retrieve-an-account-statement" [
   if ($account_statement_id | is-empty) { error make --unspanned { msg: "path parameter 'account_statement_id' must be non-empty" } }
   let full_url = (build-url $base ({account_statement_id: (encode-path-segment $account_statement_id)} | format pattern "/account_statements/{account_statement_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -461,7 +488,7 @@ export def "list-account-transfers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account_transfers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -501,9 +528,9 @@ export def "create-an-account-transfer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account_transfers" $auth.query)
   let req_body = {"account_id": $account_id, "amount": $amount, "description": $description, "destination_account_id": $destination_account_id, "require_approval": $require_approval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -539,7 +566,7 @@ export def "retrieve-an-account-transfer" [
   if ($account_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'account_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({account_transfer_id: (encode-path-segment $account_transfer_id)} | format pattern "/account_transfers/{account_transfer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -575,7 +602,7 @@ export def "approve-an-account-transfer" [
   if ($account_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'account_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({account_transfer_id: (encode-path-segment $account_transfer_id)} | format pattern "/account_transfers/{account_transfer_id}/approve") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -611,7 +638,7 @@ export def "cancel-an-account-transfer" [
   if ($account_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'account_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({account_transfer_id: (encode-path-segment $account_transfer_id)} | format pattern "/account_transfers/{account_transfer_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -650,7 +677,7 @@ export def "list-accounts" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -688,9 +715,9 @@ export def "create-an-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let req_body = {"entity_id": $entity_id, "informational_entity_id": $informational_entity_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -726,7 +753,7 @@ export def "retrieve-an-account" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -764,9 +791,9 @@ export def "update-an-account" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -802,7 +829,7 @@ export def "close-an-account" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/close") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -843,7 +870,7 @@ export def "list-ach-prenotifications" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ach_prenotifications" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -890,9 +917,9 @@ export def "create-an-ach-prenotification" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ach_prenotifications" $auth.query)
   let req_body = {"account_number": $account_number, "addendum": $addendum, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_name": $company_name, "credit_debit_indicator": $credit_debit_indicator, "effective_date": $effective_date, "individual_id": $individual_id, "individual_name": $individual_name, "routing_number": $routing_number, "standard_entry_class_code": $standard_entry_class_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -928,7 +955,7 @@ export def "retrieve-an-ach-prenotification" [
   if ($ach_prenotification_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_prenotification_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_prenotification_id: (encode-path-segment $ach_prenotification_id)} | format pattern "/ach_prenotifications/{ach_prenotification_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -971,7 +998,7 @@ export def "list-ach-transfers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ach_transfers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,9 +1050,9 @@ export def "create-an-ach-transfer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ach_transfers" $auth.query)
   let req_body = {"account_id": $account_id, "account_number": $account_number, "addendum": $addendum, "amount": $amount, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_name": $company_name, "effective_date": $effective_date, "external_account_id": $external_account_id, "funding": $funding, "individual_id": $individual_id, "individual_name": $individual_name, "require_approval": $require_approval, "routing_number": $routing_number, "standard_entry_class_code": $standard_entry_class_code, "statement_descriptor": $statement_descriptor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1061,7 +1088,7 @@ export def "retrieve-an-ach-transfer" [
   if ($ach_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_transfer_id: (encode-path-segment $ach_transfer_id)} | format pattern "/ach_transfers/{ach_transfer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1097,7 +1124,7 @@ export def "approve-an-ach-transfer" [
   if ($ach_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_transfer_id: (encode-path-segment $ach_transfer_id)} | format pattern "/ach_transfers/{ach_transfer_id}/approve") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1133,7 +1160,7 @@ export def "cancel-a-pending-ach-transfer" [
   if ($ach_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_transfer_id: (encode-path-segment $ach_transfer_id)} | format pattern "/ach_transfers/{ach_transfer_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1175,7 +1202,7 @@ export def "list-card-disputes" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/card_disputes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1212,9 +1239,9 @@ export def "create-a-card-dispute" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/card_disputes" $auth.query)
   let req_body = {"disputed_transaction_id": $disputed_transaction_id, "explanation": $explanation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1250,7 +1277,7 @@ export def "retrieve-a-card-dispute" [
   if ($card_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'card_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({card_dispute_id: (encode-path-segment $card_dispute_id)} | format pattern "/card_disputes/{card_dispute_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1288,7 +1315,7 @@ export def "list-card-profiles" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/card_profiles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1325,9 +1352,9 @@ export def "create-a-card-profile" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/card_profiles" $auth.query)
   let req_body = {"description": $description, "digital_wallets": $digital_wallets} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1363,7 +1390,7 @@ export def "retrieve-a-card-profile" [
   if ($card_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'card_profile_id' must be non-empty" } }
   let full_url = (build-url $base ({card_profile_id: (encode-path-segment $card_profile_id)} | format pattern "/card_profiles/{card_profile_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1405,7 +1432,7 @@ export def "list-cards" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cards" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1444,9 +1471,9 @@ export def "create-a-card" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cards" $auth.query)
   let req_body = {"account_id": $account_id, "billing_address": $billing_address, "description": $description, "digital_wallet": $digital_wallet} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1482,7 +1509,7 @@ export def "retrieve-a-card" [
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/cards/{card_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1523,9 +1550,9 @@ export def "update-a-card" [
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/cards/{card_id}") $auth.query)
   let req_body = {"billing_address": $billing_address, "description": $description, "digital_wallet": $digital_wallet, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1561,7 +1588,7 @@ export def "retrieve-sensitive-details-for-a-card" [
   if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/cards/{card_id}/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1603,7 +1630,7 @@ export def "list-check-deposits" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/check_deposits" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1643,9 +1670,9 @@ export def "create-a-check-deposit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_deposits" $auth.query)
   let req_body = {"account_id": $account_id, "amount": $amount, "back_image_file_id": $back_image_file_id, "currency": $currency, "front_image_file_id": $front_image_file_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1681,7 +1708,7 @@ export def "retrieve-a-check-deposit" [
   if ($check_deposit_id | is-empty) { error make --unspanned { msg: "path parameter 'check_deposit_id' must be non-empty" } }
   let full_url = (build-url $base ({check_deposit_id: (encode-path-segment $check_deposit_id)} | format pattern "/check_deposits/{check_deposit_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1723,7 +1750,7 @@ export def "list-check-transfers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/check_transfers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1770,9 +1797,9 @@ export def "create-a-check-transfer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_transfers" $auth.query)
   let req_body = {"account_id": $account_id, "address_city": $address_city, "address_line1": $address_line1, "address_line2": $address_line2, "address_state": $address_state, "address_zip": $address_zip, "amount": $amount, "message": $message, "note": $note, "recipient_name": $recipient_name, "require_approval": $require_approval, "return_address": $return_address} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1808,7 +1835,7 @@ export def "retrieve-a-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/check_transfers/{check_transfer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1844,7 +1871,7 @@ export def "approve-a-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/check_transfers/{check_transfer_id}/approve") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1880,7 +1907,7 @@ export def "cancel-a-pending-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/check_transfers/{check_transfer_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1916,7 +1943,7 @@ export def "request-a-stop-payment-on-a-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/check_transfers/{check_transfer_id}/stop_payment") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1959,7 +1986,7 @@ export def "list-declined-transactions" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/declined_transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1995,7 +2022,7 @@ export def "retrieve-a-declined-transaction" [
   if ($declined_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'declined_transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({declined_transaction_id: (encode-path-segment $declined_transaction_id)} | format pattern "/declined_transactions/{declined_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2037,7 +2064,7 @@ export def "list-digital-wallet-tokens" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "card_id" $card_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/digital_wallet_tokens" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2073,7 +2100,7 @@ export def "retrieve-a-digital-wallet-token" [
   if ($digital_wallet_token_id | is-empty) { error make --unspanned { msg: "path parameter 'digital_wallet_token_id' must be non-empty" } }
   let full_url = (build-url $base ({digital_wallet_token_id: (encode-path-segment $digital_wallet_token_id)} | format pattern "/digital_wallet_tokens/{digital_wallet_token_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2116,7 +2143,7 @@ export def "list-documents" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/documents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2152,7 +2179,7 @@ export def "retrieve-a-document" [
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/documents/{document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2189,7 +2216,7 @@ export def "list-entities" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/entities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2232,9 +2259,9 @@ export def "create-an-entity" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/entities" $auth.query)
   let req_body = {"corporation": $corporation, "description": $description, "joint": $joint, "natural_person": $natural_person, "relationship": $relationship, "structure": $structure, "supplemental_documents": $supplemental_documents, "trust": $trust} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2270,7 +2297,7 @@ export def "retrieve-an-entity" [
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entities/{entity_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2308,9 +2335,9 @@ export def "create-a-supplemental-document-for-an-entity" [
   if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entity_id' must be non-empty" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entities/{entity_id}/supplemental_documents") $auth.query)
   let req_body = {"file_id": $file_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2347,7 +2374,7 @@ export def "list-event-subscriptions" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/event_subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2385,9 +2412,9 @@ export def "create-an-event-subscription" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event_subscriptions" $auth.query)
   let req_body = {"selected_event_category": $selected_event_category, "shared_secret": $shared_secret, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2423,7 +2450,7 @@ export def "retrieve-an-event-subscription" [
   if ($event_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'event_subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({event_subscription_id: (encode-path-segment $event_subscription_id)} | format pattern "/event_subscriptions/{event_subscription_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2461,9 +2488,9 @@ export def "update-an-event-subscription" [
   if ($event_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'event_subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({event_subscription_id: (encode-path-segment $event_subscription_id)} | format pattern "/event_subscriptions/{event_subscription_id}") $auth.query)
   let req_body = {"status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2506,7 +2533,7 @@ export def "list-events" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "associated_object_id" $associated_object_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2542,7 +2569,7 @@ export def "retrieve-an-event" [
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2580,7 +2607,7 @@ export def "list-external-accounts" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/external_accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2619,9 +2646,9 @@ export def "create-an-external-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/external_accounts" $auth.query)
   let req_body = {"account_number": $account_number, "description": $description, "funding": $funding, "routing_number": $routing_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2657,7 +2684,7 @@ export def "retrieve-an-external-account" [
   if ($external_account_id | is-empty) { error make --unspanned { msg: "path parameter 'external_account_id' must be non-empty" } }
   let full_url = (build-url $base ({external_account_id: (encode-path-segment $external_account_id)} | format pattern "/external_accounts/{external_account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2696,9 +2723,9 @@ export def "update-an-external-account" [
   if ($external_account_id | is-empty) { error make --unspanned { msg: "path parameter 'external_account_id' must be non-empty" } }
   let full_url = (build-url $base ({external_account_id: (encode-path-segment $external_account_id)} | format pattern "/external_accounts/{external_account_id}") $auth.query)
   let req_body = {"description": $description, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2740,7 +2767,7 @@ export def "list-files" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "purpose.in" $purpose_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2778,10 +2805,10 @@ export def "create-a-file" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files" $auth.query)
   let req_body = {"description": $description, "file": $file, "purpose": $purpose} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -2818,7 +2845,7 @@ export def "retrieve-a-file" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2852,7 +2879,7 @@ export def "retrieve-group-details" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups/current" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2889,7 +2916,7 @@ export def "list-inbound-ach-transfer-returns" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inbound_ach_transfer_returns" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2926,9 +2953,9 @@ export def "create-an-ach-return" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound_ach_transfer_returns" $auth.query)
   let req_body = {"reason": $reason, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2964,7 +2991,7 @@ export def "retrieve-an-inbound-ach-transfer-return" [
   if ($inbound_ach_transfer_return_id | is-empty) { error make --unspanned { msg: "path parameter 'inbound_ach_transfer_return_id' must be non-empty" } }
   let full_url = (build-url $base ({inbound_ach_transfer_return_id: (encode-path-segment $inbound_ach_transfer_return_id)} | format pattern "/inbound_ach_transfer_returns/{inbound_ach_transfer_return_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3001,7 +3028,7 @@ export def "list-inbound-wire-drawdown-requests" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inbound_wire_drawdown_requests" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3037,7 +3064,7 @@ export def "retrieve-an-inbound-wire-drawdown-request" [
   if ($inbound_wire_drawdown_request_id | is-empty) { error make --unspanned { msg: "path parameter 'inbound_wire_drawdown_request_id' must be non-empty" } }
   let full_url = (build-url $base ({inbound_wire_drawdown_request_id: (encode-path-segment $inbound_wire_drawdown_request_id)} | format pattern "/inbound_wire_drawdown_requests/{inbound_wire_drawdown_request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3076,7 +3103,7 @@ export def "list-limits" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "model_id" $model_id "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/limits" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3115,9 +3142,9 @@ export def "create-a-limit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/limits" $auth.query)
   let req_body = {"interval": $interval, "metric": $metric, "model_id": $model_id, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3153,7 +3180,7 @@ export def "retrieve-a-limit" [
   if ($limit_id | is-empty) { error make --unspanned { msg: "path parameter 'limit_id' must be non-empty" } }
   let full_url = (build-url $base ({limit_id: (encode-path-segment $limit_id)} | format pattern "/limits/{limit_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3191,9 +3218,9 @@ export def "update-a-limit" [
   if ($limit_id | is-empty) { error make --unspanned { msg: "path parameter 'limit_id' must be non-empty" } }
   let full_url = (build-url $base ({limit_id: (encode-path-segment $limit_id)} | format pattern "/limits/{limit_id}") $auth.query)
   let req_body = {"status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3230,7 +3257,7 @@ export def "list-oauth-connections" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth_connections" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3266,7 +3293,7 @@ export def "retrieve-an-oauth-connection" [
   if ($oauth_connection_id | is-empty) { error make --unspanned { msg: "path parameter 'oauth_connection_id' must be non-empty" } }
   let full_url = (build-url $base ({oauth_connection_id: (encode-path-segment $oauth_connection_id)} | format pattern "/oauth_connections/{oauth_connection_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3307,7 +3334,7 @@ export def "list-pending-transactions" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "route_id" $route_id "scalar") (serialize-qp "source_id" $source_id "scalar") (serialize-qp "status.in" $status_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/pending_transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3343,7 +3370,7 @@ export def "retrieve-a-pending-transaction" [
   if ($pending_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'pending_transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({pending_transaction_id: (encode-path-segment $pending_transaction_id)} | format pattern "/pending_transactions/{pending_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3379,7 +3406,7 @@ export def "retrieve-a-real-time-decision" [
   if ($real_time_decision_id | is-empty) { error make --unspanned { msg: "path parameter 'real_time_decision_id' must be non-empty" } }
   let full_url = (build-url $base ({real_time_decision_id: (encode-path-segment $real_time_decision_id)} | format pattern "/real_time_decisions/{real_time_decision_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3419,9 +3446,9 @@ export def "action-a-real-time-decision" [
   if ($real_time_decision_id | is-empty) { error make --unspanned { msg: "path parameter 'real_time_decision_id' must be non-empty" } }
   let full_url = (build-url $base ({real_time_decision_id: (encode-path-segment $real_time_decision_id)} | format pattern "/real_time_decisions/{real_time_decision_id}/action") $auth.query)
   let req_body = {"card_authorization": $card_authorization, "digital_wallet_authentication": $digital_wallet_authentication, "digital_wallet_token": $digital_wallet_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3460,7 +3487,7 @@ export def "list-routing-numbers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "routing_number" $routing_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/routing_numbers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3496,9 +3523,9 @@ export def "simulate-an-account-statement-being-created" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/account_statements" $auth.query)
   let req_body = {"account_id": $account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3534,7 +3561,7 @@ export def "complete-a-sandbox-account-transfer" [
   if ($account_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'account_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({account_transfer_id: (encode-path-segment $account_transfer_id)} | format pattern "/simulations/account_transfers/{account_transfer_id}/complete") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3572,9 +3599,9 @@ export def "return-a-sandbox-ach-transfer" [
   if ($ach_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_transfer_id: (encode-path-segment $ach_transfer_id)} | format pattern "/simulations/ach_transfers/{ach_transfer_id}/return") $auth.query)
   let req_body = {"reason": $reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3610,7 +3637,7 @@ export def "submit-a-sandbox-ach-transfer" [
   if ($ach_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'ach_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({ach_transfer_id: (encode-path-segment $ach_transfer_id)} | format pattern "/simulations/ach_transfers/{ach_transfer_id}/submit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3648,9 +3675,9 @@ export def "simulate-an-authorization-on-a-card" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_authorizations" $auth.query)
   let req_body = {"amount": $amount, "card_id": $card_id, "digital_wallet_token_id": $digital_wallet_token_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3689,9 +3716,9 @@ export def "simulates-advancing-the-state-of-a-card-dispute" [
   if ($card_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'card_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({card_dispute_id: (encode-path-segment $card_dispute_id)} | format pattern "/simulations/card_disputes/{card_dispute_id}/action") $auth.query)
   let req_body = {"explanation": $explanation, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3727,9 +3754,9 @@ export def "simulate-a-refund-on-a-card" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_refunds" $auth.query)
   let req_body = {"transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3767,9 +3794,9 @@ export def "simulate-settling-a-card-authorization" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/card_settlements" $auth.query)
   let req_body = {"amount": $amount, "card_id": $card_id, "pending_transaction_id": $pending_transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3805,7 +3832,7 @@ export def "reject-a-sandbox-check-deposit" [
   if ($check_deposit_id | is-empty) { error make --unspanned { msg: "path parameter 'check_deposit_id' must be non-empty" } }
   let full_url = (build-url $base ({check_deposit_id: (encode-path-segment $check_deposit_id)} | format pattern "/simulations/check_deposits/{check_deposit_id}/reject") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3841,7 +3868,7 @@ export def "return-a-sandbox-check-deposit" [
   if ($check_deposit_id | is-empty) { error make --unspanned { msg: "path parameter 'check_deposit_id' must be non-empty" } }
   let full_url = (build-url $base ({check_deposit_id: (encode-path-segment $check_deposit_id)} | format pattern "/simulations/check_deposits/{check_deposit_id}/return") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3877,7 +3904,7 @@ export def "submit-a-sandbox-check-deposit" [
   if ($check_deposit_id | is-empty) { error make --unspanned { msg: "path parameter 'check_deposit_id' must be non-empty" } }
   let full_url = (build-url $base ({check_deposit_id: (encode-path-segment $check_deposit_id)} | format pattern "/simulations/check_deposits/{check_deposit_id}/submit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3913,7 +3940,7 @@ export def "deposit-a-sandbox-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/simulations/check_transfers/{check_transfer_id}/deposit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3949,7 +3976,7 @@ export def "mail-a-sandbox-check-transfer" [
   if ($check_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'check_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({check_transfer_id: (encode-path-segment $check_transfer_id)} | format pattern "/simulations/check_transfers/{check_transfer_id}/mail") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3985,9 +4012,9 @@ export def "simulate-digital-wallet-provisioning-for-a-card" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/digital_wallet_token_requests" $auth.query)
   let req_body = {"card_id": $card_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4023,9 +4050,9 @@ export def "simulate-a-tax-document-being-created" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/documents" $auth.query)
   let req_body = {"account_id": $account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4067,9 +4094,9 @@ export def "simulate-an-ach-transfer-to-your-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_ach_transfers" $auth.query)
   let req_body = {"account_number_id": $account_number_id, "amount": $amount, "company_descriptive_date": $company_descriptive_date, "company_discretionary_data": $company_discretionary_data, "company_entry_description": $company_entry_description, "company_id": $company_id, "company_name": $company_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4111,9 +4138,9 @@ export def "simulate-a-real-time-payments-transfer-to-your-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_real_time_payments_transfers" $auth.query)
   let req_body = {"account_number_id": $account_number_id, "amount": $amount, "debtor_account_number": $debtor_account_number, "debtor_name": $debtor_name, "debtor_routing_number": $debtor_routing_number, "remittance_information": $remittance_information, "request_for_payment_id": $request_for_payment_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4168,9 +4195,9 @@ export def "simulate-an-inbound-wire-drawdown-request-being-created" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_wire_drawdown_requests" $auth.query)
   let req_body = {"amount": $amount, "beneficiary_account_number": $beneficiary_account_number, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "beneficiary_routing_number": $beneficiary_routing_number, "currency": $currency, "message_to_recipient": $message_to_recipient, "originator_account_number": $originator_account_number, "originator_address_line1": $originator_address_line1, "originator_address_line2": $originator_address_line2, "originator_address_line3": $originator_address_line3, "originator_name": $originator_name, "originator_routing_number": $originator_routing_number, "originator_to_beneficiary_information_line1": $originator_to_beneficiary_information_line1, "originator_to_beneficiary_information_line2": $originator_to_beneficiary_information_line2, "originator_to_beneficiary_information_line3": $originator_to_beneficiary_information_line3, "originator_to_beneficiary_information_line4": $originator_to_beneficiary_information_line4, "recipient_account_number_id": $recipient_account_number_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4220,9 +4247,9 @@ export def "simulate-a-wire-transfer-to-your-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simulations/inbound_wire_transfers" $auth.query)
   let req_body = {"account_number_id": $account_number_id, "amount": $amount, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "beneficiary_reference": $beneficiary_reference, "originator_address_line1": $originator_address_line1, "originator_address_line2": $originator_address_line2, "originator_address_line3": $originator_address_line3, "originator_name": $originator_name, "originator_to_beneficiary_information_line1": $originator_to_beneficiary_information_line1, "originator_to_beneficiary_information_line2": $originator_to_beneficiary_information_line2, "originator_to_beneficiary_information_line3": $originator_to_beneficiary_information_line3, "originator_to_beneficiary_information_line4": $originator_to_beneficiary_information_line4} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4258,7 +4285,7 @@ export def "reverse-a-sandbox-wire-transfer" [
   if ($wire_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_transfer_id: (encode-path-segment $wire_transfer_id)} | format pattern "/simulations/wire_transfers/{wire_transfer_id}/reverse") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4294,7 +4321,7 @@ export def "submit-a-sandbox-wire-transfer" [
   if ($wire_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_transfer_id: (encode-path-segment $wire_transfer_id)} | format pattern "/simulations/wire_transfers/{wire_transfer_id}/submit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4338,7 +4365,7 @@ export def "list-transactions" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar") (serialize-qp "category.in" $category_in "multi") (serialize-qp "route_id" $route_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4374,7 +4401,7 @@ export def "retrieve-a-transaction" [
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4411,7 +4438,7 @@ export def "list-wire-drawdown-requests" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wire_drawdown_requests" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4455,9 +4482,9 @@ export def "create-a-wire-drawdown-request" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wire_drawdown_requests" $auth.query)
   let req_body = {"account_number_id": $account_number_id, "amount": $amount, "message_to_recipient": $message_to_recipient, "recipient_account_number": $recipient_account_number, "recipient_address_line1": $recipient_address_line1, "recipient_address_line2": $recipient_address_line2, "recipient_address_line3": $recipient_address_line3, "recipient_name": $recipient_name, "recipient_routing_number": $recipient_routing_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4493,7 +4520,7 @@ export def "retrieve-a-wire-drawdown-request" [
   if ($wire_drawdown_request_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_drawdown_request_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_drawdown_request_id: (encode-path-segment $wire_drawdown_request_id)} | format pattern "/wire_drawdown_requests/{wire_drawdown_request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4536,7 +4563,7 @@ export def "list-wire-transfers" [
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "external_account_id" $external_account_id "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.on_or_after" $created_at_on_or_after "scalar") (serialize-qp "created_at.on_or_before" $created_at_on_or_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wire_transfers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4582,9 +4609,9 @@ export def "create-a-wire-transfer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wire_transfers" $auth.query)
   let req_body = {"account_id": $account_id, "account_number": $account_number, "amount": $amount, "beneficiary_address_line1": $beneficiary_address_line1, "beneficiary_address_line2": $beneficiary_address_line2, "beneficiary_address_line3": $beneficiary_address_line3, "beneficiary_name": $beneficiary_name, "external_account_id": $external_account_id, "message_to_recipient": $message_to_recipient, "require_approval": $require_approval, "routing_number": $routing_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4620,7 +4647,7 @@ export def "retrieve-a-wire-transfer" [
   if ($wire_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_transfer_id: (encode-path-segment $wire_transfer_id)} | format pattern "/wire_transfers/{wire_transfer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4656,7 +4683,7 @@ export def "approve-a-wire-transfer" [
   if ($wire_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_transfer_id: (encode-path-segment $wire_transfer_id)} | format pattern "/wire_transfers/{wire_transfer_id}/approve") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4692,7 +4719,7 @@ export def "cancel-a-pending-wire-transfer" [
   if ($wire_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'wire_transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({wire_transfer_id: (encode-path-segment $wire_transfer_id)} | format pattern "/wire_transfers/{wire_transfer_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

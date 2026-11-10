@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -251,9 +278,9 @@ export def "abort-multipart-upload" [
   let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -307,11 +334,11 @@ export def "complete-multipart-upload" [
   let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -346,8 +373,8 @@ export def "list-parts" [
   --max-parts: int # Sets the maximum number of parts to return.
   --part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
   --upload-id: string # Upload ID identifying the multipart upload whose parts are being listed. (required)
-  --max-parts-2: string # Pagination limit (disambiguated-2)
-  --part-number-marker-2: string # Pagination token (disambiguated-2)
+  --qp-max-parts: string # Pagination limit (spec name: MaxParts)
+  --qp-part-number-marker: string # Pagination token (spec name: PartNumberMarker)
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -360,16 +387,16 @@ export def "list-parts" [
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
   if ($upload_id == null) { error make --unspanned { msg: "required query parameter 'uploadId' missing: pass --upload-id" } }
-  let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $upload_id "scalar") (serialize-qp "MaxParts" $max_parts_2 "scalar") (serialize-qp "PartNumberMarker" $part_number_marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $upload_id "scalar") (serialize-qp "MaxParts" $qp_max_parts "scalar") (serialize-qp "PartNumberMarker" $qp_part_number_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-parts": $max_parts, "part-number-marker": $part_number_marker, "uploadId": $upload_id, "MaxParts": $max_parts_2, "PartNumberMarker": $part_number_marker_2} | compact)
+    query: ({"max-parts": $max_parts, "part-number-marker": $part_number_marker, "uploadId": $upload_id, "MaxParts": $qp_max_parts, "PartNumberMarker": $qp_part_number_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -446,13 +473,13 @@ export def "copy-object" [
   if ($x_amz_copy_source == null) { error make --unspanned { msg: "required header parameter 'x-amz-copy-source' missing: pass --x-amz-copy-source" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-metadata-directive": $x_amz_metadata_directive, "x-amz-tagging-directive": $x_amz_tagging_directive, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -500,11 +527,11 @@ export def "create-bucket" [
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-bucket-object-lock-enabled": $x_amz_bucket_object_lock_enabled, "x-amz-object-ownership": $x_amz_object_ownership} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -543,9 +570,9 @@ export def "delete-bucket" [
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -584,9 +611,9 @@ export def "head-bucket" [
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -622,8 +649,8 @@ export def "list-objects" [
   --marker: string # Marker is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. Marker can be any key in the bucket.
   --max-keys: int # Sets the maximum number of keys returned in the response. By default the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more.
   --prefix: string # Limits the response to keys that begin with the specified prefix.
-  --max-keys-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-max-keys: string # Pagination limit (spec name: MaxKeys)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -631,16 +658,16 @@ export def "list-objects" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "MaxKeys" $max_keys_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "marker": $marker, "max-keys": $max_keys, "prefix": $prefix, "MaxKeys": $max_keys_2, "Marker": $marker_2} | compact)
+    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "marker": $marker, "max-keys": $max_keys, "prefix": $prefix, "MaxKeys": $qp_max_keys, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -708,13 +735,13 @@ export def "create-multipart-upload" [
   let qp = [(serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -757,9 +784,9 @@ export def "delete-bucket-analytics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -802,9 +829,9 @@ export def "get-bucket-analytics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -849,11 +876,11 @@ export def "put-bucket-analytics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -895,9 +922,9 @@ export def "delete-bucket-cors" [
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -939,9 +966,9 @@ export def "get-bucket-cors" [
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -987,11 +1014,11 @@ export def "put-bucket-cors" [
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1032,9 +1059,9 @@ export def "delete-bucket-encryption" [
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1075,9 +1102,9 @@ export def "get-bucket-encryption" [
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1122,11 +1149,11 @@ export def "put-bucket-encryption" [
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1168,9 +1195,9 @@ export def "delete-bucket-intelligent-tiering-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1212,9 +1239,9 @@ export def "get-bucket-intelligent-tiering-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1258,11 +1285,11 @@ export def "put-bucket-intelligent-tiering-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1305,9 +1332,9 @@ export def "delete-bucket-inventory-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1350,9 +1377,9 @@ export def "get-bucket-inventory-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1397,11 +1424,11 @@ export def "put-bucket-inventory-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1443,9 +1470,9 @@ export def "delete-bucket-lifecycle" [
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1486,9 +1513,9 @@ export def "get-bucket-lifecycle-configuration" [
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1532,11 +1559,11 @@ export def "put-bucket-lifecycle-configuration" [
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1579,9 +1606,9 @@ export def "delete-bucket-metrics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1624,9 +1651,9 @@ export def "get-bucket-metrics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1671,11 +1698,11 @@ export def "put-bucket-metrics-configuration" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1716,9 +1743,9 @@ export def "delete-bucket-ownership-controls" [
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1759,9 +1786,9 @@ export def "get-bucket-ownership-controls" [
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1805,11 +1832,11 @@ export def "put-bucket-ownership-controls" [
   let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1851,9 +1878,9 @@ export def "delete-bucket-policy" [
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1895,9 +1922,9 @@ export def "get-bucket-policy" [
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1944,11 +1971,11 @@ export def "put-bucket-policy" [
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-confirm-remove-self-bucket-access": $x_amz_confirm_remove_self_bucket_access, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1989,9 +2016,9 @@ export def "delete-bucket-replication" [
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2032,9 +2059,9 @@ export def "get-bucket-replication" [
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2080,11 +2107,11 @@ export def "put-bucket-replication" [
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2126,9 +2153,9 @@ export def "delete-bucket-tagging" [
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2170,9 +2197,9 @@ export def "get-bucket-tagging" [
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2218,11 +2245,11 @@ export def "put-bucket-tagging" [
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2264,9 +2291,9 @@ export def "delete-bucket-website" [
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2308,9 +2335,9 @@ export def "get-bucket-website" [
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2356,11 +2383,11 @@ export def "put-bucket-website" [
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2406,9 +2433,9 @@ export def "delete-object" [
   let qp = [(serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2468,9 +2495,9 @@ export def "get-object" [
   let qp = [(serialize-qp "response-cache-control" $response_cache_control "scalar") (serialize-qp "response-content-disposition" $response_content_disposition "scalar") (serialize-qp "response-content-encoding" $response_content_encoding "scalar") (serialize-qp "response-content-language" $response_content_language "scalar") (serialize-qp "response-content-type" $response_content_type "scalar") (serialize-qp "response-expires" $response_expires "scalar") (serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2524,9 +2551,9 @@ export def "head-object" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -2601,13 +2628,13 @@ export def "put-object" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'Key' must be non-empty" } }
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Length": $content_length, "Content-MD5": $content_md5, "Content-Type": $content_type, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/xml")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -2651,9 +2678,9 @@ export def "delete-object-tagging" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2698,9 +2725,9 @@ export def "get-object-tagging" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2749,11 +2776,11 @@ export def "put-object-tagging" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2801,11 +2828,11 @@ export def "delete-objects" [
   let qp = [(serialize-qp "delete" $delete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2846,9 +2873,9 @@ export def "delete-public-access-block" [
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2889,9 +2916,9 @@ export def "get-public-access-block" [
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2936,11 +2963,11 @@ export def "put-public-access-block" [
   let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2981,9 +3008,9 @@ export def "get-bucket-accelerate-configuration" [
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3027,11 +3054,11 @@ export def "put-bucket-accelerate-configuration" [
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3073,9 +3100,9 @@ export def "get-bucket-acl" [
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3127,11 +3154,11 @@ export def "put-bucket-acl" [
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3175,9 +3202,9 @@ export def "get-bucket-lifecycle" [
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3225,11 +3252,11 @@ export def "put-bucket-lifecycle" [
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3271,9 +3298,9 @@ export def "get-bucket-location" [
   let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3315,9 +3342,9 @@ export def "get-bucket-logging" [
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3363,11 +3390,11 @@ export def "put-bucket-logging" [
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3408,9 +3435,9 @@ export def "get-bucket-notification-configuration" [
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3454,11 +3481,11 @@ export def "put-bucket-notification-configuration" [
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-skip-destination-validation": $x_amz_skip_destination_validation} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3502,9 +3529,9 @@ export def "get-bucket-notification" [
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3552,11 +3579,11 @@ export def "put-bucket-notification" [
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3597,9 +3624,9 @@ export def "get-bucket-policy-status" [
   let qp = [(serialize-qp "policyStatus" $policy_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3641,9 +3668,9 @@ export def "get-bucket-request-payment" [
   let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3689,11 +3716,11 @@ export def "put-bucket-request-payment" [
   let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3735,9 +3762,9 @@ export def "get-bucket-versioning" [
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3784,11 +3811,11 @@ export def "put-bucket-versioning" [
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-mfa": $x_amz_mfa, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3834,9 +3861,9 @@ export def "get-object-acl" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3892,11 +3919,11 @@ export def "put-object-acl" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3948,9 +3975,9 @@ export def "get-object-attributes" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-max-parts": $x_amz_max_parts, "x-amz-part-number-marker": $x_amz_part_number_marker, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-object-attributes": $x_amz_object_attributes} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-max-parts": $x_amz_max_parts, "x-amz-part-number-marker": $x_amz_part_number_marker, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-object-attributes": (if ($x_amz_object_attributes | describe | str starts-with "list") { $x_amz_object_attributes | compact | each { into string } | str join "," } else { $x_amz_object_attributes })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3995,9 +4022,9 @@ export def "get-object-legal-hold" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4046,11 +4073,11 @@ export def "put-object-legal-hold" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4091,9 +4118,9 @@ export def "get-object-lock-configuration" [
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4140,11 +4167,11 @@ export def "put-object-lock-configuration" [
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4189,9 +4216,9 @@ export def "get-object-retention" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4241,11 +4268,11 @@ export def "put-object-retention" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4290,9 +4317,9 @@ export def "get-object-torrent" [
   let qp = [(serialize-qp "torrent" $torrent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4334,9 +4361,9 @@ export def "list-bucket-analytics-configurations" [
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4377,9 +4404,9 @@ export def "list-bucket-intelligent-tiering-configurations" [
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4421,9 +4448,9 @@ export def "list-bucket-inventory-configurations" [
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4465,9 +4492,9 @@ export def "list-bucket-metrics-configurations" [
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4503,9 +4530,9 @@ export def "list-buckets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4542,9 +4569,9 @@ export def "list-multipart-uploads" [
   --max-uploads: int # Sets the maximum number of multipart uploads, from 1 to 1,000, to return in the response body. 1,000 is the maximum number of uploads that can be returned in a response.
   --prefix: string # Lists in-progress uploads only for those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different grouping of keys. (You can think of using prefix to make groups in the same way you'd use a folder in a file system.)
   --upload-id-marker: string # Together with key-marker, specifies the multipart upload after which listing should begin. If key-marker is not specified, the upload-id-marker parameter is ignored. Otherwise, any multipart uploads for a key equal to the key-marker might be included in the list only if they have an upload ID lexicographically greater than the specified upload-id-marker.
-  --max-uploads-2: string # Pagination limit (disambiguated-2)
-  --key-marker-2: string # Pagination token (disambiguated-2)
-  --upload-id-marker-2: string # Pagination token (disambiguated-2)
+  --qp-max-uploads: string # Pagination limit (spec name: MaxUploads)
+  --qp-key-marker: string # Pagination token (spec name: KeyMarker)
+  --qp-upload-id-marker: string # Pagination token (spec name: UploadIdMarker)
   --uploads: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -4553,16 +4580,16 @@ export def "list-multipart-uploads" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let uploads = ($uploads | default true)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $max_uploads_2 "scalar") (serialize-qp "KeyMarker" $key_marker_2 "scalar") (serialize-qp "UploadIdMarker" $upload_id_marker_2 "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $qp_max_uploads "scalar") (serialize-qp "KeyMarker" $qp_key_marker "scalar") (serialize-qp "UploadIdMarker" $qp_upload_id_marker "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-uploads": $max_uploads, "prefix": $prefix, "upload-id-marker": $upload_id_marker, "MaxUploads": $max_uploads_2, "KeyMarker": $key_marker_2, "UploadIdMarker": $upload_id_marker_2, "uploads": $uploads} | compact)
+    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-uploads": $max_uploads, "prefix": $prefix, "upload-id-marker": $upload_id_marker, "MaxUploads": $qp_max_uploads, "KeyMarker": $qp_key_marker, "UploadIdMarker": $qp_upload_id_marker, "uploads": $uploads} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4595,9 +4622,9 @@ export def "list-object-versions" [
   --max-keys: int # Sets the maximum number of keys returned in the response. By default the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more. If additional keys satisfy the search criteria, but were not returned because max-keys was exceeded, the response contains <isTruncated>true</isTruncated>. To return the additional keys, see key-marker and version-id-marker.
   --prefix: string # Use this parameter to select only those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different groupings of keys. (You can think of using prefix to make groups in the same way you'd use a folder in a file system.) You can use prefix with delimiter to roll up numerous objects into a single result under CommonPrefixes.
   --version-id-marker: string # Specifies the object version you want to start listing from.
-  --max-keys-2: string # Pagination limit (disambiguated-2)
-  --key-marker-2: string # Pagination token (disambiguated-2)
-  --version-id-marker-2: string # Pagination token (disambiguated-2)
+  --qp-max-keys: string # Pagination limit (spec name: MaxKeys)
+  --qp-key-marker: string # Pagination token (spec name: KeyMarker)
+  --qp-version-id-marker: string # Pagination token (spec name: VersionIdMarker)
   --versions: oneof<nothing, bool> # required, allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
@@ -4606,16 +4633,16 @@ export def "list-object-versions" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let versions = ($versions | default true)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $max_keys_2 "scalar") (serialize-qp "KeyMarker" $key_marker_2 "scalar") (serialize-qp "VersionIdMarker" $version_id_marker_2 "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "KeyMarker" $qp_key_marker "scalar") (serialize-qp "VersionIdMarker" $qp_version_id_marker "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-keys": $max_keys, "prefix": $prefix, "version-id-marker": $version_id_marker, "MaxKeys": $max_keys_2, "KeyMarker": $key_marker_2, "VersionIdMarker": $version_id_marker_2, "versions": $versions} | compact)
+    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "key-marker": $key_marker, "max-keys": $max_keys, "prefix": $prefix, "version-id-marker": $version_id_marker, "MaxKeys": $qp_max_keys, "KeyMarker": $qp_key_marker, "VersionIdMarker": $qp_version_id_marker, "versions": $versions} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4648,8 +4675,8 @@ export def "list-objects-v2" [
   --continuation-token: string # ContinuationToken indicates Amazon S3 that the list is being continued on this bucket with a token. ContinuationToken is obfuscated and is not a real key.
   --fetch-owner: oneof<nothing, bool> # The owner field is not present in listV2 by default, if you want to return owner field with each key in the result then set the fetch owner field to true.
   --start-after: string # StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
-  --max-keys-2: string # Pagination limit (disambiguated-2)
-  --continuation-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-keys: string # Pagination limit (spec name: MaxKeys)
+  --qp-continuation-token: string # Pagination token (spec name: ContinuationToken)
   --list-type: string@list-type-completer # required
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request in V2 style. Bucket owners need not specify this parameter in their requests.
@@ -4659,16 +4686,16 @@ export def "list-objects-v2" [
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
   let list_type = ($list_type | default "2")
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $max_keys_2 "scalar") (serialize-qp "ContinuationToken" $continuation_token_2 "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $qp_max_keys "scalar") (serialize-qp "ContinuationToken" $qp_continuation_token "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/{bucket}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "max-keys": $max_keys, "prefix": $prefix, "continuation-token": $continuation_token, "fetch-owner": $fetch_owner, "start-after": $start_after, "MaxKeys": $max_keys_2, "ContinuationToken": $continuation_token_2, "list-type": $list_type} | compact)
+    query: ({"delimiter": $delimiter, "encoding-type": $encoding_type, "max-keys": $max_keys, "prefix": $prefix, "continuation-token": $continuation_token, "fetch-owner": $fetch_owner, "start-after": $start_after, "MaxKeys": $qp_max_keys, "ContinuationToken": $qp_continuation_token, "list-type": $list_type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4713,11 +4740,11 @@ export def "restore-object" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "restore" $restore "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4767,11 +4794,11 @@ export def "select-object-content" [
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "select-type" $select_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4830,11 +4857,11 @@ export def "upload-part" [
   let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4895,9 +4922,9 @@ export def "upload-part-copy" [
   let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), key: (encode-path-segment $key)} | format pattern "/{bucket}/{key}") $qp $auth.query)
   let accept_val = "text/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "x-amz-copy-source-range": $x_amz_copy_source_range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4974,11 +5001,11 @@ export def "write-get-object-response" [
   if ($x_amz_request_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-request-token' missing: pass --x-amz-request-token" } }
   let full_url = (build-url $base "/WriteGetObjectResponse" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-route": $x_amz_request_route, "x-amz-request-token": $x_amz_request_token, "x-amz-fwd-status": $x_amz_fwd_status, "x-amz-fwd-error-code": $x_amz_fwd_error_code, "x-amz-fwd-error-message": $x_amz_fwd_error_message, "x-amz-fwd-header-accept-ranges": $x_amz_fwd_header_accept_ranges, "x-amz-fwd-header-Cache-Control": $x_amz_fwd_header_cache_control, "x-amz-fwd-header-Content-Disposition": $x_amz_fwd_header_content_disposition, "x-amz-fwd-header-Content-Encoding": $x_amz_fwd_header_content_encoding, "x-amz-fwd-header-Content-Language": $x_amz_fwd_header_content_language, "Content-Length": $content_length, "x-amz-fwd-header-Content-Range": $x_amz_fwd_header_content_range, "x-amz-fwd-header-Content-Type": $x_amz_fwd_header_content_type, "x-amz-fwd-header-x-amz-checksum-crc32": $x_amz_fwd_header_x_amz_checksum_crc32, "x-amz-fwd-header-x-amz-checksum-crc32c": $x_amz_fwd_header_x_amz_checksum_crc32c, "x-amz-fwd-header-x-amz-checksum-sha1": $x_amz_fwd_header_x_amz_checksum_sha1, "x-amz-fwd-header-x-amz-checksum-sha256": $x_amz_fwd_header_x_amz_checksum_sha256, "x-amz-fwd-header-x-amz-delete-marker": $x_amz_fwd_header_x_amz_delete_marker, "x-amz-fwd-header-ETag": $x_amz_fwd_header_e_tag, "x-amz-fwd-header-Expires": $x_amz_fwd_header_expires, "x-amz-fwd-header-x-amz-expiration": $x_amz_fwd_header_x_amz_expiration, "x-amz-fwd-header-Last-Modified": $x_amz_fwd_header_last_modified, "x-amz-fwd-header-x-amz-missing-meta": $x_amz_fwd_header_x_amz_missing_meta, "x-amz-fwd-header-x-amz-object-lock-mode": $x_amz_fwd_header_x_amz_object_lock_mode, "x-amz-fwd-header-x-amz-object-lock-legal-hold": $x_amz_fwd_header_x_amz_object_lock_legal_hold, "x-amz-fwd-header-x-amz-object-lock-retain-until-date": $x_amz_fwd_header_x_amz_object_lock_retain_until_date, "x-amz-fwd-header-x-amz-mp-parts-count": $x_amz_fwd_header_x_amz_mp_parts_count, "x-amz-fwd-header-x-amz-replication-status": $x_amz_fwd_header_x_amz_replication_status, "x-amz-fwd-header-x-amz-request-charged": $x_amz_fwd_header_x_amz_request_charged, "x-amz-fwd-header-x-amz-restore": $x_amz_fwd_header_x_amz_restore, "x-amz-fwd-header-x-amz-server-side-encryption": $x_amz_fwd_header_x_amz_server_side_encryption, "x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm": $x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm, "x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id": $x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id, "x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5": $x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5, "x-amz-fwd-header-x-amz-storage-class": $x_amz_fwd_header_x_amz_storage_class, "x-amz-fwd-header-x-amz-tagging-count": $x_amz_fwd_header_x_amz_tagging_count, "x-amz-fwd-header-x-amz-version-id": $x_amz_fwd_header_x_amz_version_id, "x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled": $x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

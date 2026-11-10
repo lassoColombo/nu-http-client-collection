@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -217,12 +244,12 @@ export def "update-bulk-inventory" [
   let qp = [(serialize-qp "feedType" $feed_type "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -270,9 +297,9 @@ export def "get-wfs-inventory" [
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "fromModifiedDate" $from_modified_date "scalar") (serialize-qp "toModifiedDate" $to_modified_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/fulfillment/inventory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -316,9 +343,9 @@ export def "get-multi-node-inventory-for-all-sku-and-all-ship-nodes" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextCursor" $next_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -363,9 +390,9 @@ export def "get-multi-node-inventory-for-sku-and-all-shipnodes" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku: (encode-path-segment $sku)} | format pattern "/v3/inventories/{sku}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -410,11 +437,11 @@ export def "update-multi-node-inventory" [
   if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let full_url = (build-url $base ({sku: (encode-path-segment $sku)} | format pattern "/v3/inventories/{sku}") $auth.query)
   let req_body = {"inventories": $inventories} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -460,9 +487,9 @@ export def "get-inventory" [
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -499,7 +526,7 @@ export def "update-inventory-for-an-item" [
   --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (required, e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
   --wm-svc-name: string # Walmart Service Name (required, e.g. Walmart Service Name)
   quantity: record # Quantity that has been ordered by the customers but not yet shipped — shape: {amount: float, unit: "EACH"}
-  --sku-body: string # A seller-provided Product ID. Response will have decoded value. (body field)
+  --body-sku: string # A seller-provided Product ID. Response will have decoded value. (spec name: sku)
 ]: any -> oneof<record<quantity: record<amount: float, unit: string>, sku: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -510,13 +537,13 @@ export def "update-inventory-for-an-item" [
   if ($wm_svc_name == null) { error make --unspanned { msg: "required header parameter 'WM_SVC.NAME' missing: pass --wm-svc-name" } }
   let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp $auth.query)
-  let req_body = {"quantity": $quantity, "sku": $sku_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  if (($req_body | get -o "sku") == null) { error make --unspanned { msg: "required body field 'sku' missing: pass --sku-body or pipe a record" } }
+  let req_body = {"quantity": $quantity, "sku": $body_sku} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "sku") == null) { error make --unspanned { msg: "required body field 'sku' missing: pass --body-sku or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

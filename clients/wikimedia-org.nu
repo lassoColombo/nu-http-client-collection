@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -185,7 +212,7 @@ export def "get-feed-availability" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feed/availability" $auth.query)
   let accept_val = ($accept | default "application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Availability/1.0.1\"")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -223,9 +250,9 @@ export def "post-media-math-check-type" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/media/math/check/{type}") $auth.query)
   let req_body = {"q": $q} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -262,7 +289,7 @@ export def "get-media-math-formula-hash" [
   if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
   let full_url = (build-url $base ({hash: (encode-path-segment $hash)} | format pattern "/media/math/formula/{hash}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -300,7 +327,7 @@ export def "get-media-math-render-format-hash" [
   if ($hash | is-empty) { error make --unspanned { msg: "path parameter 'hash' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), hash: (encode-path-segment $hash)} | format pattern "/media/math/render/{format}/{hash}") $auth.query)
   let accept_val = ($accept | default "image/svg+xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -346,7 +373,7 @@ export def "get-metrics-bytes-difference-absolute-aggregate-project-editor-type-
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -392,7 +419,7 @@ export def "get-metrics-bytes-difference-absolute-per-page-project-page-title-ed
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/absolute/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -438,7 +465,7 @@ export def "get-metrics-bytes-difference-net-aggregate-project-editor-type-page-
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -484,7 +511,7 @@ export def "get-metrics-bytes-difference-net-per-page-project-page-title-editor-
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/bytes-difference/net/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -532,7 +559,7 @@ export def "get-metrics-edited-pages-aggregate-project-editor-type-page-type-act
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -578,7 +605,7 @@ export def "get-metrics-edited-pages-new-project-editor-type-page-type-granulari
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edited-pages/new/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -624,7 +651,7 @@ export def "get-metrics-edited-pages-top-by-absolute-bytes-difference-project-ed
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -670,7 +697,7 @@ export def "get-metrics-edited-pages-top-by-edits-project-editor-type-page-type-
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -716,7 +743,7 @@ export def "get-metrics-edited-pages-top-by-net-bytes-difference-project-editor-
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/edited-pages/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -764,7 +791,7 @@ export def "get-metrics-editors-aggregate-project-editor-type-page-type-activity
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), activity_level: (encode-path-segment $activity_level), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/editors/aggregate/{project}/{editor_type}/{page_type}/{activity_level}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -810,7 +837,7 @@ export def "get-metrics-editors-top-by-absolute-bytes-difference-project-editor-
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-absolute-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -856,7 +883,7 @@ export def "get-metrics-editors-top-by-edits-project-editor-type-page-type-year-
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-edits/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -902,7 +929,7 @@ export def "get-metrics-editors-top-by-net-bytes-difference-project-editor-type-
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/editors/top-by-net-bytes-difference/{project}/{editor_type}/{page_type}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -948,7 +975,7 @@ export def "get-metrics-edits-aggregate-project-editor-type-page-type-granularit
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), editor_type: (encode-path-segment $editor_type), page_type: (encode-path-segment $page_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/aggregate/{project}/{editor_type}/{page_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -994,7 +1021,7 @@ export def "get-metrics-edits-per-page-project-page-title-editor-type-granularit
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), page_title: (encode-path-segment $page_title), editor_type: (encode-path-segment $editor_type), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/edits/per-page/{project}/{page_title}/{editor_type}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1038,7 +1065,7 @@ export def "get-metrics-legacy-pagecounts-aggregate-project-access-site-granular
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/legacy/pagecounts/aggregate/{project}/{access_site}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1084,7 +1111,7 @@ export def "get-metrics-pageviews-aggregate-project-access-agent-granularity-sta
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1132,7 +1159,7 @@ export def "get-metrics-pageviews-per-article-project-access-agent-article-granu
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), agent: (encode-path-segment $agent), article: (encode-path-segment $article), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1174,7 +1201,7 @@ export def "get-metrics-pageviews-top-by-country-project-access-year-month" [
   if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month)} | format pattern "/metrics/pageviews/top-by-country/{project}/{access}/{year}/{month}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1218,7 +1245,7 @@ export def "get-metrics-pageviews-top-project-access-year-month-day" [
   if ($day | is-empty) { error make --unspanned { msg: "path parameter 'day' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access: (encode-path-segment $access), year: (encode-path-segment $year), month: (encode-path-segment $month), day: (encode-path-segment $day)} | format pattern "/metrics/pageviews/top/{project}/{access}/{year}/{month}/{day}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1260,7 +1287,7 @@ export def "get-metrics-registered-users-new-project-granularity-start-end" [
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/registered-users/new/{project}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1304,7 +1331,7 @@ export def "get-metrics-unique-devices-project-access-site-granularity-start-end
   if ($end | is-empty) { error make --unspanned { msg: "path parameter 'end' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), access_site: (encode-path-segment $access_site), granularity: (encode-path-segment $granularity), start: (encode-path-segment $start), end: (encode-path-segment $end)} | format pattern "/metrics/unique-devices/{project}/{access_site}/{granularity}/{start}/{end}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1344,9 +1371,9 @@ export def "post-transform-html-from-from-lang-to-to-lang" [
   if ($to_lang | is-empty) { error make --unspanned { msg: "path parameter 'to_lang' must be non-empty" } }
   let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}") $auth.query)
   let req_body = {"html": $html} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1389,9 +1416,9 @@ export def "post-transform-html-from-from-lang-to-to-lang-provider" [
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), provider: (encode-path-segment $provider)} | format pattern "/transform/html/from/{from_lang}/to/{to_lang}/{provider}") $auth.query)
   let req_body = {"html": $html} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1425,7 +1452,7 @@ export def "get-transform-list-languagepairs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transform/list/languagepairs/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1463,7 +1490,7 @@ export def "get-transform-list-pair-from-to" [
   if ($to | is-empty) { error make --unspanned { msg: "path parameter 'to' must be non-empty" } }
   let full_url = (build-url $base ({from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/pair/{from}/{to}/") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1499,7 +1526,7 @@ export def "get-transform-list-tool-tool" [
   if ($tool | is-empty) { error make --unspanned { msg: "path parameter 'tool' must be non-empty" } }
   let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/transform/list/tool/{tool}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1537,7 +1564,7 @@ export def "get-transform-list-tool-tool-from" [
   if ($from | is-empty) { error make --unspanned { msg: "path parameter 'from' must be non-empty" } }
   let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from)} | format pattern "/transform/list/tool/{tool}/{from}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1577,7 +1604,7 @@ export def "get-transform-list-tool-tool-from-to" [
   if ($to | is-empty) { error make --unspanned { msg: "path parameter 'to' must be non-empty" } }
   let full_url = (build-url $base ({tool: (encode-path-segment $tool), from: (encode-path-segment $from), to: (encode-path-segment $to)} | format pattern "/transform/list/tool/{tool}/{from}/{to}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1617,7 +1644,7 @@ export def "get-transform-word-from-from-lang-to-to-lang-word" [
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1659,7 +1686,7 @@ export def "get-transform-word-from-from-lang-to-to-lang-word-provider" [
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   let full_url = (build-url $base ({from_lang: (encode-path-segment $from_lang), to_lang: (encode-path-segment $to_lang), word: (encode-path-segment $word), provider: (encode-path-segment $provider)} | format pattern "/transform/word/from/{from_lang}/to/{to_lang}/{word}/{provider}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

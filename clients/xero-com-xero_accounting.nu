@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -197,9 +224,9 @@ export def "get-accounts" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -251,11 +278,11 @@ export def "create-account" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Accounts" $auth.query)
   let req_body = {"AccountID": $account_id, "AddToWatchlist": $add_to_watchlist, "BankAccountNumber": $bank_account_number, "BankAccountType": $bank_account_type, "Code": $code, "CurrencyCode": $currency_code, "Description": $description, "EnablePaymentsToAccount": $enable_payments_to_account, "Name": $name, "ReportingCode": $reporting_code, "ShowInExpenseClaims": $show_in_expense_claims, "Status": $status, "TaxType": $tax_type, "Type": $type, "ValidationErrors": $validation_errors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -293,9 +320,9 @@ export def "delete-account" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -333,9 +360,9 @@ export def "get-account" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -375,11 +402,11 @@ export def "update-account" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}") $auth.query)
   let req_body = {"Accounts": $accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -417,9 +444,9 @@ export def "get-account-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -461,9 +488,9 @@ export def "get-account-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Accounts/{account_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -505,9 +532,9 @@ export def "get-account-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -549,11 +576,11 @@ export def "update-account-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -595,11 +622,11 @@ export def "create-account-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -641,9 +668,9 @@ export def "get-bank-transactions" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BankTransactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -684,11 +711,11 @@ export def "update-or-create-bank-transactions" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BankTransactions" $qp $auth.query)
   let req_body = {"BankTransactions": $bank_transactions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -729,11 +756,11 @@ export def "create-bank-transactions" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BankTransactions" $qp $auth.query)
   let req_body = {"BankTransactions": $bank_transactions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -773,9 +800,9 @@ export def "get-bank-transaction" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -817,11 +844,11 @@ export def "update-bank-transaction" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}") $qp $auth.query)
   let req_body = {"BankTransactions": $bank_transactions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -859,9 +886,9 @@ export def "get-bank-transaction-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -903,9 +930,9 @@ export def "get-bank-transaction-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -947,9 +974,9 @@ export def "get-bank-transaction-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -991,11 +1018,11 @@ export def "update-bank-transaction-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1037,11 +1064,11 @@ export def "create-bank-transaction-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1079,9 +1106,9 @@ export def "get-bank-transactions-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1121,11 +1148,11 @@ export def "create-bank-transaction-history-record" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1165,9 +1192,9 @@ export def "get-bank-transfers" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BankTransfers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,11 +1232,11 @@ export def "create-bank-transfer" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/BankTransfers" $auth.query)
   let req_body = {"BankTransfers": $bank_transfers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1247,9 +1274,9 @@ export def "get-bank-transfer" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1287,9 +1314,9 @@ export def "get-bank-transfer-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1331,9 +1358,9 @@ export def "get-bank-transfer-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1375,9 +1402,9 @@ export def "get-bank-transfer-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1418,11 +1445,11 @@ export def "update-bank-transfer-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1463,11 +1490,11 @@ export def "create-bank-transfer-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1505,9 +1532,9 @@ export def "get-bank-transfer-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1547,11 +1574,11 @@ export def "create-bank-transfer-history-record" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1591,9 +1618,9 @@ export def "get-batch-payments" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BatchPayments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1633,11 +1660,11 @@ export def "create-batch-payment" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/BatchPayments" $qp $auth.query)
   let req_body = {"BatchPayments": $batch_payments} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1675,9 +1702,9 @@ export def "get-batch-payment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({batch_payment_id: (encode-path-segment $batch_payment_id)} | format pattern "/BatchPayments/{batch_payment_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1717,11 +1744,11 @@ export def "create-batch-payment-history-record" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({batch_payment_id: (encode-path-segment $batch_payment_id)} | format pattern "/BatchPayments/{batch_payment_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1757,9 +1784,9 @@ export def "get-branding-themes" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/BrandingThemes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1797,9 +1824,9 @@ export def "get-branding-theme" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1837,9 +1864,9 @@ export def "get-branding-theme-payment-services" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}/PaymentServices") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1884,11 +1911,11 @@ export def "create-branding-theme-payment-services" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}/PaymentServices") $auth.query)
   let req_body = {"PayNowText": $pay_now_text, "PaymentServiceID": $payment_service_id, "PaymentServiceName": $payment_service_name, "PaymentServiceType": $payment_service_type, "PaymentServiceUrl": $payment_service_url, "ValidationErrors": $validation_errors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1927,9 +1954,9 @@ export def "get-contact-groups" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ContactGroups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1967,11 +1994,11 @@ export def "create-contact-group" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/ContactGroups" $auth.query)
   let req_body = {"ContactGroups": $contact_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2009,9 +2036,9 @@ export def "get-contact-group" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2051,11 +2078,11 @@ export def "update-contact-group" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}") $auth.query)
   let req_body = {"ContactGroups": $contact_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2093,9 +2120,9 @@ export def "delete-contact-group-contacts" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2135,11 +2162,11 @@ export def "create-contact-group-contacts" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts") $auth.query)
   let req_body = {"Contacts": $contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2179,9 +2206,9 @@ export def "delete-contact-group-contact" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2224,9 +2251,9 @@ export def "get-contacts" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "IDs" $i_ds "csv") (serialize-qp "page" $page "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Contacts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2266,11 +2293,11 @@ export def "update-or-create-contacts" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Contacts" $qp $auth.query)
   let req_body = {"Contacts": $contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2310,11 +2337,11 @@ export def "create-contacts" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Contacts" $qp $auth.query)
   let req_body = {"Contacts": $contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2352,9 +2379,9 @@ export def "get-contact" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2394,11 +2421,11 @@ export def "update-contact" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}") $auth.query)
   let req_body = {"Contacts": $contacts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2436,9 +2463,9 @@ export def "get-contact-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2480,9 +2507,9 @@ export def "get-contact-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Contacts/{contact_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2524,9 +2551,9 @@ export def "get-contact-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2567,11 +2594,11 @@ export def "update-contact-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2612,11 +2639,11 @@ export def "create-contact-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2654,9 +2681,9 @@ export def "get-contact-cis-settings" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/CISSettings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2694,9 +2721,9 @@ export def "get-contact-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2736,11 +2763,11 @@ export def "create-contact-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2778,9 +2805,9 @@ export def "get-contact-by-contact-number" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({contact_number: (encode-path-segment $contact_number)} | format pattern "/Contacts/{contact_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2822,9 +2849,9 @@ export def "get-credit-notes" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/CreditNotes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2865,11 +2892,11 @@ export def "update-or-create-credit-notes" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/CreditNotes" $qp $auth.query)
   let req_body = {"CreditNotes": $credit_notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2910,11 +2937,11 @@ export def "create-credit-notes" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/CreditNotes" $qp $auth.query)
   let req_body = {"CreditNotes": $credit_notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2954,9 +2981,9 @@ export def "get-credit-note" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2998,11 +3025,11 @@ export def "update-credit-note" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}") $qp $auth.query)
   let req_body = {"CreditNotes": $credit_notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3044,11 +3071,11 @@ export def "create-credit-note-allocation" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/Allocations") $qp $auth.query)
   let req_body = {"Allocations": $allocations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3086,9 +3113,9 @@ export def "get-credit-note-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3130,9 +3157,9 @@ export def "get-credit-note-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3174,9 +3201,9 @@ export def "get-credit-note-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3218,11 +3245,11 @@ export def "update-credit-note-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3266,11 +3293,11 @@ export def "create-credit-note-attachment-by-file-name" [
   let qp = [(serialize-qp "IncludeOnline" $include_online "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3308,9 +3335,9 @@ export def "get-credit-note-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3350,11 +3377,11 @@ export def "create-credit-note-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3392,9 +3419,9 @@ export def "get-credit-note-as-pdf" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/pdf") $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3433,9 +3460,9 @@ export def "get-currencies" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Currencies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3474,11 +3501,11 @@ export def "create-currency" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Currencies" $auth.query)
   let req_body = {"Code": $code, "Description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3518,9 +3545,9 @@ export def "get-employees" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Employees" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3560,11 +3587,11 @@ export def "update-or-create-employees" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Employees" $qp $auth.query)
   let req_body = {"Employees": $employees} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3604,11 +3631,11 @@ export def "create-employees" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Employees" $qp $auth.query)
   let req_body = {"Employees": $employees} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3646,9 +3673,9 @@ export def "get-employee" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3688,9 +3715,9 @@ export def "get-expense-claims" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ExpenseClaims" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3728,11 +3755,11 @@ export def "create-expense-claims" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/ExpenseClaims" $auth.query)
   let req_body = {"ExpenseClaims": $expense_claims} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3770,9 +3797,9 @@ export def "get-expense-claim" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3812,11 +3839,11 @@ export def "update-expense-claim" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}") $auth.query)
   let req_body = {"ExpenseClaims": $expense_claims} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3854,9 +3881,9 @@ export def "get-expense-claim-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3896,11 +3923,11 @@ export def "create-expense-claim-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3936,9 +3963,9 @@ export def "get-invoice-reminders" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/InvoiceReminders/Settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3986,9 +4013,9 @@ export def "get-invoices" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "IDs" $i_ds "csv") (serialize-qp "InvoiceNumbers" $invoice_numbers "csv") (serialize-qp "ContactIDs" $contact_i_ds "csv") (serialize-qp "Statuses" $statuses "csv") (serialize-qp "page" $page "scalar") (serialize-qp "includeArchived" $include_archived "scalar") (serialize-qp "createdByMyApp" $created_by_my_app "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Invoices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4029,11 +4056,11 @@ export def "update-or-create-invoices" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Invoices" $qp $auth.query)
   let req_body = {"Invoices": $invoices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4074,11 +4101,11 @@ export def "create-invoices" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Invoices" $qp $auth.query)
   let req_body = {"Invoices": $invoices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4118,9 +4145,9 @@ export def "get-invoice" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4162,11 +4189,11 @@ export def "update-invoice" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}") $qp $auth.query)
   let req_body = {"Invoices": $invoices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4204,9 +4231,9 @@ export def "get-invoice-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4248,9 +4275,9 @@ export def "get-invoice-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Invoices/{invoice_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4292,9 +4319,9 @@ export def "get-invoice-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4336,11 +4363,11 @@ export def "update-invoice-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4384,11 +4411,11 @@ export def "create-invoice-attachment-by-file-name" [
   let qp = [(serialize-qp "IncludeOnline" $include_online "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4428,11 +4455,11 @@ export def "email-invoice" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/Email") $auth.query)
   let req_body = {"Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4470,9 +4497,9 @@ export def "get-invoice-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4512,11 +4539,11 @@ export def "create-invoice-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4554,9 +4581,9 @@ export def "get-online-invoice" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/OnlineInvoice") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4594,9 +4621,9 @@ export def "get-invoice-as-pdf" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/pdf") $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4637,9 +4664,9 @@ export def "get-items" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Items" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4680,11 +4707,11 @@ export def "update-or-create-items" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Items" $qp $auth.query)
   let req_body = {"Items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4725,11 +4752,11 @@ export def "create-items" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Items" $qp $auth.query)
   let req_body = {"Items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4767,9 +4794,9 @@ export def "delete-item" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4809,9 +4836,9 @@ export def "get-item" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4853,11 +4880,11 @@ export def "update-item" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}") $qp $auth.query)
   let req_body = {"Items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4895,9 +4922,9 @@ export def "get-item-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4937,11 +4964,11 @@ export def "create-item-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4981,9 +5008,9 @@ export def "get-journals" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "paymentsOnly" $payments_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Journals" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5021,9 +5048,9 @@ export def "get-journal" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({journal_id: (encode-path-segment $journal_id)} | format pattern "/Journals/{journal_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5066,9 +5093,9 @@ export def "get-linked-transactions" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "LinkedTransactionID" $linked_transaction_id "scalar") (serialize-qp "SourceTransactionID" $source_transaction_id "scalar") (serialize-qp "ContactID" $contact_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "TargetTransactionID" $target_transaction_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/LinkedTransactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5115,11 +5142,11 @@ export def "create-linked-transaction" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/LinkedTransactions" $auth.query)
   let req_body = {"ContactID": $contact_id, "LinkedTransactionID": $linked_transaction_id, "SourceLineItemID": $source_line_item_id, "SourceTransactionID": $source_transaction_id, "SourceTransactionTypeCode": $source_transaction_type_code, "Status": $status, "TargetLineItemID": $target_line_item_id, "TargetTransactionID": $target_transaction_id, "Type": $type, "ValidationErrors": $validation_errors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5157,9 +5184,9 @@ export def "delete-linked-transaction" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5197,9 +5224,9 @@ export def "get-linked-transaction" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5239,11 +5266,11 @@ export def "update-linked-transaction" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}") $auth.query)
   let req_body = {"LinkedTransactions": $linked_transactions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5284,9 +5311,9 @@ export def "get-manual-journals" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ManualJournals" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5326,11 +5353,11 @@ export def "update-or-create-manual-journals" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ManualJournals" $qp $auth.query)
   let req_body = {"ManualJournals": $manual_journals} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5370,11 +5397,11 @@ export def "create-manual-journals" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ManualJournals" $qp $auth.query)
   let req_body = {"ManualJournals": $manual_journals} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5412,9 +5439,9 @@ export def "get-manual-journal" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5454,11 +5481,11 @@ export def "update-manual-journal" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}") $auth.query)
   let req_body = {"ManualJournals": $manual_journals} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5496,9 +5523,9 @@ export def "get-manual-journal-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5540,9 +5567,9 @@ export def "get-manual-journal-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5584,9 +5611,9 @@ export def "get-manual-journal-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5628,11 +5655,11 @@ export def "update-manual-journal-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5674,11 +5701,11 @@ export def "create-manual-journal-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5716,9 +5743,9 @@ export def "get-manual-journals-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5758,11 +5785,11 @@ export def "create-manual-journal-history-record" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5798,9 +5825,9 @@ export def "get-organisations" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Organisation" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5836,9 +5863,9 @@ export def "get-organisation-actions" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Organisation/Actions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5876,9 +5903,9 @@ export def "get-organisation-cis-settings" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({organisation_id: (encode-path-segment $organisation_id)} | format pattern "/Organisation/{organisation_id}/CISSettings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5920,9 +5947,9 @@ export def "get-overpayments" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Overpayments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5960,9 +5987,9 @@ export def "get-overpayment" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6004,11 +6031,11 @@ export def "create-overpayment-allocations" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/Allocations") $qp $auth.query)
   let req_body = {"Allocations": $allocations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6046,9 +6073,9 @@ export def "get-overpayment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6088,11 +6115,11 @@ export def "create-overpayment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6128,9 +6155,9 @@ export def "get-payment-services" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/PaymentServices" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6168,11 +6195,11 @@ export def "create-payment-service" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/PaymentServices" $auth.query)
   let req_body = {"PaymentServices": $payment_services} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6213,9 +6240,9 @@ export def "get-payments" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Payments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6275,11 +6302,11 @@ export def "create-payment" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Payments" $auth.query)
   let req_body = {"Account": $account, "Amount": $amount, "BankAccountNumber": $bank_account_number, "BatchPaymentID": $batch_payment_id, "Code": $code, "CreditNote": $credit_note, "CreditNoteNumber": $credit_note_number, "CurrencyRate": $currency_rate, "Date": $date, "Details": $details, "HasAccount": $has_account, "HasValidationErrors": $has_validation_errors, "Invoice": $invoice, "InvoiceNumber": $invoice_number, "IsReconciled": $is_reconciled, "Overpayment": $overpayment, "Particulars": $particulars, "PaymentID": $payment_id, "Prepayment": $prepayment, "Reference": $reference, "Status": $status, "StatusAttributeString": $status_attribute_string, "ValidationErrors": $validation_errors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6319,11 +6346,11 @@ export def "create-payments" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Payments" $qp $auth.query)
   let req_body = {"Payments": $payments} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6361,9 +6388,9 @@ export def "get-payment" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6403,11 +6430,11 @@ export def "delete-payment" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}") $auth.query)
   let req_body = {"Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6445,9 +6472,9 @@ export def "get-payment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6487,11 +6514,11 @@ export def "create-payment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6533,9 +6560,9 @@ export def "get-prepayments" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Prepayments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6573,9 +6600,9 @@ export def "get-prepayment" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6617,11 +6644,11 @@ export def "create-prepayment-allocations" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/Allocations") $qp $auth.query)
   let req_body = {"Allocations": $allocations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6659,9 +6686,9 @@ export def "get-prepayment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6701,11 +6728,11 @@ export def "create-prepayment-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6748,9 +6775,9 @@ export def "get-purchase-orders" [
   let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PurchaseOrders" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6790,11 +6817,11 @@ export def "update-or-create-purchase-orders" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PurchaseOrders" $qp $auth.query)
   let req_body = {"PurchaseOrders": $purchase_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6834,11 +6861,11 @@ export def "create-purchase-orders" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/PurchaseOrders" $qp $auth.query)
   let req_body = {"PurchaseOrders": $purchase_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6876,9 +6903,9 @@ export def "get-purchase-order" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6918,11 +6945,11 @@ export def "update-purchase-order" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}") $auth.query)
   let req_body = {"PurchaseOrders": $purchase_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6960,9 +6987,9 @@ export def "get-purchase-order-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7004,9 +7031,9 @@ export def "get-purchase-order-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7048,9 +7075,9 @@ export def "get-purchase-order-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7092,11 +7119,11 @@ export def "update-purchase-order-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7138,11 +7165,11 @@ export def "create-purchase-order-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7180,9 +7207,9 @@ export def "get-purchase-order-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7222,11 +7249,11 @@ export def "create-purchase-order-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7264,9 +7291,9 @@ export def "get-purchase-order-as-pdf" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/pdf") $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7304,9 +7331,9 @@ export def "get-purchase-order-by-number" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({purchase_order_number: (encode-path-segment $purchase_order_number)} | format pattern "/PurchaseOrders/{purchase_order_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7353,9 +7380,9 @@ export def "get-quotes" [
   let qp = [(serialize-qp "DateFrom" $date_from "scalar") (serialize-qp "DateTo" $date_to "scalar") (serialize-qp "ExpiryDateFrom" $expiry_date_from "scalar") (serialize-qp "ExpiryDateTo" $expiry_date_to "scalar") (serialize-qp "ContactID" $contact_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "QuoteNumber" $quote_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Quotes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7395,11 +7422,11 @@ export def "update-or-create-quotes" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Quotes" $qp $auth.query)
   let req_body = {"Quotes": $quotes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7439,11 +7466,11 @@ export def "create-quotes" [
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Quotes" $qp $auth.query)
   let req_body = {"Quotes": $quotes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7481,9 +7508,9 @@ export def "get-quote" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7523,11 +7550,11 @@ export def "update-quote" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}") $auth.query)
   let req_body = {"Quotes": $quotes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7565,9 +7592,9 @@ export def "get-quote-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7609,9 +7636,9 @@ export def "get-quote-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Quotes/{quote_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7653,9 +7680,9 @@ export def "get-quote-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7697,11 +7724,11 @@ export def "update-quote-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7743,11 +7770,11 @@ export def "create-quote-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7785,9 +7812,9 @@ export def "get-quote-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7827,11 +7854,11 @@ export def "create-quote-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7869,9 +7896,9 @@ export def "get-quote-as-pdf" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/pdf") $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7912,9 +7939,9 @@ export def "get-receipts" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Receipts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7954,11 +7981,11 @@ export def "create-receipt" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Receipts" $qp $auth.query)
   let req_body = {"Receipts": $receipts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7998,9 +8025,9 @@ export def "get-receipt" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8042,11 +8069,11 @@ export def "update-receipt" [
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}") $qp $auth.query)
   let req_body = {"Receipts": $receipts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8084,9 +8111,9 @@ export def "get-receipt-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8128,9 +8155,9 @@ export def "get-receipt-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Receipts/{receipt_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8172,9 +8199,9 @@ export def "get-receipt-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8216,11 +8243,11 @@ export def "update-receipt-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8262,11 +8289,11 @@ export def "create-receipt-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8304,9 +8331,9 @@ export def "get-receipt-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8346,11 +8373,11 @@ export def "create-receipt-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8389,9 +8416,9 @@ export def "get-repeating-invoices" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/RepeatingInvoices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8429,9 +8456,9 @@ export def "get-repeating-invoice" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8469,9 +8496,9 @@ export def "get-repeating-invoice-attachments" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8513,9 +8540,9 @@ export def "get-repeating-invoice-attachment-by-id" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{attachment_id}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8557,9 +8584,9 @@ export def "get-repeating-invoice-attachment-by-file-name" [
   if ($content_type == null) { error make --unspanned { msg: "required header parameter 'contentType' missing: pass --content-type" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8601,11 +8628,11 @@ export def "update-repeating-invoice-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8647,11 +8674,11 @@ export def "create-repeating-invoice-attachment-by-file-name" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8689,9 +8716,9 @@ export def "get-repeating-invoice-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/History") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8731,11 +8758,11 @@ export def "create-repeating-invoice-history" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/History") $auth.query)
   let req_body = {"HistoryRecords": $history_records} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8771,9 +8798,9 @@ export def "get-report-ba-sor-gst-list" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Reports" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8815,9 +8842,9 @@ export def "get-report-aged-payables-by-contact" [
   let qp = [(serialize-qp "contactId" $contact_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/AgedPayablesByContact" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8859,9 +8886,9 @@ export def "get-report-aged-receivables-by-contact" [
   let qp = [(serialize-qp "contactId" $contact_id "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/AgedReceivablesByContact" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8905,9 +8932,9 @@ export def "get-report-balance-sheet" [
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "periods" $periods "scalar") (serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "trackingOptionID1" $tracking_option_id1 "scalar") (serialize-qp "trackingOptionID2" $tracking_option_id2 "scalar") (serialize-qp "standardLayout" $standard_layout "scalar") (serialize-qp "paymentsOnly" $payments_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/BalanceSheet" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8946,9 +8973,9 @@ export def "get-report-bank-summary" [
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/BankSummary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8988,9 +9015,9 @@ export def "get-report-budget-summary" [
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "timeframe" $timeframe "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/BudgetSummary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9028,9 +9055,9 @@ export def "get-report-executive-summary" [
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/ExecutiveSummary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9077,9 +9104,9 @@ export def "get-report-profit-and-loss" [
   let qp = [(serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "periods" $periods "scalar") (serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "trackingCategoryID" $tracking_category_id "scalar") (serialize-qp "trackingCategoryID2" $tracking_category_id2 "scalar") (serialize-qp "trackingOptionID" $tracking_option_id "scalar") (serialize-qp "trackingOptionID2" $tracking_option_id2 "scalar") (serialize-qp "standardLayout" $standard_layout "scalar") (serialize-qp "paymentsOnly" $payments_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/ProfitAndLoss" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9117,9 +9144,9 @@ export def "get-report-ten-ninety-nine" [
   let qp = [(serialize-qp "reportYear" $report_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/TenNinetyNine" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9158,9 +9185,9 @@ export def "get-report-trial-balance" [
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "paymentsOnly" $payments_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Reports/TrialBalance" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9198,9 +9225,9 @@ export def "get-report-ba-sor-gst" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/Reports/{report_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9240,11 +9267,11 @@ export def "post-setup" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/Setup" $auth.query)
   let req_body = {"Accounts": $accounts, "ConversionBalances": $conversion_balances, "ConversionDate": $conversion_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9284,9 +9311,9 @@ export def "get-tax-rates" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "TaxType" $tax_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/TaxRates" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9324,11 +9351,11 @@ export def "update-tax-rate" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/TaxRates" $auth.query)
   let req_body = {"TaxRates": $tax_rates} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9366,11 +9393,11 @@ export def "create-tax-rates" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/TaxRates" $auth.query)
   let req_body = {"TaxRates": $tax_rates} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9410,9 +9437,9 @@ export def "get-tracking-categories" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "includeArchived" $include_archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/TrackingCategories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9455,11 +9482,11 @@ export def "create-tracking-category" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base "/TrackingCategories" $auth.query)
   let req_body = {"Name": $name, "Option": $option, "Options": $options, "Status": $status, "TrackingCategoryID": $tracking_category_id, "TrackingOptionID": $tracking_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9497,9 +9524,9 @@ export def "delete-tracking-category" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9537,9 +9564,9 @@ export def "get-tracking-category" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9574,7 +9601,7 @@ export def "update-tracking-category" [
   --option: string # The option name of the tracking option e.g. East, West (max length = 100)
   --options: list # See Tracking Options — item shape: {Name?: string, Status?: "ACTIVE"|"ARCHIVED"|"DELETED", TrackingCategoryID?: string, TrackingOptionID?: string}
   --status: string@status-completer # The status of a tracking category
-  --body-tracking-category-id: string # The Xero identifier for a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid)
+  --body-tracking-category-id: string # The Xero identifier for a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid) (spec name: TrackingCategoryID)
   --tracking-option-id: string # The Xero identifier for a tracking option e.g. dc54c220-0140-495a-b925-3246adc0075f (format: uuid)
 ]: any -> oneof<record<TrackingCategories: table<Name: string, Option: string, Options: list, Status: string, TrackingCategoryID: string, TrackingOptionID: string>>, string, nothing> {
   let input = $in
@@ -9584,11 +9611,11 @@ export def "update-tracking-category" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}") $auth.query)
   let req_body = {"Name": $name, "Option": $option, "Options": $options, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $tracking_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9621,7 +9648,7 @@ export def "create-tracking-options" [
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --name: string # The name of the tracking option e.g. Marketing, East (max length = 100)
   --status: string@status-completer # The status of a tracking option
-  --body-tracking-category-id: string # Filter by a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid)
+  --body-tracking-category-id: string # Filter by a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid) (spec name: TrackingCategoryID)
   --tracking-option-id: string # The Xero identifier for a tracking option e.g. ae777a87-5ef3-4fa0-a4f0-d10e1f13073a (format: uuid)
 ]: any -> oneof<record<Options: table<Name: string, Status: string, TrackingCategoryID: string, TrackingOptionID: string>>, string, nothing> {
   let input = $in
@@ -9631,11 +9658,11 @@ export def "create-tracking-options" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options") $auth.query)
   let req_body = {"Name": $name, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $tracking_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9675,9 +9702,9 @@ export def "delete-tracking-options" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id), tracking_option_id: (encode-path-segment $tracking_option_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options/{tracking_option_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9711,8 +9738,8 @@ export def "update-tracking-options" [
   --xero-tenant-id: string # Xero identifier for Tenant (required, e.g. YOUR_XERO_TENANT_ID)
   --name: string # The name of the tracking option e.g. Marketing, East (max length = 100)
   --status: string@status-completer # The status of a tracking option
-  --body-tracking-category-id: string # Filter by a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid)
-  --body-tracking-option-id: string # The Xero identifier for a tracking option e.g. ae777a87-5ef3-4fa0-a4f0-d10e1f13073a (format: uuid)
+  --body-tracking-category-id: string # Filter by a tracking category e.g. 297c2dc5-cc47-4afd-8ec8-74990b8761e9 (format: uuid) (spec name: TrackingCategoryID)
+  --body-tracking-option-id: string # The Xero identifier for a tracking option e.g. ae777a87-5ef3-4fa0-a4f0-d10e1f13073a (format: uuid) (spec name: TrackingOptionID)
 ]: any -> oneof<record<Options: table<Name: string, Status: string, TrackingCategoryID: string, TrackingOptionID: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9722,11 +9749,11 @@ export def "update-tracking-options" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id), tracking_option_id: (encode-path-segment $tracking_option_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options/{tracking_option_id}") $auth.query)
   let req_body = {"Name": $name, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $body_tracking_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9766,9 +9793,9 @@ export def "get-users" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "If-Modified-Since": $if_modified_since} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9806,9 +9833,9 @@ export def "get-user" [
   if ($xero_tenant_id == null) { error make --unspanned { msg: "required header parameter 'xero-tenant-id' missing: pass --xero-tenant-id" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

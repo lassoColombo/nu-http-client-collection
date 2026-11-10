@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -177,7 +204,7 @@ export def "delete-admin-mappings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -213,7 +240,7 @@ export def "get-admin-mappings" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/__admin/mappings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -259,9 +286,9 @@ export def "post-admin-mappings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings" $auth.query)
   let req_body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -308,9 +335,9 @@ export def "post-admin-mappings-find-by-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/find-by-metadata" $auth.query)
   let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -343,7 +370,7 @@ export def "post-admin-mappings-import" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/import" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -390,9 +417,9 @@ export def "post-admin-mappings-remove-by-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/remove-by-metadata" $auth.query)
   let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -425,7 +452,7 @@ export def "post-admin-mappings-reset" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/reset" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -458,7 +485,7 @@ export def "post-admin-mappings-save" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/save" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -493,7 +520,7 @@ export def "delete-admin-mappings-stub-mapping-id" [
   if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
   let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -528,7 +555,7 @@ export def "get-admin-mappings-stub-mapping-id" [
   if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
   let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -576,9 +603,9 @@ export def "put-admin-mappings-stub-mapping-id" [
   if ($stub_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'stubMappingId' must be non-empty" } }
   let full_url = (build-url $base ({stub_mapping_id: (encode-path-segment $stub_mapping_id)} | format pattern "/__admin/mappings/{stub_mapping_id}") $auth.query)
   let req_body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -618,9 +645,9 @@ export def "post-admin-near-misses-request" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/near-misses/request" $auth.query)
   let req_body = {"absoluteUrl": $absolute_url, "body": $body, "cookies": $cookies, "headers": $headers, "method": $method, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -664,9 +691,9 @@ export def "post-admin-near-misses-request-pattern" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/near-misses/request-pattern" $auth.query)
   let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -708,9 +735,9 @@ export def "post-admin-recordings-snapshot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/snapshot" $auth.query)
   let req_body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -753,9 +780,9 @@ export def "post-admin-recordings-start" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/start" $auth.query)
   let req_body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters, "targetBaseUrl": $target_base_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -788,7 +815,7 @@ export def "get-admin-recordings-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/status" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -821,7 +848,7 @@ export def "post-admin-recordings-stop" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/stop" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -854,7 +881,7 @@ export def "delete-admin-requests" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -890,7 +917,7 @@ export def "get-admin-requests" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/__admin/requests" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -934,9 +961,9 @@ export def "post-admin-requests-count" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/count" $auth.query)
   let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -980,9 +1007,9 @@ export def "post-admin-requests-find" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/find" $auth.query)
   let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1026,9 +1053,9 @@ export def "post-admin-requests-remove" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/remove" $auth.query)
   let req_body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1075,9 +1102,9 @@ export def "post-admin-requests-remove-by-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/remove-by-metadata" $auth.query)
   let req_body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1112,7 +1139,7 @@ export def "post-admin-requests-reset" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/reset" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1145,7 +1172,7 @@ export def "get-admin-requests-unmatched" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/unmatched" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,7 +1205,7 @@ export def "get-admin-requests-unmatched-near-misses" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/unmatched/near-misses" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1213,7 +1240,7 @@ export def "delete-admin-requests-request-id" [
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/__admin/requests/{request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1248,7 +1275,7 @@ export def "get-admin-requests-request-id" [
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/__admin/requests/{request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1281,7 +1308,7 @@ export def "post-admin-reset" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/reset" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1314,7 +1341,7 @@ export def "get-admin-scenarios" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/scenarios" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1347,7 +1374,7 @@ export def "post-admin-scenarios-reset" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/scenarios/reset" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1382,9 +1409,9 @@ export def "post-admin-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/settings" $auth.query)
   let req_body = {"fixedDelay": $fixed_delay} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1417,7 +1444,7 @@ export def "post-admin-shutdown" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/shutdown" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -61,9 +84,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -86,9 +111,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -168,9 +219,9 @@ def operation-completer-24 [] { ["untag-resource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-phone-number-with-user" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-phone-number-with-user" "associate-phone-numbers-with-voice-connector" "associate-phone-numbers-with-voice-connector-group" "associate-signin-delegate-groups-with-account" "batch-create-attendee" "batch-create-channel-membership" "batch-create-room-membership" "batch-delete-phone-number" "batch-suspend-user" "batch-unsuspend-user" "batch-update-phone-number" "batch-update-user" "list-users" "create-account" "list-accounts" "create-app-instance" "list-app-instances" "create-app-instance-admin" "list-app-instance-admins" "create-app-instance-user" "create-attendee" "list-attendees" "create-bot" "list-bots" "create-channel" "create-channel-ban" "list-channel-bans" "create-channel-membership" "list-channel-memberships" "create-channel-moderator" "list-channel-moderators" "create-media-capture-pipeline" "list-media-capture-pipelines" "create-meeting" "list-meetings" "create-meeting-dial-out" "create-meeting-with-attendees" "create-phone-number-order" "list-phone-number-orders" "create-proxy-session" "list-proxy-sessions" "create-room" "list-rooms" "create-room-membership" "list-room-memberships" "create-sip-media-application" "list-sip-media-applications" "create-sip-media-application-call" "create-sip-rule" "list-sip-rules" "create-user" "create-voice-connector" "list-voice-connectors" "create-voice-connector-group" "list-voice-connector-groups" "delete-account" "get-account" "update-account" "delete-app-instance" "describe-app-instance" "update-app-instance" "delete-app-instance-admin" "describe-app-instance-admin" "delete-app-instance-streaming-configurations" "get-app-instance-streaming-configurations" "put-app-instance-streaming-configurations" "delete-app-instance-user" "describe-app-instance-user" "update-app-instance-user" "delete-attendee" "get-attendee" "delete-channel" "describe-channel" "update-channel" "delete-channel-ban" "describe-channel-ban" "delete-channel-membership" "describe-channel-membership" "delete-channel-message" "get-channel-message" "update-channel-message" "delete-channel-moderator" "describe-channel-moderator" "delete-events-configuration" "get-events-configuration" "put-events-configuration" "delete-media-capture-pipeline" "get-media-capture-pipeline" "delete-meeting" "get-meeting" "delete-phone-number" "get-phone-number" "update-phone-number" "delete-proxy-session" "get-proxy-session" "update-proxy-session" "delete-room" "get-room" "update-room" "delete-room-membership" "update-room-membership" "delete-sip-media-application" "get-sip-media-application" "update-sip-media-application" "delete-sip-rule" "get-sip-rule" "update-sip-rule" "delete-voice-connector" "get-voice-connector" "update-voice-connector" "delete-voice-connector-emergency-calling-configuration" "get-voice-connector-emergency-calling-configuration" "put-voice-connector-emergency-calling-configuration" "delete-voice-connector-group" "get-voice-connector-group" "update-voice-connector-group" "delete-voice-connector-origination" "get-voice-connector-origination" "put-voice-connector-origination" "delete-voice-connector-proxy" "get-voice-connector-proxy" "put-voice-connector-proxy" "delete-voice-connector-streaming-configuration" "get-voice-connector-streaming-configuration" "put-voice-connector-streaming-configuration" "delete-voice-connector-termination" "get-voice-connector-termination" "put-voice-connector-termination" "delete-voice-connector-termination-credentials" "describe-channel-membership-for-app-instance-user" "describe-channel-moderated-by-app-instance-user" "disassociate-phone-number-from-user" "disassociate-phone-numbers-from-voice-connector" "disassociate-phone-numbers-from-voice-connector-group" "disassociate-signin-delegate-groups-from-account" "get-account-settings" "update-account-settings" "get-app-instance-retention-settings" "put-app-instance-retention-settings" "get-bot" "update-bot" "get-global-settings" "update-global-settings" "get-messaging-session-endpoint" "get-phone-number-order" "get-phone-number-settings" "update-phone-number-settings" "get-retention-settings" "put-retention-settings" "get-sip-media-application-logging-configuration" "put-sip-media-application-logging-configuration" "get-user" "update-user" "get-user-settings" "update-user-settings" "get-voice-connector-logging-configuration" "put-voice-connector-logging-configuration" "get-voice-connector-termination-health" "invite-users" "list-app-instance-users" "list-attendee-tags" "list-channel-memberships-for-app-instance-user" "list-channel-messages" "send-channel-message" "list-channels" "list-channels-moderated-by-app-instance-user" "list-meeting-tags" "list-phone-numbers" "list-supported-phone-number-countries" "list-tags-for-resource" "list-voice-connector-termination-credentials" "logout-user" "put-voice-connector-termination-credentials" "redact-channel-message" "redact-conversation-message" "redact-room-message" "regenerate-security-token" "reset-personal-pin" "restore-phone-number" "search-available-phone-numbers" "start-meeting-transcription" "stop-meeting-transcription" "tag-attendee" "tag-meeting" "tag-resource" "untag-attendee" "untag-meeting" "untag-resource" "update-channel-read-marker" "update-sip-media-application-call" "validate-e911-address" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -204,7 +255,7 @@ export def "associate-phone-number-with-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer
+  --operation: string@operation-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -213,20 +264,21 @@ export def "associate-phone-number-with-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   e164_phone_number: string # The phone number, in E.164 format. (format: password)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  let operation = ($operation | default "associate-phone-number")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumber": $e164_phone_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -256,7 +308,7 @@ export def "associate-phone-numbers-with-voice-connector" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-1
+  --operation: string@operation-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -266,19 +318,20 @@ export def "associate-phone-numbers-with-voice-connector" [
   --x-amz-signed-headers: string
   e164_phone_numbers: list<string> # List of phone numbers, in E.164 format.
   --force-associate: oneof<nothing, bool> # If true, associates the provided phone numbers with the provided Amazon Chime Voice Connector and removes any previously existing associations. If false, does not associate any phone numbers that have previously existing associations.
-]: any -> record<PhoneNumberErrors: record> {
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
+  let operation = ($operation | default "associate-phone-numbers")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers, "ForceAssociate": $force_associate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -308,7 +361,7 @@ export def "associate-phone-numbers-with-voice-connector-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-1
+  --operation: string@operation-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -318,19 +371,20 @@ export def "associate-phone-numbers-with-voice-connector-group" [
   --x-amz-signed-headers: string
   e164_phone_numbers: list<string> # List of phone numbers, in E.164 format.
   --force-associate: oneof<nothing, bool> # If true, associates the provided phone numbers with the provided Amazon Chime Voice Connector Group and removes any previously existing associations. If false, does not associate any phone numbers that have previously existing associations.
-]: any -> record<PhoneNumberErrors: record> {
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
+  let operation = ($operation | default "associate-phone-numbers")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers, "ForceAssociate": $force_associate} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -349,7 +403,6 @@ export def "associate-phone-numbers-with-voice-connector-group" [
 #
 # POST /accounts/{accountId}
 # operationId: AssociateSigninDelegateGroupsWithAccount
-# --SigninDelegateGroups item shape: {GroupName?: any}
 export def "associate-signin-delegate-groups-with-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -361,7 +414,7 @@ export def "associate-signin-delegate-groups-with-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-2
+  --operation: string@operation-completer-2 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -369,20 +422,21 @@ export def "associate-signin-delegate-groups-with-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  signin_delegate_groups: list # The sign-in delegate groups. — item shape: {GroupName?: any}
-]: any -> record {
+  signin_delegate_groups: list # The sign-in delegate groups. — item shape: {GroupName?: string}
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "associate-signin-delegate-groups")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let req_body = {"SigninDelegateGroups": $signin_delegate_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -401,7 +455,6 @@ export def "associate-signin-delegate-groups-with-account" [
 #
 # POST /meetings/{meetingId}/attendees
 # operationId: BatchCreateAttendee
-# --Attendees item shape: {ExternalUserId: any, Tags?: any}
 export def "batch-create-attendee" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,7 +466,7 @@ export def "batch-create-attendee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-3
+  --operation: string@operation-completer-3 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -421,20 +474,21 @@ export def "batch-create-attendee" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  attendees: list # The request containing the attendees to create. — item shape: {ExternalUserId: any, Tags?: any}
-]: any -> record<Attendees: record, Errors: record> {
+  attendees: list # The request containing the attendees to create. — item shape: {ExternalUserId: string, Tags?: list}
+]: any -> oneof<record<Attendees: table<ExternalUserId: string, AttendeeId: string, JoinToken: string>, Errors: table<ExternalUserId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  let operation = ($operation | default "batch-create")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp $auth.query)
   let req_body = {"Attendees": $attendees} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -464,7 +518,7 @@ export def "batch-create-channel-membership" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-3
+  --operation: string@operation-completer-3 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -475,19 +529,20 @@ export def "batch-create-channel-membership" [
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
   --type: string@type-completer # The membership type of a user, DEFAULT or HIDDEN. Default members are always returned as part of ListChannelMemberships. Hidden members are only returned if the type filter in ListChannelMemberships equals HIDDEN. Otherwise hidden members are not returned. This is only supported by moderators.
   member_arns: list<string> # The ARNs of the members you want to add to the channel.
-]: any -> record<BatchChannelMemberships: record<InvitedBy: record<Arn: record, Name: record>, Type: record, Members: record, ChannelArn: record>, Errors: record> {
+]: any -> oneof<record<BatchChannelMemberships: record<InvitedBy: record<Arn: string, Name: string>, Type: string, Members: list<record>, ChannelArn: string>, Errors: table<MemberArn: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
+  let operation = ($operation | default "batch-create")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp $auth.query)
   let req_body = {"Type": $type, "MemberArns": $member_arns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -506,7 +561,6 @@ export def "batch-create-channel-membership" [
 #
 # POST /accounts/{accountId}/rooms/{roomId}/memberships
 # operationId: BatchCreateRoomMembership
-# --MembershipItemList item shape: {MemberId?: any, Role?: any}
 export def "batch-create-room-membership" [
   account_id: string
   room_id: string
@@ -519,7 +573,7 @@ export def "batch-create-room-membership" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-3
+  --operation: string@operation-completer-3 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -527,21 +581,22 @@ export def "batch-create-room-membership" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  membership_item_list: list # The list of membership items. — item shape: {MemberId?: any, Role?: any}
-]: any -> record<Errors: record> {
+  membership_item_list: list # The list of membership items. — item shape: {MemberId?: string, Role?: "Administrator"|"Member"}
+]: any -> oneof<record<Errors: table<MemberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
+  let operation = ($operation | default "batch-create")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp $auth.query)
   let req_body = {"MembershipItemList": $membership_item_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -570,7 +625,7 @@ export def "batch-delete-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-4
+  --operation: string@operation-completer-4 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -579,18 +634,19 @@ export def "batch-delete-phone-number" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   phone_number_ids: list<string> # List of phone number IDs.
-]: any -> record<PhoneNumberErrors: record> {
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let operation = ($operation | default "batch-delete")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let req_body = {"PhoneNumberIds": $phone_number_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -620,7 +676,7 @@ export def "batch-suspend-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-5
+  --operation: string@operation-completer-5 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -629,19 +685,20 @@ export def "batch-suspend-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   user_id_list: list<string> # The request containing the user IDs to suspend.
-]: any -> record<UserErrors: record> {
+]: any -> oneof<record<UserErrors: table<UserId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "suspend")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserIdList": $user_id_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -671,7 +728,7 @@ export def "batch-unsuspend-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-6
+  --operation: string@operation-completer-6 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -680,19 +737,20 @@ export def "batch-unsuspend-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   user_id_list: list<string> # The request containing the user IDs to unsuspend.
-]: any -> record<UserErrors: record> {
+]: any -> oneof<record<UserErrors: table<UserId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "unsuspend")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserIdList": $user_id_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -711,7 +769,6 @@ export def "batch-unsuspend-user" [
 #
 # POST /phone-numbers
 # operationId: BatchUpdatePhoneNumber
-# --UpdatePhoneNumberRequestItems item shape: {PhoneNumberId: any, ProductType?: any, CallingName?: any}
 export def "batch-update-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +779,7 @@ export def "batch-update-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-7
+  --operation: string@operation-completer-7 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -730,19 +787,20 @@ export def "batch-update-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  update_phone_number_request_items: list # The request containing the phone number IDs and product types or calling names to update. — item shape: {PhoneNumberId: any, ProductType?: any, CallingName?: any}
-]: any -> record<PhoneNumberErrors: record> {
+  update_phone_number_request_items: list # The request containing the phone number IDs and product types or calling names to update. — item shape: {PhoneNumberId: string, ProductType?: "BusinessCalling"|"VoiceConnector"|"SipMediaApplicationDialIn", CallingName?: string}
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let operation = ($operation | default "batch-update")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let req_body = {"UpdatePhoneNumberRequestItems": $update_phone_number_request_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -761,7 +819,6 @@ export def "batch-update-phone-number" [
 #
 # POST /accounts/{accountId}/users
 # operationId: BatchUpdateUser
-# --UpdateUserRequestItems item shape: {UserId: any, LicenseType?: any, UserType?: any, AlexaForBusinessMetadata?: any}
 export def "batch-update-user" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -780,19 +837,19 @@ export def "batch-update-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  update_user_request_items: list # The request containing the user IDs and details to update. — item shape: {UserId: any, LicenseType?: any, UserType?: any, AlexaForBusinessMetadata?: any}
-]: any -> record<UserErrors: record> {
+  update_user_request_items: list # The request containing the user IDs and details to update. — item shape: {UserId: string, LicenseType?: "Basic"|"Plus"|"Pro"|"ProTrial", UserType?: "PrivateUser"|"SharedDevice", AlexaForBusinessMetadata?: record}
+]: any -> oneof<record<UserErrors: table<UserId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $auth.query)
   let req_body = {"UpdateUserRequestItems": $update_user_request_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -826,8 +883,8 @@ export def "list-users" [
   --user-type: string@user-type-completer # The user type.
   --max-results: int # The maximum number of results to return in a single call. Defaults to 100.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -835,20 +892,20 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Users: record, NextToken: record> {
+]: nothing -> oneof<record<Users: table<UserId: string, AccountId: string, PrimaryEmail: string, PrimaryProvisionedNumber: string, DisplayName: string, LicenseType: string, UserType: string, UserRegistrationStatus: string, UserInvitationStatus: string, RegisteredOn: string, InvitedOn: string, AlexaForBusinessMetadata: record, PersonalPIN: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "user-email" $user_email "scalar") (serialize-qp "user-type" $user_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "user-email" $user_email "scalar") (serialize-qp "user-type" $user_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"user-email": $user_email, "user-type": $user_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"user-email": $user_email, "user-type": $user_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -881,17 +938,17 @@ export def "create-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the Amazon Chime account.
-]: any -> record<Account: record<AwsAccountId: record, AccountId: record, Name: record, AccountType: record, CreatedTimestamp: record, DefaultLicense: record, SupportedLicenses: record, AccountStatus: record, SigninDelegateGroups: record>> {
+]: any -> oneof<record<Account: record<AwsAccountId: string, AccountId: string, Name: string, AccountType: string, CreatedTimestamp: string, DefaultLicense: string, SupportedLicenses: list<string>, AccountStatus: string, SigninDelegateGroups: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let req_body = {"Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -924,8 +981,8 @@ export def "list-accounts" [
   --user-email: string # User email address with which to filter results. (format: password)
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call. Defaults to 100.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -933,19 +990,19 @@ export def "list-accounts" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Accounts: record, NextToken: record> {
+]: nothing -> oneof<record<Accounts: table<AwsAccountId: string, AccountId: string, Name: string, AccountType: string, CreatedTimestamp: string, DefaultLicense: string, SupportedLicenses: list, AccountStatus: string, SigninDelegateGroups: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "user-email" $user_email "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "user-email" $user_email "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "user-email": $user_email, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"name": $name, "user-email": $user_email, "next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -960,7 +1017,6 @@ export def "list-accounts" [
 #
 # POST /app-instances
 # operationId: CreateAppInstance
-# --Tags item shape: {Key: any, Value: any}
 export def "create-app-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -981,18 +1037,18 @@ export def "create-app-instance" [
   name: string # The name of the AppInstance. (format: password)
   --metadata: string # The metadata of the AppInstance. Limited to a 1KB string in UTF-8. (format: password)
   client_request_token: string # The ClientRequestToken of the AppInstance. (format: password)
-  --tags: list # Tags assigned to the AppInstance. — item shape: {Key: any, Value: any}
-]: any -> record<AppInstanceArn: record> {
+  --tags: list # Tags assigned to the AppInstance. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<AppInstanceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app-instances" $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1023,8 +1079,8 @@ export def "list-app-instances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of AppInstances that you want to return.
   --next-token: string # The token passed by previous API requests until you reach the maximum number of AppInstances. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1032,19 +1088,19 @@ export def "list-app-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstances: record, NextToken: record> {
+]: nothing -> oneof<record<AppInstances: table<AppInstanceArn: string, Name: string, Metadata: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/app-instances" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1078,18 +1134,18 @@ export def "create-app-instance-admin" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   app_instance_admin_arn: string # The ARN of the administrator of the current AppInstance.
-]: any -> record<AppInstanceAdmin: record<Arn: record, Name: record>, AppInstanceArn: record> {
+]: any -> oneof<record<AppInstanceAdmin: record<Arn: string, Name: string>, AppInstanceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins") $auth.query)
   let req_body = {"AppInstanceAdminArn": $app_instance_admin_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1121,8 +1177,8 @@ export def "list-app-instance-admins" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of administrators that you want to return.
   --next-token: string # The token returned from previous API requests until the number of administrators is reached. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1130,20 +1186,20 @@ export def "list-app-instance-admins" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceArn: record, AppInstanceAdmins: record, NextToken: record> {
+]: nothing -> oneof<record<AppInstanceArn: string, AppInstanceAdmins: table<Admin: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/admins") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1158,7 +1214,6 @@ export def "list-app-instance-admins" [
 #
 # POST /app-instance-users
 # operationId: CreateAppInstanceUser
-# --Tags item shape: {Key: any, Value: any}
 export def "create-app-instance-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1181,18 +1236,18 @@ export def "create-app-instance-user" [
   name: string # The user's name. (format: password)
   --metadata: string # The request's metadata. Limited to a 1KB string in UTF-8. (format: password)
   client_request_token: string # The token assigned to the user requesting an AppInstance. (format: password)
-  --tags: list # Tags assigned to the AppInstanceUser. — item shape: {Key: any, Value: any}
-]: any -> record<AppInstanceUserArn: record> {
+  --tags: list # Tags assigned to the AppInstanceUser. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<AppInstanceUserArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app-instance-users" $auth.query)
   let req_body = {"AppInstanceArn": $app_instance_arn, "AppInstanceUserId": $app_instance_user_id, "Name": $name, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1211,7 +1266,6 @@ export def "create-app-instance-user" [
 #
 # POST /meetings/{meetingId}/attendees
 # operationId: CreateAttendee
-# --Tags item shape: {Key: any, Value: any}
 export def "create-attendee" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1231,19 +1285,19 @@ export def "create-attendee" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   external_user_id: string # The Amazon Chime SDK external user ID. An idempotency token. Links the attendee to an identity managed by a builder application. (format: password)
-  --tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
-]: any -> record<Attendee: record<ExternalUserId: record, AttendeeId: record, JoinToken: record>> {
+  --tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<Attendee: record<ExternalUserId: string, AttendeeId: string, JoinToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $auth.query)
   let req_body = {"ExternalUserId": $external_user_id, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1275,8 +1329,8 @@ export def "list-attendees" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1284,20 +1338,20 @@ export def "list-attendees" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attendees: record, NextToken: record> {
+]: nothing -> oneof<record<Attendees: table<ExternalUserId: string, AttendeeId: string, JoinToken: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/attendees") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1332,18 +1386,18 @@ export def "create-bot" [
   --x-amz-signed-headers: string
   display_name: string # The bot display name. (format: password)
   --domain: string # The domain of the Amazon Chime Enterprise account.
-]: any -> record<Bot: record<BotId: record, UserId: record, DisplayName: record, BotType: record, Disabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, BotEmail: record, SecurityToken: record>> {
+]: any -> oneof<record<Bot: record<BotId: string, UserId: string, DisplayName: string, BotType: string, Disabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, BotEmail: string, SecurityToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots") $auth.query)
   let req_body = {"DisplayName": $display_name, "Domain": $domain} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1375,8 +1429,8 @@ export def "list-bots" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of results to return in a single call. The default is 10.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1384,20 +1438,20 @@ export def "list-bots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bots: record, NextToken: record> {
+]: nothing -> oneof<record<Bots: table<BotId: string, UserId: string, DisplayName: string, BotType: string, Disabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, BotEmail: string, SecurityToken: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/bots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1412,7 +1466,6 @@ export def "list-bots" [
 #
 # POST /channels
 # operationId: CreateChannel
-# --Tags item shape: {Key: any, Value: any}
 export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1437,18 +1490,18 @@ export def "create-channel" [
   --privacy: string@privacy-completer # The channel's privacy level: PUBLIC or PRIVATE. Private channels aren't discoverable by users outside the channel. Public channels are discoverable by anyone in the AppInstance.
   --metadata: string # The metadata of the creation request. Limited to 1KB and UTF-8. (format: password)
   client_request_token: string # The client token for the request. An Idempotency token. (format: password)
-  --tags: list # The tags for the creation request. — item shape: {Key: any, Value: any}
-]: any -> record<ChannelArn: record> {
+  --tags: list # The tags for the creation request. — item shape: {Key: string, Value: string}
+]: any -> oneof<record<ChannelArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels" $auth.query)
   let req_body = {"AppInstanceArn": $app_instance_arn, "Name": $name, "Mode": $mode, "Privacy": $privacy, "Metadata": $metadata, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1487,18 +1540,18 @@ export def "create-channel-ban" [
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
   member_arn: string # The ARN of the member being banned.
-]: any -> record<ChannelArn: record, Member: record<Arn: record, Name: record>> {
+]: any -> oneof<record<ChannelArn: string, Member: record<Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans") $auth.query)
   let req_body = {"MemberArn": $member_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1530,8 +1583,8 @@ export def "list-channel-bans" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of bans that you want returned.
   --next-token: string # The token passed by previous API calls until all requested bans are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1540,20 +1593,20 @@ export def "list-channel-bans" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record, NextToken: record, ChannelBans: record> {
+]: nothing -> oneof<record<ChannelArn: string, NextToken: string, ChannelBans: table<Member: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/bans") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1589,18 +1642,18 @@ export def "create-channel-membership" [
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
   member_arn: string # The ARN of the member you want to add to the channel.
   type: string@type-completer # The membership type of a user, DEFAULT or HIDDEN. Default members are always returned as part of ListChannelMemberships. Hidden members are only returned if the type filter in ListChannelMemberships equals HIDDEN. Otherwise hidden members are not returned. This is only supported by moderators.
-]: any -> record<ChannelArn: record, Member: record<Arn: record, Name: record>> {
+]: any -> oneof<record<ChannelArn: string, Member: record<Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $auth.query)
   let req_body = {"MemberArn": $member_arn, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1633,8 +1686,8 @@ export def "list-channel-memberships" [
   --type: string@type-completer # The membership type of a user, DEFAULT or HIDDEN. Default members are always returned as part of ListChannelMemberships. Hidden members are only returned if the type filter in ListChannelMemberships equals HIDDEN. Otherwise hidden members are not returned.
   --max-results: int # The maximum number of channel memberships that you want returned.
   --next-token: string # The token passed by previous API calls until all requested channel memberships are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1643,20 +1696,20 @@ export def "list-channel-memberships" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record, ChannelMemberships: record, NextToken: record> {
+]: nothing -> oneof<record<ChannelArn: string, ChannelMemberships: table<Member: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/memberships") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"type": $type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"type": $type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1691,18 +1744,18 @@ export def "create-channel-moderator" [
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
   channel_moderator_arn: string # The ARN of the moderator.
-]: any -> record<ChannelArn: record, ChannelModerator: record<Arn: record, Name: record>> {
+]: any -> oneof<record<ChannelArn: string, ChannelModerator: record<Arn: string, Name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators") $auth.query)
   let req_body = {"ChannelModeratorArn": $channel_moderator_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1734,8 +1787,8 @@ export def "list-channel-moderators" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of moderators that you want returned.
   --next-token: string # The token passed by previous API calls until all requested moderators are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1744,20 +1797,20 @@ export def "list-channel-moderators" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record, NextToken: record, ChannelModerators: record> {
+]: nothing -> oneof<record<ChannelArn: string, NextToken: string, ChannelModerators: table<Moderator: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/moderators") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1772,7 +1825,6 @@ export def "list-channel-moderators" [
 #
 # POST /media-capture-pipelines
 # operationId: CreateMediaCapturePipeline
-# --ChimeSdkMeetingConfiguration shape: {SourceConfiguration?: any, ArtifactsConfiguration?: any}
 export def "create-media-capture-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,18 +1847,18 @@ export def "create-media-capture-pipeline" [
   sink_type: string@sink-type-completer # Destination type to which the media artifacts are saved. You must use an S3 bucket.
   sink_arn: string # The ARN of the sink type. (format: password)
   --client-request-token: string # The unique identifier for the client request. The token makes the API request idempotent. Use a different token for different media pipeline requests. (format: password)
-  --chime-sdk-meeting-configuration: record # The configuration object of the Amazon Chime SDK meeting for a specified media capture pipeline. SourceType must be ChimeSdkMeeting. — shape: {SourceConfiguration?: any, ArtifactsConfiguration?: any}
-]: any -> record<MediaCapturePipeline: record<MediaPipelineId: record, SourceType: record, SourceArn: record, Status: record, SinkType: record, SinkArn: record, CreatedTimestamp: record, UpdatedTimestamp: record, ChimeSdkMeetingConfiguration: record<SourceConfiguration: record, ArtifactsConfiguration: record>>> {
+  --chime-sdk-meeting-configuration: record # The configuration object of the Amazon Chime SDK meeting for a specified media capture pipeline. SourceType must be ChimeSdkMeeting. — shape: {SourceConfiguration?: record, ArtifactsConfiguration?: record}
+]: any -> oneof<record<MediaCapturePipeline: record<MediaPipelineId: string, SourceType: string, SourceArn: string, Status: string, SinkType: string, SinkArn: string, CreatedTimestamp: string, UpdatedTimestamp: string, ChimeSdkMeetingConfiguration: record<SourceConfiguration: record, ArtifactsConfiguration: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/media-capture-pipelines" $auth.query)
   let req_body = {"SourceType": $source_type, "SourceArn": $source_arn, "SinkType": $sink_type, "SinkArn": $sink_arn, "ClientRequestToken": $client_request_token, "ChimeSdkMeetingConfiguration": $chime_sdk_meeting_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1837,8 +1889,8 @@ export def "list-media-capture-pipelines" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token used to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call. Valid Range: 1 - 99.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1846,19 +1898,19 @@ export def "list-media-capture-pipelines" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MediaCapturePipelines: record, NextToken: record> {
+]: nothing -> oneof<record<MediaCapturePipelines: table<MediaPipelineId: string, SourceType: string, SourceArn: string, Status: string, SinkType: string, SinkArn: string, CreatedTimestamp: string, UpdatedTimestamp: string, ChimeSdkMeetingConfiguration: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/media-capture-pipelines" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1873,8 +1925,6 @@ export def "list-media-capture-pipelines" [
 #
 # POST /meetings
 # operationId: CreateMeeting
-# --Tags item shape: {Key: any, Value: any}
-# --NotificationsConfiguration shape: {SnsTopicArn?: any, SqsQueueArn?: any}
 export def "create-meeting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1896,19 +1946,19 @@ export def "create-meeting" [
   --external-meeting-id: string # The external meeting ID. (format: password)
   --meeting-host-id: string # Reserved. (format: password)
   --media-region: string # The Region in which to create the meeting. Default: us-east-1. Available values: af-south-1 , ap-northeast-1 , ap-northeast-2 , ap-south-1 , ap-southeast-1 , ap-southeast-2 , ca-central-1 , eu-central-1 , eu-north-1 , eu-south-1 , eu-west-1 , eu-west-2 , eu-west-3 , sa-east-1 , us-east-1 , us-east-2 , us-west-1 , us-west-2 .
-  --tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
-  --notifications-configuration: record # The resource target configurations for receiving Amazon Chime SDK meeting and attendee event notifications. The Amazon Chime SDK supports resource targets located in the US East (N. Virginia) AWS Region (us-east-1). — shape: {SnsTopicArn?: any, SqsQueueArn?: any}
-]: any -> record<Meeting: record<MeetingId: record, ExternalMeetingId: record, MediaPlacement: record<AudioHostUrl: record, AudioFallbackUrl: record, ScreenDataUrl: record, ScreenSharingUrl: record, ScreenViewingUrl: record, SignalingUrl: record, TurnControlUrl: record, EventIngestionUrl: record>, MediaRegion: record>> {
+  --tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
+  --notifications-configuration: record # The resource target configurations for receiving Amazon Chime SDK meeting and attendee event notifications. The Amazon Chime SDK supports resource targets located in the US East (N. Virginia) AWS Region (us-east-1). — shape: {SnsTopicArn?: string, SqsQueueArn?: string}
+]: any -> oneof<record<Meeting: record<MeetingId: string, ExternalMeetingId: string, MediaPlacement: record<AudioHostUrl: string, AudioFallbackUrl: string, ScreenDataUrl: string, ScreenSharingUrl: string, ScreenViewingUrl: string, SignalingUrl: string, TurnControlUrl: string, EventIngestionUrl: string>, MediaRegion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/meetings" $auth.query)
   let req_body = {"ClientRequestToken": $client_request_token, "ExternalMeetingId": $external_meeting_id, "MeetingHostId": $meeting_host_id, "MediaRegion": $media_region, "Tags": $tags, "NotificationsConfiguration": $notifications_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1939,8 +1989,8 @@ export def "list-meetings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1948,19 +1998,19 @@ export def "list-meetings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Meetings: record, NextToken: record> {
+]: nothing -> oneof<record<Meetings: table<MeetingId: string, ExternalMeetingId: string, MediaPlacement: record, MediaRegion: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/meetings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1996,18 +2046,18 @@ export def "create-meeting-dial-out" [
   from_phone_number: string # Phone number used as the caller ID when the remote party receives a call. (format: password)
   to_phone_number: string # Phone number called when inviting someone to a meeting. (format: password)
   join_token: string # Token used by the Amazon Chime SDK attendee. Call the CreateAttendee (https://docs.aws.amazon.com/chime/latest/APIReference/API_CreateAttendee.html) action to get a join token. (format: password)
-]: any -> record<TransactionId: record> {
+]: any -> oneof<record<TransactionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/dial-outs") $auth.query)
   let req_body = {"FromPhoneNumber": $from_phone_number, "ToPhoneNumber": $to_phone_number, "JoinToken": $join_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2026,9 +2076,6 @@ export def "create-meeting-dial-out" [
 #
 # POST /meetings
 # operationId: CreateMeetingWithAttendees
-# --Tags item shape: {Key: any, Value: any}
-# --NotificationsConfiguration shape: {SnsTopicArn?: any, SqsQueueArn?: any}
-# --Attendees item shape: {ExternalUserId: any, Tags?: any}
 export def "create-meeting-with-attendees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2086,7 @@ export def "create-meeting-with-attendees" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-8
+  --operation: string@operation-completer-8 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2051,21 +2098,22 @@ export def "create-meeting-with-attendees" [
   --external-meeting-id: string # The external meeting ID. (format: password)
   --meeting-host-id: string # Reserved. (format: password)
   --media-region: string # The Region in which to create the meeting. Default: us-east-1 . Available values: af-south-1 , ap-northeast-1 , ap-northeast-2 , ap-south-1 , ap-southeast-1 , ap-southeast-2 , ca-central-1 , eu-central-1 , eu-north-1 , eu-south-1 , eu-west-1 , eu-west-2 , eu-west-3 , sa-east-1 , us-east-1 , us-east-2 , us-west-1 , us-west-2 .
-  --tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
-  --notifications-configuration: record # The resource target configurations for receiving Amazon Chime SDK meeting and attendee event notifications. The Amazon Chime SDK supports resource targets located in the US East (N. Virginia) AWS Region (us-east-1). — shape: {SnsTopicArn?: any, SqsQueueArn?: any}
-  --attendees: list # The request containing the attendees to create. — item shape: {ExternalUserId: any, Tags?: any}
-]: any -> record<Meeting: record<MeetingId: record, ExternalMeetingId: record, MediaPlacement: record<AudioHostUrl: record, AudioFallbackUrl: record, ScreenDataUrl: record, ScreenSharingUrl: record, ScreenViewingUrl: record, SignalingUrl: record, TurnControlUrl: record, EventIngestionUrl: record>, MediaRegion: record>, Attendees: record, Errors: record> {
+  --tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
+  --notifications-configuration: record # The resource target configurations for receiving Amazon Chime SDK meeting and attendee event notifications. The Amazon Chime SDK supports resource targets located in the US East (N. Virginia) AWS Region (us-east-1). — shape: {SnsTopicArn?: string, SqsQueueArn?: string}
+  --attendees: list # The request containing the attendees to create. — item shape: {ExternalUserId: string, Tags?: list}
+]: any -> oneof<record<Meeting: record<MeetingId: string, ExternalMeetingId: string, MediaPlacement: record<AudioHostUrl: string, AudioFallbackUrl: string, ScreenDataUrl: string, ScreenSharingUrl: string, ScreenViewingUrl: string, SignalingUrl: string, TurnControlUrl: string, EventIngestionUrl: string>, MediaRegion: string>, Attendees: table<ExternalUserId: string, AttendeeId: string, JoinToken: string>, Errors: table<ExternalUserId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let operation = ($operation | default "create-attendees")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/meetings" $qp $auth.query)
   let req_body = {"ClientRequestToken": $client_request_token, "ExternalMeetingId": $external_meeting_id, "MeetingHostId": $meeting_host_id, "MediaRegion": $media_region, "Tags": $tags, "NotificationsConfiguration": $notifications_configuration, "Attendees": $attendees} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2103,17 +2151,17 @@ export def "create-phone-number-order" [
   --x-amz-signed-headers: string
   product_type: string@product-type-completer # The phone number product type.
   e164_phone_numbers: list<string> # List of phone numbers, in E.164 format.
-]: any -> record<PhoneNumberOrder: record<PhoneNumberOrderId: record, ProductType: record, Status: record, OrderedPhoneNumbers: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: any -> oneof<record<PhoneNumberOrder: record<PhoneNumberOrderId: string, ProductType: string, Status: string, OrderedPhoneNumbers: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-number-orders" $auth.query)
   let req_body = {"ProductType": $product_type, "E164PhoneNumbers": $e164_phone_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2144,8 +2192,8 @@ export def "list-phone-number-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2153,19 +2201,19 @@ export def "list-phone-number-orders" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumberOrders: record, NextToken: record> {
+]: nothing -> oneof<record<PhoneNumberOrders: table<PhoneNumberOrderId: string, ProductType: string, Status: string, OrderedPhoneNumbers: list, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-number-orders" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2180,7 +2228,6 @@ export def "list-phone-number-orders" [
 #
 # POST /voice-connectors/{voiceConnectorId}/proxy-sessions
 # operationId: CreateProxySession
-# --GeoMatchParams shape: {Country?: any, AreaCode?: any}
 export def "create-proxy-session" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2205,19 +2252,19 @@ export def "create-proxy-session" [
   capabilities: list<string> # The proxy session capabilities.
   --number-selection-behavior: string@number-selection-behavior-completer # The preference for proxy phone number reuse, or stickiness, between the same participants across sessions.
   --geo-match-level: string@geo-match-level-completer # The preference for matching the country or area code of the proxy phone number with that of the first participant.
-  --geo-match-params: record # The country and area code for a proxy phone number in a proxy phone session. — shape: {Country?: any, AreaCode?: any}
-]: any -> record<ProxySession: record<VoiceConnectorId: record, ProxySessionId: record, Name: record, Status: record, ExpiryMinutes: record, Capabilities: record, CreatedTimestamp: record, UpdatedTimestamp: record, EndedTimestamp: record, Participants: record, NumberSelectionBehavior: record, GeoMatchLevel: record, GeoMatchParams: record<Country: record, AreaCode: record>>> {
+  --geo-match-params: record # The country and area code for a proxy phone number in a proxy phone session. — shape: {Country?: string, AreaCode?: string}
+]: any -> oneof<record<ProxySession: record<VoiceConnectorId: string, ProxySessionId: string, Name: string, Status: string, ExpiryMinutes: int, Capabilities: list<string>, CreatedTimestamp: string, UpdatedTimestamp: string, EndedTimestamp: string, Participants: list<record>, NumberSelectionBehavior: string, GeoMatchLevel: string, GeoMatchParams: record<Country: string, AreaCode: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions") $auth.query)
   let req_body = {"ParticipantPhoneNumbers": $participant_phone_numbers, "Name": $name, "ExpiryMinutes": $expiry_minutes, "Capabilities": $capabilities, "NumberSelectionBehavior": $number_selection_behavior, "GeoMatchLevel": $geo_match_level, "GeoMatchParams": $geo_match_params} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2250,8 +2297,8 @@ export def "list-proxy-sessions" [
   --status: string@status-completer # The proxy session status.
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2259,20 +2306,20 @@ export def "list-proxy-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProxySessions: record, NextToken: record> {
+]: nothing -> oneof<record<ProxySessions: table<VoiceConnectorId: string, ProxySessionId: string, Name: string, Status: string, ExpiryMinutes: int, Capabilities: list, CreatedTimestamp: string, UpdatedTimestamp: string, EndedTimestamp: string, Participants: list, NumberSelectionBehavior: string, GeoMatchLevel: string, GeoMatchParams: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"status": $status, "next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"status": $status, "next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2307,18 +2354,18 @@ export def "create-room" [
   --x-amz-signed-headers: string
   name: string # The room name. (format: password)
   --client-request-token: string # The idempotency token for the request. (format: password)
-]: any -> record<Room: record<RoomId: record, Name: record, AccountId: record, CreatedBy: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: any -> oneof<record<Room: record<RoomId: string, Name: string, AccountId: string, CreatedBy: string, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms") $auth.query)
   let req_body = {"Name": $name, "ClientRequestToken": $client_request_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2351,8 +2398,8 @@ export def "list-rooms" [
   --member-id: string # The member ID (user ID or bot ID).
   --max-results: int # The maximum number of results to return in a single call.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2360,20 +2407,20 @@ export def "list-rooms" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rooms: record, NextToken: record> {
+]: nothing -> oneof<record<Rooms: table<RoomId: string, Name: string, AccountId: string, CreatedBy: string, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "member-id" $member_id "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "member-id" $member_id "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/rooms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"member-id": $member_id, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"member-id": $member_id, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2409,7 +2456,7 @@ export def "create-room-membership" [
   --x-amz-signed-headers: string
   member_id: string # The Amazon Chime member ID (user ID or bot ID).
   --role: string@role-completer # The role of the member.
-]: any -> record<RoomMembership: record<RoomId: record, Member: record<MemberId: record, MemberType: record, Email: record, FullName: record, AccountId: record>, Role: record, InvitedBy: record, UpdatedTimestamp: record>> {
+]: any -> oneof<record<RoomMembership: record<RoomId: string, Member: record<MemberId: string, MemberType: string, Email: string, FullName: string, AccountId: string>, Role: string, InvitedBy: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,11 +2464,11 @@ export def "create-room-membership" [
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $auth.query)
   let req_body = {"MemberId": $member_id, "Role": $role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2454,8 +2501,8 @@ export def "list-room-memberships" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of results to return in a single call.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2463,21 +2510,21 @@ export def "list-room-memberships" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RoomMemberships: record, NextToken: record> {
+]: nothing -> oneof<record<RoomMemberships: table<RoomId: string, Member: record, Role: string, InvitedBy: string, UpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2492,7 +2539,6 @@ export def "list-room-memberships" [
 #
 # POST /sip-media-applications
 # operationId: CreateSipMediaApplication
-# --Endpoints item shape: {LambdaArn?: any}
 export def "create-sip-media-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2512,18 +2558,18 @@ export def "create-sip-media-application" [
   --x-amz-signed-headers: string
   aws_region: string # The AWS Region assigned to the SIP media application.
   name: string # The SIP media application name.
-  endpoints: list # List of endpoints (Lambda Amazon Resource Names) specified for the SIP media application. Currently, only one endpoint is supported. — item shape: {LambdaArn?: any}
-]: any -> record<SipMediaApplication: record<SipMediaApplicationId: record, AwsRegion: record, Name: record, Endpoints: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+  endpoints: list # List of endpoints (Lambda Amazon Resource Names) specified for the SIP media application. Currently, only one endpoint is supported. — item shape: {LambdaArn?: string}
+]: any -> oneof<record<SipMediaApplication: record<SipMediaApplicationId: string, AwsRegion: string, Name: string, Endpoints: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sip-media-applications" $auth.query)
   let req_body = {"AwsRegion": $aws_region, "Name": $name, "Endpoints": $endpoints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2554,8 +2600,8 @@ export def "list-sip-media-applications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int # The maximum number of results to return in a single call. Defaults to 100.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2563,19 +2609,19 @@ export def "list-sip-media-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SipMediaApplications: record, NextToken: record> {
+]: nothing -> oneof<record<SipMediaApplications: table<SipMediaApplicationId: string, AwsRegion: string, Name: string, Endpoints: list, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sip-media-applications" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2611,18 +2657,18 @@ export def "create-sip-media-application-call" [
   from_phone_number: string # The phone number that a user calls from. This is a phone number in your Amazon Chime phone number inventory. (format: password)
   to_phone_number: string # The phone number that the service should call. (format: password)
   --sip-headers: record # The SIP headers added to an outbound call leg.
-]: any -> record<SipMediaApplicationCall: record<TransactionId: record>> {
+]: any -> oneof<record<SipMediaApplicationCall: record<TransactionId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls") $auth.query)
   let req_body = {"FromPhoneNumber": $from_phone_number, "ToPhoneNumber": $to_phone_number, "SipHeaders": $sip_headers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2641,7 +2687,6 @@ export def "create-sip-media-application-call" [
 #
 # POST /sip-rules
 # operationId: CreateSipRule
-# --TargetApplications item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
 export def "create-sip-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2663,18 +2708,18 @@ export def "create-sip-rule" [
   trigger_type: string@trigger-type-completer # The type of trigger assigned to the SIP rule in TriggerValue, currently RequestUriHostname or ToPhoneNumber.
   trigger_value: string # If TriggerType is RequestUriHostname, the value can be the outbound host name of an Amazon Chime Voice Connector. If TriggerType is ToPhoneNumber, the value can be a customer-owned phone number in the E164 format. The SipMediaApplication specified in the SipRule is triggered if the request URI in an incoming SIP request matches the RequestUriHostname, or if the To header in the incoming SIP request matches the ToPhoneNumber value.
   --disabled: oneof<nothing, bool> # Enables or disables a rule. You must disable rules before you can delete them.
-  target_applications: list # List of SIP media applications with priority and AWS Region. Only one SIP application per AWS Region can be used. — item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
-]: any -> record<SipRule: record<SipRuleId: record, Name: record, Disabled: record, TriggerType: record, TriggerValue: record, TargetApplications: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+  target_applications: list # List of SIP media applications with priority and AWS Region. Only one SIP application per AWS Region can be used. — item shape: {SipMediaApplicationId?: string, Priority?: int, AwsRegion?: string}
+]: any -> oneof<record<SipRule: record<SipRuleId: string, Name: string, Disabled: bool, TriggerType: string, TriggerValue: string, TargetApplications: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sip-rules" $auth.query)
   let req_body = {"Name": $name, "TriggerType": $trigger_type, "TriggerValue": $trigger_value, "Disabled": $disabled, "TargetApplications": $target_applications} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2706,8 +2751,8 @@ export def "list-sip-rules" [
   --sip-media-application: string # The SIP media application ID.
   --max-results: int # The maximum number of results to return in a single call. Defaults to 100.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2715,19 +2760,19 @@ export def "list-sip-rules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SipRules: record, NextToken: record> {
+]: nothing -> oneof<record<SipRules: table<SipRuleId: string, Name: string, Disabled: bool, TriggerType: string, TriggerValue: string, TargetApplications: list, CreatedTimestamp: string, UpdatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sip-media-application" $sip_media_application "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sip-media-application" $sip_media_application "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sip-rules" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sip-media-application": $sip_media_application, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"sip-media-application": $sip_media_application, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2753,7 +2798,7 @@ export def "create-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-9
+  --operation: string@operation-completer-9 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2764,19 +2809,20 @@ export def "create-user" [
   --username: string # The user name.
   --email: string # The user's email address. (format: password)
   --user-type: string@user-type-completer # The user type.
-]: any -> record<User: record<UserId: record, AccountId: record, PrimaryEmail: record, PrimaryProvisionedNumber: record, DisplayName: record, LicenseType: record, UserType: record, UserRegistrationStatus: record, UserInvitationStatus: record, RegisteredOn: record, InvitedOn: record, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: record, AlexaForBusinessRoomArn: record>, PersonalPIN: record>> {
+]: any -> oneof<record<User: record<UserId: string, AccountId: string, PrimaryEmail: string, PrimaryProvisionedNumber: string, DisplayName: string, LicenseType: string, UserType: string, UserRegistrationStatus: string, UserInvitationStatus: string, RegisteredOn: string, InvitedOn: string, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: bool, AlexaForBusinessRoomArn: string>, PersonalPIN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "create")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"Username": $username, "Email": $email, "UserType": $user_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2815,17 +2861,18 @@ export def "create-voice-connector" [
   name: string # The name of the Amazon Chime Voice Connector.
   --aws-region: string@aws-region-completer # The AWS Region in which the Amazon Chime Voice Connector is created. Default value: us-east-1 .
   --require-encryption: oneof<nothing, bool> # When enabled, requires encryption for the Amazon Chime Voice Connector.
-]: any -> record<VoiceConnector: record<VoiceConnectorId: record, AwsRegion: record, Name: record, OutboundHostName: record, RequireEncryption: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorArn: record>> {
+]: any -> oneof<record<VoiceConnector: record<VoiceConnectorId: string, AwsRegion: string, Name: string, OutboundHostName: string, RequireEncryption: bool, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voice-connectors" $auth.query)
   let req_body = {"Name": $name, "AwsRegion": $aws_region, "RequireEncryption": $require_encryption} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "RequireEncryption") == null) { error make --unspanned { msg: "required body field 'RequireEncryption' missing: pass --require-encryption or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2856,8 +2903,8 @@ export def "list-voice-connectors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2865,19 +2912,19 @@ export def "list-voice-connectors" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VoiceConnectors: record, NextToken: record> {
+]: nothing -> oneof<record<VoiceConnectors: table<VoiceConnectorId: string, AwsRegion: string, Name: string, OutboundHostName: string, RequireEncryption: bool, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/voice-connectors" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2892,7 +2939,6 @@ export def "list-voice-connectors" [
 #
 # POST /voice-connector-groups
 # operationId: CreateVoiceConnectorGroup
-# --VoiceConnectorItems item shape: {VoiceConnectorId: any, Priority: any}
 export def "create-voice-connector-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2911,18 +2957,18 @@ export def "create-voice-connector-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the Amazon Chime Voice Connector group.
-  --voice-connector-items: list # The Amazon Chime Voice Connectors to route inbound calls to. — item shape: {VoiceConnectorId: any, Priority: any}
-]: any -> record<VoiceConnectorGroup: record<VoiceConnectorGroupId: record, Name: record, VoiceConnectorItems: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorGroupArn: record>> {
+  --voice-connector-items: list # The Amazon Chime Voice Connectors to route inbound calls to. — item shape: {VoiceConnectorId: string, Priority: int}
+]: any -> oneof<record<VoiceConnectorGroup: record<VoiceConnectorGroupId: string, Name: string, VoiceConnectorItems: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/voice-connector-groups" $auth.query)
   let req_body = {"Name": $name, "VoiceConnectorItems": $voice_connector_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2953,8 +2999,8 @@ export def "list-voice-connector-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token to use to retrieve the next page of results.
   --max-results: int # The maximum number of results to return in a single call.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2962,19 +3008,19 @@ export def "list-voice-connector-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VoiceConnectorGroups: record, NextToken: record> {
+]: nothing -> oneof<record<VoiceConnectorGroups: table<VoiceConnectorGroupId: string, Name: string, VoiceConnectorItems: list, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorGroupArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/voice-connector-groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"next-token": $next_token, "max-results": $max_results, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3007,15 +3053,15 @@ export def "delete-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3052,15 +3098,15 @@ export def "get-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Account: record<AwsAccountId: record, AccountId: record, Name: record, AccountType: record, CreatedTimestamp: record, DefaultLicense: record, SupportedLicenses: record, AccountStatus: record, SigninDelegateGroups: record>> {
+]: nothing -> oneof<record<Account: record<AwsAccountId: string, AccountId: string, Name: string, AccountType: string, CreatedTimestamp: string, DefaultLicense: string, SupportedLicenses: list<string>, AccountStatus: string, SigninDelegateGroups: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3099,18 +3145,18 @@ export def "update-account" [
   --x-amz-signed-headers: string
   --name: string # The new name for the specified Amazon Chime account.
   --default-license: string@default-license-completer # The default license applied when you add users to an Amazon Chime account.
-]: any -> record<Account: record<AwsAccountId: record, AccountId: record, Name: record, AccountType: record, CreatedTimestamp: record, DefaultLicense: record, SupportedLicenses: record, AccountStatus: record, SigninDelegateGroups: record>> {
+]: any -> oneof<record<Account: record<AwsAccountId: string, AccountId: string, Name: string, AccountType: string, CreatedTimestamp: string, DefaultLicense: string, SupportedLicenses: list<string>, AccountStatus: string, SigninDelegateGroups: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $auth.query)
   let req_body = {"Name": $name, "DefaultLicense": $default_license} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3153,9 +3199,9 @@ export def "delete-app-instance" [
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3192,15 +3238,15 @@ export def "describe-app-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstance: record<AppInstanceArn: record, Name: record, Metadata: record, CreatedTimestamp: record, LastUpdatedTimestamp: record>> {
+]: nothing -> oneof<record<AppInstance: record<AppInstanceArn: string, Name: string, Metadata: string, CreatedTimestamp: string, LastUpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3239,18 +3285,18 @@ export def "update-app-instance" [
   --x-amz-signed-headers: string
   name: string # The name that you want to change. (format: password)
   --metadata: string # The metadata that you want to change. (format: password)
-]: any -> record<AppInstanceArn: record> {
+]: any -> oneof<record<AppInstanceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}") $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3295,9 +3341,9 @@ export def "delete-app-instance-admin" [
   if ($app_instance_admin_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceAdminArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3335,16 +3381,16 @@ export def "describe-app-instance-admin" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceAdmin: record<Admin: record<Arn: record, Name: record>, AppInstanceArn: record, CreatedTimestamp: record>> {
+]: nothing -> oneof<record<AppInstanceAdmin: record<Admin: record<Arn: string, Name: string>, AppInstanceArn: string, CreatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   if ($app_instance_admin_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceAdminArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn), app_instance_admin_arn: (encode-path-segment $app_instance_admin_arn)} | format pattern "/app-instances/{app_instance_arn}/admins/{app_instance_admin_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3387,9 +3433,9 @@ export def "delete-app-instance-streaming-configurations" [
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3426,15 +3472,15 @@ export def "get-app-instance-streaming-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceStreamingConfigurations: record> {
+]: nothing -> oneof<record<AppInstanceStreamingConfigurations: table<AppInstanceDataType: string, ResourceArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3453,7 +3499,6 @@ export def "get-app-instance-streaming-configurations" [
 #
 # PUT /app-instances/{appInstanceArn}/streaming-configurations
 # operationId: PutAppInstanceStreamingConfigurations
-# --AppInstanceStreamingConfigurations item shape: {AppInstanceDataType: any, ResourceArn: any}
 export def "put-app-instance-streaming-configurations" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3472,19 +3517,19 @@ export def "put-app-instance-streaming-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  app_instance_streaming_configurations: list # The streaming configurations set for an AppInstance. — item shape: {AppInstanceDataType: any, ResourceArn: any}
-]: any -> record<AppInstanceStreamingConfigurations: record> {
+  app_instance_streaming_configurations: list # The streaming configurations set for an AppInstance. — item shape: {AppInstanceDataType: "Channel"|"ChannelMessage", ResourceArn: string}
+]: any -> oneof<record<AppInstanceStreamingConfigurations: table<AppInstanceDataType: string, ResourceArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/streaming-configurations") $auth.query)
   let req_body = {"AppInstanceStreamingConfigurations": $app_instance_streaming_configurations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3527,9 +3572,9 @@ export def "delete-app-instance-user" [
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3566,15 +3611,15 @@ export def "describe-app-instance-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceUser: record<AppInstanceUserArn: record, Name: record, CreatedTimestamp: record, Metadata: record, LastUpdatedTimestamp: record>> {
+]: nothing -> oneof<record<AppInstanceUser: record<AppInstanceUserArn: string, Name: string, CreatedTimestamp: string, Metadata: string, LastUpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3613,18 +3658,18 @@ export def "update-app-instance-user" [
   --x-amz-signed-headers: string
   name: string # The name of the AppInstanceUser. (format: password)
   --metadata: string # The metadata of the AppInstanceUser. (format: password)
-]: any -> record<AppInstanceUserArn: record> {
+]: any -> oneof<record<AppInstanceUserArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_user_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceUserArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_user_arn: (encode-path-segment $app_instance_user_arn)} | format pattern "/app-instance-users/{app_instance_user_arn}") $auth.query)
   let req_body = {"Name": $name, "Metadata": $metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3669,9 +3714,9 @@ export def "delete-attendee" [
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3709,16 +3754,16 @@ export def "get-attendee" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Attendee: record<ExternalUserId: record, AttendeeId: record, JoinToken: record>> {
+]: nothing -> oneof<record<Attendee: record<ExternalUserId: string, AttendeeId: string, JoinToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3762,9 +3807,9 @@ export def "delete-channel" [
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3802,15 +3847,15 @@ export def "describe-channel" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<Channel: record<Name: record, ChannelArn: record, Mode: record, Privacy: record, Metadata: record, CreatedBy: record<Arn: record, Name: record>, CreatedTimestamp: record, LastMessageTimestamp: record, LastUpdatedTimestamp: record>> {
+]: nothing -> oneof<record<Channel: record<Name: string, ChannelArn: string, Mode: string, Privacy: string, Metadata: string, CreatedBy: record<Arn: string, Name: string>, CreatedTimestamp: string, LastMessageTimestamp: string, LastUpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3851,18 +3896,18 @@ export def "update-channel" [
   name: string # The name of the channel. (format: password)
   mode: string@mode-completer # The mode of the update request.
   --metadata: string # The metadata for the update request. (format: password)
-]: any -> record<ChannelArn: record> {
+]: any -> oneof<record<ChannelArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $auth.query)
   let req_body = {"Name": $name, "Mode": $mode, "Metadata": $metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3908,9 +3953,9 @@ export def "delete-channel-ban" [
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3949,16 +3994,16 @@ export def "describe-channel-ban" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelBan: record<Member: record<Arn: record, Name: record>, ChannelArn: record, CreatedTimestamp: record, CreatedBy: record<Arn: record, Name: record>>> {
+]: nothing -> oneof<record<ChannelBan: record<Member: record<Arn: string, Name: string>, ChannelArn: string, CreatedTimestamp: string, CreatedBy: record<Arn: string, Name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/bans/{member_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4004,9 +4049,9 @@ export def "delete-channel-membership" [
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4045,16 +4090,16 @@ export def "describe-channel-membership" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelMembership: record<InvitedBy: record<Arn: record, Name: record>, Type: record, Member: record<Arn: record, Name: record>, ChannelArn: record, CreatedTimestamp: record, LastUpdatedTimestamp: record>> {
+]: nothing -> oneof<record<ChannelMembership: record<InvitedBy: record<Arn: string, Name: string>, Type: string, Member: record<Arn: string, Name: string>, ChannelArn: string, CreatedTimestamp: string, LastUpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($member_arn | is-empty) { error make --unspanned { msg: "path parameter 'memberArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), member_arn: (encode-path-segment $member_arn)} | format pattern "/channels/{channel_arn}/memberships/{member_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4100,9 +4145,9 @@ export def "delete-channel-message" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4141,16 +4186,16 @@ export def "get-channel-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelMessage: record<ChannelArn: record, MessageId: record, Content: record, Metadata: record, Type: record, CreatedTimestamp: record, LastEditedTimestamp: record, LastUpdatedTimestamp: record, Sender: record<Arn: record, Name: record>, Redacted: record, Persistence: record>> {
+]: nothing -> oneof<record<ChannelMessage: record<ChannelArn: string, MessageId: string, Content: string, Metadata: string, Type: string, CreatedTimestamp: string, LastEditedTimestamp: string, LastUpdatedTimestamp: string, Sender: record<Arn: string, Name: string>, Redacted: bool, Persistence: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4191,7 +4236,7 @@ export def "update-channel-message" [
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
   --content: string # The content of the message being updated. (format: password)
   --metadata: string # The metadata of the message being updated. (format: password)
-]: any -> record<ChannelArn: record, MessageId: record> {
+]: any -> oneof<record<ChannelArn: string, MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4199,11 +4244,11 @@ export def "update-channel-message" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $auth.query)
   let req_body = {"Content": $content, "Metadata": $metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4249,9 +4294,9 @@ export def "delete-channel-moderator" [
   if ($channel_moderator_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelModeratorArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4290,16 +4335,16 @@ export def "describe-channel-moderator" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelModerator: record<Moderator: record<Arn: record, Name: record>, ChannelArn: record, CreatedTimestamp: record, CreatedBy: record<Arn: record, Name: record>>> {
+]: nothing -> oneof<record<ChannelModerator: record<Moderator: record<Arn: string, Name: string>, ChannelArn: string, CreatedTimestamp: string, CreatedBy: record<Arn: string, Name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($channel_moderator_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelModeratorArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), channel_moderator_arn: (encode-path-segment $channel_moderator_arn)} | format pattern "/channels/{channel_arn}/moderators/{channel_moderator_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4344,9 +4389,9 @@ export def "delete-events-configuration" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4384,16 +4429,16 @@ export def "get-events-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventsConfiguration: record<BotId: record, OutboundEventsHTTPSEndpoint: record, LambdaFunctionArn: record>> {
+]: nothing -> oneof<record<EventsConfiguration: record<BotId: string, OutboundEventsHTTPSEndpoint: string, LambdaFunctionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4433,7 +4478,7 @@ export def "put-events-configuration" [
   --x-amz-signed-headers: string
   --outbound-events-https-endpoint: string # HTTPS endpoint that allows the bot to receive outgoing events. (format: password)
   --lambda-function-arn: string # Lambda function ARN that allows the bot to receive outgoing events. (format: password)
-]: any -> record<EventsConfiguration: record<BotId: record, OutboundEventsHTTPSEndpoint: record, LambdaFunctionArn: record>> {
+]: any -> oneof<record<EventsConfiguration: record<BotId: string, OutboundEventsHTTPSEndpoint: string, LambdaFunctionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4441,11 +4486,11 @@ export def "put-events-configuration" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}/events-configuration") $auth.query)
   let req_body = {"OutboundEventsHTTPSEndpoint": $outbound_events_https_endpoint, "LambdaFunctionArn": $lambda_function_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4488,9 +4533,9 @@ export def "delete-media-capture-pipeline" [
   if ($media_pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaPipelineId' must be non-empty" } }
   let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4527,15 +4572,15 @@ export def "get-media-capture-pipeline" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MediaCapturePipeline: record<MediaPipelineId: record, SourceType: record, SourceArn: record, Status: record, SinkType: record, SinkArn: record, CreatedTimestamp: record, UpdatedTimestamp: record, ChimeSdkMeetingConfiguration: record<SourceConfiguration: record, ArtifactsConfiguration: record>>> {
+]: nothing -> oneof<record<MediaCapturePipeline: record<MediaPipelineId: string, SourceType: string, SourceArn: string, Status: string, SinkType: string, SinkArn: string, CreatedTimestamp: string, UpdatedTimestamp: string, ChimeSdkMeetingConfiguration: record<SourceConfiguration: record, ArtifactsConfiguration: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaPipelineId' must be non-empty" } }
   let full_url = (build-url $base ({media_pipeline_id: (encode-path-segment $media_pipeline_id)} | format pattern "/media-capture-pipelines/{media_pipeline_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4578,9 +4623,9 @@ export def "delete-meeting" [
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4617,15 +4662,15 @@ export def "get-meeting" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Meeting: record<MeetingId: record, ExternalMeetingId: record, MediaPlacement: record<AudioHostUrl: record, AudioFallbackUrl: record, ScreenDataUrl: record, ScreenSharingUrl: record, ScreenViewingUrl: record, SignalingUrl: record, TurnControlUrl: record, EventIngestionUrl: record>, MediaRegion: record>> {
+]: nothing -> oneof<record<Meeting: record<MeetingId: string, ExternalMeetingId: string, MediaPlacement: record<AudioHostUrl: string, AudioFallbackUrl: string, ScreenDataUrl: string, ScreenSharingUrl: string, ScreenViewingUrl: string, SignalingUrl: string, TurnControlUrl: string, EventIngestionUrl: string>, MediaRegion: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4668,9 +4713,9 @@ export def "delete-phone-number" [
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
   let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4707,15 +4752,15 @@ export def "get-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumber: record<PhoneNumberId: record, E164PhoneNumber: record, Country: record, Type: record, ProductType: record, Status: record, Capabilities: record<InboundCall: record, OutboundCall: record, InboundSMS: record, OutboundSMS: record, InboundMMS: record, OutboundMMS: record>, Associations: record, CallingName: record, CallingNameStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, DeletionTimestamp: record>> {
+]: nothing -> oneof<record<PhoneNumber: record<PhoneNumberId: string, E164PhoneNumber: string, Country: string, Type: string, ProductType: string, Status: string, Capabilities: record<InboundCall: bool, OutboundCall: bool, InboundSMS: bool, OutboundSMS: bool, InboundMMS: bool, OutboundMMS: bool>, Associations: list<record>, CallingName: string, CallingNameStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, DeletionTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
   let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4754,18 +4799,18 @@ export def "update-phone-number" [
   --x-amz-signed-headers: string
   --product-type: string@product-type-completer # The product type.
   --calling-name: string # The outbound calling name associated with the phone number. (format: password)
-]: any -> record<PhoneNumber: record<PhoneNumberId: record, E164PhoneNumber: record, Country: record, Type: record, ProductType: record, Status: record, Capabilities: record<InboundCall: record, OutboundCall: record, InboundSMS: record, OutboundSMS: record, InboundMMS: record, OutboundMMS: record>, Associations: record, CallingName: record, CallingNameStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, DeletionTimestamp: record>> {
+]: any -> oneof<record<PhoneNumber: record<PhoneNumberId: string, E164PhoneNumber: string, Country: string, Type: string, ProductType: string, Status: string, Capabilities: record<InboundCall: bool, OutboundCall: bool, InboundSMS: bool, OutboundSMS: bool, InboundMMS: bool, OutboundMMS: bool>, Associations: list<record>, CallingName: string, CallingNameStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, DeletionTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
   let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $auth.query)
   let req_body = {"ProductType": $product_type, "CallingName": $calling_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4810,9 +4855,9 @@ export def "delete-proxy-session" [
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4850,16 +4895,16 @@ export def "get-proxy-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ProxySession: record<VoiceConnectorId: record, ProxySessionId: record, Name: record, Status: record, ExpiryMinutes: record, Capabilities: record, CreatedTimestamp: record, UpdatedTimestamp: record, EndedTimestamp: record, Participants: record, NumberSelectionBehavior: record, GeoMatchLevel: record, GeoMatchParams: record<Country: record, AreaCode: record>>> {
+]: nothing -> oneof<record<ProxySession: record<VoiceConnectorId: string, ProxySessionId: string, Name: string, Status: string, ExpiryMinutes: int, Capabilities: list<string>, CreatedTimestamp: string, UpdatedTimestamp: string, EndedTimestamp: string, Participants: list<record>, NumberSelectionBehavior: string, GeoMatchLevel: string, GeoMatchParams: record<Country: string, AreaCode: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4899,7 +4944,7 @@ export def "update-proxy-session" [
   --x-amz-signed-headers: string
   capabilities: list<string> # The proxy session capabilities.
   --expiry-minutes: int # The number of minutes allowed for the proxy session.
-]: any -> record<ProxySession: record<VoiceConnectorId: record, ProxySessionId: record, Name: record, Status: record, ExpiryMinutes: record, Capabilities: record, CreatedTimestamp: record, UpdatedTimestamp: record, EndedTimestamp: record, Participants: record, NumberSelectionBehavior: record, GeoMatchLevel: record, GeoMatchParams: record<Country: record, AreaCode: record>>> {
+]: any -> oneof<record<ProxySession: record<VoiceConnectorId: string, ProxySessionId: string, Name: string, Status: string, ExpiryMinutes: int, Capabilities: list<string>, CreatedTimestamp: string, UpdatedTimestamp: string, EndedTimestamp: string, Participants: list<record>, NumberSelectionBehavior: string, GeoMatchLevel: string, GeoMatchParams: record<Country: string, AreaCode: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4907,11 +4952,11 @@ export def "update-proxy-session" [
   if ($proxy_session_id | is-empty) { error make --unspanned { msg: "path parameter 'proxySessionId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id), proxy_session_id: (encode-path-segment $proxy_session_id)} | format pattern "/voice-connectors/{voice_connector_id}/proxy-sessions/{proxy_session_id}") $auth.query)
   let req_body = {"Capabilities": $capabilities, "ExpiryMinutes": $expiry_minutes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4956,9 +5001,9 @@ export def "delete-room" [
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4996,16 +5041,16 @@ export def "get-room" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Room: record<RoomId: record, Name: record, AccountId: record, CreatedBy: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: nothing -> oneof<record<Room: record<RoomId: string, Name: string, AccountId: string, CreatedBy: string, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5044,7 +5089,7 @@ export def "update-room" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The room name. (format: password)
-]: any -> record<Room: record<RoomId: record, Name: record, AccountId: record, CreatedBy: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: any -> oneof<record<Room: record<RoomId: string, Name: string, AccountId: string, CreatedBy: string, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5052,11 +5097,11 @@ export def "update-room" [
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}") $auth.query)
   let req_body = {"Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5103,9 +5148,9 @@ export def "delete-room-membership" [
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5145,7 +5190,7 @@ export def "update-room-membership" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --role: string@role-completer # The role of the member.
-]: any -> record<RoomMembership: record<RoomId: record, Member: record<MemberId: record, MemberType: record, Email: record, FullName: record, AccountId: record>, Role: record, InvitedBy: record, UpdatedTimestamp: record>> {
+]: any -> oneof<record<RoomMembership: record<RoomId: string, Member: record<MemberId: string, MemberType: string, Email: string, FullName: string, AccountId: string>, Role: string, InvitedBy: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5154,11 +5199,11 @@ export def "update-room-membership" [
   if ($member_id | is-empty) { error make --unspanned { msg: "path parameter 'memberId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), member_id: (encode-path-segment $member_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/memberships/{member_id}") $auth.query)
   let req_body = {"Role": $role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5201,9 +5246,9 @@ export def "delete-sip-media-application" [
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5240,15 +5285,15 @@ export def "get-sip-media-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SipMediaApplication: record<SipMediaApplicationId: record, AwsRegion: record, Name: record, Endpoints: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: nothing -> oneof<record<SipMediaApplication: record<SipMediaApplicationId: string, AwsRegion: string, Name: string, Endpoints: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5267,7 +5312,6 @@ export def "get-sip-media-application" [
 #
 # PUT /sip-media-applications/{sipMediaApplicationId}
 # operationId: UpdateSipMediaApplication
-# --Endpoints item shape: {LambdaArn?: any}
 export def "update-sip-media-application" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5287,19 +5331,19 @@ export def "update-sip-media-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # The new name for the specified SIP media application.
-  --endpoints: list # The new set of endpoints for the specified SIP media application. — item shape: {LambdaArn?: any}
-]: any -> record<SipMediaApplication: record<SipMediaApplicationId: record, AwsRegion: record, Name: record, Endpoints: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+  --endpoints: list # The new set of endpoints for the specified SIP media application. — item shape: {LambdaArn?: string}
+]: any -> oneof<record<SipMediaApplication: record<SipMediaApplicationId: string, AwsRegion: string, Name: string, Endpoints: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}") $auth.query)
   let req_body = {"Name": $name, "Endpoints": $endpoints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5342,9 +5386,9 @@ export def "delete-sip-rule" [
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
   let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5381,15 +5425,15 @@ export def "get-sip-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SipRule: record<SipRuleId: record, Name: record, Disabled: record, TriggerType: record, TriggerValue: record, TargetApplications: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: nothing -> oneof<record<SipRule: record<SipRuleId: string, Name: string, Disabled: bool, TriggerType: string, TriggerValue: string, TargetApplications: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
   let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5408,7 +5452,6 @@ export def "get-sip-rule" [
 #
 # PUT /sip-rules/{sipRuleId}
 # operationId: UpdateSipRule
-# --TargetApplications item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
 export def "update-sip-rule" [
   sip_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5429,19 +5472,19 @@ export def "update-sip-rule" [
   --x-amz-signed-headers: string
   name: string # The new name for the specified SIP rule.
   --disabled: oneof<nothing, bool> # The new value specified to indicate whether the rule is disabled.
-  --target-applications: list # The new value of the list of target applications. — item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
-]: any -> record<SipRule: record<SipRuleId: record, Name: record, Disabled: record, TriggerType: record, TriggerValue: record, TargetApplications: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+  --target-applications: list # The new value of the list of target applications. — item shape: {SipMediaApplicationId?: string, Priority?: int, AwsRegion?: string}
+]: any -> oneof<record<SipRule: record<SipRuleId: string, Name: string, Disabled: bool, TriggerType: string, TriggerValue: string, TargetApplications: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'sipRuleId' must be non-empty" } }
   let full_url = (build-url $base ({sip_rule_id: (encode-path-segment $sip_rule_id)} | format pattern "/sip-rules/{sip_rule_id}") $auth.query)
   let req_body = {"Name": $name, "Disabled": $disabled, "TargetApplications": $target_applications} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5484,9 +5527,9 @@ export def "delete-voice-connector" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5523,15 +5566,15 @@ export def "get-voice-connector" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VoiceConnector: record<VoiceConnectorId: record, AwsRegion: record, Name: record, OutboundHostName: record, RequireEncryption: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorArn: record>> {
+]: nothing -> oneof<record<VoiceConnector: record<VoiceConnectorId: string, AwsRegion: string, Name: string, OutboundHostName: string, RequireEncryption: bool, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5570,18 +5613,19 @@ export def "update-voice-connector" [
   --x-amz-signed-headers: string
   name: string # The name of the Amazon Chime Voice Connector.
   --require-encryption: oneof<nothing, bool> # When enabled, requires encryption for the Amazon Chime Voice Connector.
-]: any -> record<VoiceConnector: record<VoiceConnectorId: record, AwsRegion: record, Name: record, OutboundHostName: record, RequireEncryption: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorArn: record>> {
+]: any -> oneof<record<VoiceConnector: record<VoiceConnectorId: string, AwsRegion: string, Name: string, OutboundHostName: string, RequireEncryption: bool, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $auth.query)
   let req_body = {"Name": $name, "RequireEncryption": $require_encryption} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "RequireEncryption") == null) { error make --unspanned { msg: "required body field 'RequireEncryption' missing: pass --require-encryption or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5624,9 +5668,9 @@ export def "delete-voice-connector-emergency-calling-configuration" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5663,15 +5707,15 @@ export def "get-voice-connector-emergency-calling-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EmergencyCallingConfiguration: record<DNIS: record>> {
+]: nothing -> oneof<record<EmergencyCallingConfiguration: record<DNIS: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5690,7 +5734,6 @@ export def "get-voice-connector-emergency-calling-configuration" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/emergency-calling-configuration
 # operationId: PutVoiceConnectorEmergencyCallingConfiguration
-# --EmergencyCallingConfiguration shape: {DNIS?: any}
 export def "put-voice-connector-emergency-calling-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5709,19 +5752,19 @@ export def "put-voice-connector-emergency-calling-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  emergency_calling_configuration: record # The emergency calling configuration details associated with an Amazon Chime Voice Connector. — shape: {DNIS?: any}
-]: any -> record<EmergencyCallingConfiguration: record<DNIS: record>> {
+  emergency_calling_configuration: record # The emergency calling configuration details associated with an Amazon Chime Voice Connector. — shape: {DNIS?: list}
+]: any -> oneof<record<EmergencyCallingConfiguration: record<DNIS: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/emergency-calling-configuration") $auth.query)
   let req_body = {"EmergencyCallingConfiguration": $emergency_calling_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5764,9 +5807,9 @@ export def "delete-voice-connector-group" [
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5803,15 +5846,15 @@ export def "get-voice-connector-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VoiceConnectorGroup: record<VoiceConnectorGroupId: record, Name: record, VoiceConnectorItems: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorGroupArn: record>> {
+]: nothing -> oneof<record<VoiceConnectorGroup: record<VoiceConnectorGroupId: string, Name: string, VoiceConnectorItems: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5830,7 +5873,6 @@ export def "get-voice-connector-group" [
 #
 # PUT /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: UpdateVoiceConnectorGroup
-# --VoiceConnectorItems item shape: {VoiceConnectorId: any, Priority: any}
 export def "update-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5850,19 +5892,19 @@ export def "update-voice-connector-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the Amazon Chime Voice Connector group.
-  voice_connector_items: list # The VoiceConnectorItems to associate with the group. — item shape: {VoiceConnectorId: any, Priority: any}
-]: any -> record<VoiceConnectorGroup: record<VoiceConnectorGroupId: record, Name: record, VoiceConnectorItems: record, CreatedTimestamp: record, UpdatedTimestamp: record, VoiceConnectorGroupArn: record>> {
+  voice_connector_items: list # The VoiceConnectorItems to associate with the group. — item shape: {VoiceConnectorId: string, Priority: int}
+]: any -> oneof<record<VoiceConnectorGroup: record<VoiceConnectorGroupId: string, Name: string, VoiceConnectorItems: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string, VoiceConnectorGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $auth.query)
   let req_body = {"Name": $name, "VoiceConnectorItems": $voice_connector_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5905,9 +5947,9 @@ export def "delete-voice-connector-origination" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5944,15 +5986,15 @@ export def "get-voice-connector-origination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Origination: record<Routes: record, Disabled: record>> {
+]: nothing -> oneof<record<Origination: record<Routes: list<record>, Disabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5971,7 +6013,6 @@ export def "get-voice-connector-origination" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/origination
 # operationId: PutVoiceConnectorOrigination
-# --Origination shape: {Routes?: any, Disabled?: any}
 export def "put-voice-connector-origination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5990,19 +6031,19 @@ export def "put-voice-connector-origination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  origination: record # Origination settings enable your SIP hosts to receive inbound calls using your Amazon Chime Voice Connector. The parameters listed below are not required, but you must use at least one. — shape: {Routes?: any, Disabled?: any}
-]: any -> record<Origination: record<Routes: record, Disabled: record>> {
+  origination: record # Origination settings enable your SIP hosts to receive inbound calls using your Amazon Chime Voice Connector. The parameters listed below are not required, but you must use at least one. — shape: {Routes?: list, Disabled?: bool}
+]: any -> oneof<record<Origination: record<Routes: list<record>, Disabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/origination") $auth.query)
   let req_body = {"Origination": $origination} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6045,9 +6086,9 @@ export def "delete-voice-connector-proxy" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6084,15 +6125,15 @@ export def "get-voice-connector-proxy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Proxy: record<DefaultSessionExpiryMinutes: record, Disabled: record, FallBackPhoneNumber: record, PhoneNumberCountries: record>> {
+]: nothing -> oneof<record<Proxy: record<DefaultSessionExpiryMinutes: int, Disabled: bool, FallBackPhoneNumber: string, PhoneNumberCountries: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6133,18 +6174,18 @@ export def "put-voice-connector-proxy" [
   phone_number_pool_countries: list<string> # The countries for proxy phone numbers to be selected from.
   --fall-back-phone-number: string # The phone number to route calls to after a proxy session expires. (format: password)
   --disabled: oneof<nothing, bool> # When true, stops proxy sessions from being created on the specified Amazon Chime Voice Connector.
-]: any -> record<Proxy: record<DefaultSessionExpiryMinutes: record, Disabled: record, FallBackPhoneNumber: record, PhoneNumberCountries: record>> {
+]: any -> oneof<record<Proxy: record<DefaultSessionExpiryMinutes: int, Disabled: bool, FallBackPhoneNumber: string, PhoneNumberCountries: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/programmable-numbers/proxy") $auth.query)
   let req_body = {"DefaultSessionExpiryMinutes": $default_session_expiry_minutes, "PhoneNumberPoolCountries": $phone_number_pool_countries, "FallBackPhoneNumber": $fall_back_phone_number, "Disabled": $disabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6187,9 +6228,9 @@ export def "delete-voice-connector-streaming-configuration" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6226,15 +6267,15 @@ export def "get-voice-connector-streaming-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<StreamingConfiguration: record<DataRetentionInHours: record, Disabled: record, StreamingNotificationTargets: record>> {
+]: nothing -> oneof<record<StreamingConfiguration: record<DataRetentionInHours: int, Disabled: bool, StreamingNotificationTargets: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6253,7 +6294,6 @@ export def "get-voice-connector-streaming-configuration" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/streaming-configuration
 # operationId: PutVoiceConnectorStreamingConfiguration
-# --StreamingConfiguration shape: {DataRetentionInHours?: any, Disabled?: any, StreamingNotificationTargets?: any}
 export def "put-voice-connector-streaming-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6272,19 +6312,19 @@ export def "put-voice-connector-streaming-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  streaming_configuration: record # The streaming configuration associated with an Amazon Chime Voice Connector. Specifies whether media streaming is enabled for sending to Amazon Kinesis, and shows the retention period for the Amazon Kinesis data, in hours. — shape: {DataRetentionInHours?: any, Disabled?: any, StreamingNotificationTargets?: any}
-]: any -> record<StreamingConfiguration: record<DataRetentionInHours: record, Disabled: record, StreamingNotificationTargets: record>> {
+  streaming_configuration: record # The streaming configuration associated with an Amazon Chime Voice Connector. Specifies whether media streaming is enabled for sending to Amazon Kinesis, and shows the retention period for the Amazon Kinesis data, in hours. — shape: {DataRetentionInHours?: int, Disabled?: bool, StreamingNotificationTargets?: list}
+]: any -> oneof<record<StreamingConfiguration: record<DataRetentionInHours: int, Disabled: bool, StreamingNotificationTargets: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/streaming-configuration") $auth.query)
   let req_body = {"StreamingConfiguration": $streaming_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6327,9 +6367,9 @@ export def "delete-voice-connector-termination" [
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6366,15 +6406,15 @@ export def "get-voice-connector-termination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Termination: record<CpsLimit: record, DefaultPhoneNumber: record, CallingRegions: record, CidrAllowedList: record, Disabled: record>> {
+]: nothing -> oneof<record<Termination: record<CpsLimit: int, DefaultPhoneNumber: string, CallingRegions: list<string>, CidrAllowedList: list<string>, Disabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6393,7 +6433,6 @@ export def "get-voice-connector-termination" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/termination
 # operationId: PutVoiceConnectorTermination
-# --Termination shape: {CpsLimit?: any, DefaultPhoneNumber?: any, CallingRegions?: any, CidrAllowedList?: any, Disabled?: any}
 export def "put-voice-connector-termination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6412,19 +6451,19 @@ export def "put-voice-connector-termination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  termination: record # Termination settings enable your SIP hosts to make outbound calls using your Amazon Chime Voice Connector. — shape: {CpsLimit?: any, DefaultPhoneNumber?: any, CallingRegions?: any, CidrAllowedList?: any, Disabled?: any}
-]: any -> record<Termination: record<CpsLimit: record, DefaultPhoneNumber: record, CallingRegions: record, CidrAllowedList: record, Disabled: record>> {
+  termination: record # Termination settings enable your SIP hosts to make outbound calls using your Amazon Chime Voice Connector. — shape: {CpsLimit?: int, DefaultPhoneNumber?: string, CallingRegions?: list<string>, CidrAllowedList?: list<string>, Disabled?: bool}
+]: any -> oneof<record<Termination: record<CpsLimit: int, DefaultPhoneNumber: string, CallingRegions: list<string>, CidrAllowedList: list<string>, Disabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination") $auth.query)
   let req_body = {"Termination": $termination} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6454,7 +6493,7 @@ export def "delete-voice-connector-termination-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-10
+  --operation: string@operation-completer-10 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6468,14 +6507,15 @@ export def "delete-voice-connector-termination-credentials" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
+  let operation = ($operation | default "delete")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp $auth.query)
   let req_body = {"Usernames": $usernames} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6505,8 +6545,8 @@ export def "describe-channel-membership-for-app-instance-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-instance-user-arn: string # The ARN of the user in a channel.
-  --scope: string@scope-completer
+  --app-instance-user-arn: string # The ARN of the user in a channel. (required)
+  --scope: string@scope-completer # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6515,16 +6555,18 @@ export def "describe-channel-membership-for-app-instance-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelMembership: record<ChannelSummary: record<Name: record, ChannelArn: record, Mode: record, Privacy: record, Metadata: record, LastMessageTimestamp: record>, AppInstanceUserMembershipSummary: record<Type: record, ReadMarkerTimestamp: record>>> {
+]: nothing -> oneof<record<ChannelMembership: record<ChannelSummary: record<Name: string, ChannelArn: string, Mode: string, Privacy: string, Metadata: string, LastMessageTimestamp: string>, AppInstanceUserMembershipSummary: record<Type: string, ReadMarkerTimestamp: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
+  if ($app_instance_user_arn == null) { error make --unspanned { msg: "required query parameter 'app-instance-user-arn' missing: pass --app-instance-user-arn" } }
+  let scope = ($scope | default "app-instance-user-membership")
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6554,8 +6596,8 @@ export def "describe-channel-moderated-by-app-instance-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-instance-user-arn: string # The ARN of the AppInstanceUser in the moderated channel.
-  --scope: string@scope-completer-1
+  --app-instance-user-arn: string # The ARN of the AppInstanceUser in the moderated channel. (required)
+  --scope: string@scope-completer-1 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6564,16 +6606,18 @@ export def "describe-channel-moderated-by-app-instance-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<Channel: record<ChannelSummary: record<Name: record, ChannelArn: record, Mode: record, Privacy: record, Metadata: record, LastMessageTimestamp: record>>> {
+]: nothing -> oneof<record<Channel: record<ChannelSummary: record<Name: string, ChannelArn: string, Mode: string, Privacy: string, Metadata: string, LastMessageTimestamp: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
+  if ($app_instance_user_arn == null) { error make --unspanned { msg: "required query parameter 'app-instance-user-arn' missing: pass --app-instance-user-arn" } }
+  let scope = ($scope | default "app-instance-user-moderated-channel")
   let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6604,7 +6648,7 @@ export def "disassociate-phone-number-from-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-11
+  --operation: string@operation-completer-11 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6612,17 +6656,18 @@ export def "disassociate-phone-number-from-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  let operation = ($operation | default "disassociate-phone-number")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6652,7 +6697,7 @@ export def "disassociate-phone-numbers-from-voice-connector" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-12
+  --operation: string@operation-completer-12 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6661,19 +6706,20 @@ export def "disassociate-phone-numbers-from-voice-connector" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   e164_phone_numbers: list<string> # List of phone numbers, in E.164 format.
-]: any -> record<PhoneNumberErrors: record> {
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
+  let operation = ($operation | default "disassociate-phone-numbers")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6703,7 +6749,7 @@ export def "disassociate-phone-numbers-from-voice-connector-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-12
+  --operation: string@operation-completer-12 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6712,19 +6758,20 @@ export def "disassociate-phone-numbers-from-voice-connector-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   e164_phone_numbers: list<string> # List of phone numbers, in E.164 format.
-]: any -> record<PhoneNumberErrors: record> {
+]: any -> oneof<record<PhoneNumberErrors: table<PhoneNumberId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_group_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorGroupId' must be non-empty" } }
+  let operation = ($operation | default "disassociate-phone-numbers")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_group_id: (encode-path-segment $voice_connector_group_id)} | format pattern "/voice-connector-groups/{voice_connector_group_id}") $qp $auth.query)
   let req_body = {"E164PhoneNumbers": $e164_phone_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6754,7 +6801,7 @@ export def "disassociate-signin-delegate-groups-from-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-13
+  --operation: string@operation-completer-13 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -6763,19 +6810,20 @@ export def "disassociate-signin-delegate-groups-from-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   group_names: list<string> # The sign-in delegate group names.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "disassociate-signin-delegate-groups")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let req_body = {"GroupNames": $group_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6812,15 +6860,15 @@ export def "get-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountSettings: record<DisableRemoteControl: record, EnableDialOut: record>> {
+]: nothing -> oneof<record<AccountSettings: record<DisableRemoteControl: bool, EnableDialOut: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6839,7 +6887,6 @@ export def "get-account-settings" [
 #
 # PUT /accounts/{accountId}/settings
 # operationId: UpdateAccountSettings
-# --AccountSettings shape: {DisableRemoteControl?: any, EnableDialOut?: any}
 export def "update-account-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6858,19 +6905,19 @@ export def "update-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  account_settings: record # Settings related to the Amazon Chime account. This includes settings that start or stop remote control of shared screens, or start or stop the dial-out option in the Amazon Chime web application. For more information about these settings, see Use the Policies Page (https://docs.aws.amazon.com/chime/latest/ag/policies.html) in the Amazon Chime Administration Guide. — shape: {DisableRemoteControl?: any, EnableDialOut?: any}
-]: any -> any {
+  account_settings: record # Settings related to the Amazon Chime account. This includes settings that start or stop remote control of shared screens, or start or stop the dial-out option in the Amazon Chime web application. For more information about these settings, see Use the Policies Page (https://docs.aws.amazon.com/chime/latest/ag/policies.html) in the Amazon Chime Administration Guide. — shape: {DisableRemoteControl?: bool, EnableDialOut?: bool}
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/settings") $auth.query)
   let req_body = {"AccountSettings": $account_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6907,15 +6954,15 @@ export def "get-app-instance-retention-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceRetentionSettings: record<ChannelRetentionSettings: record<RetentionDays: record>>, InitiateDeletionTimestamp: record> {
+]: nothing -> oneof<record<AppInstanceRetentionSettings: record<ChannelRetentionSettings: record<RetentionDays: int>>, InitiateDeletionTimestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6934,7 +6981,6 @@ export def "get-app-instance-retention-settings" [
 #
 # PUT /app-instances/{appInstanceArn}/retention-settings
 # operationId: PutAppInstanceRetentionSettings
-# --AppInstanceRetentionSettings shape: {ChannelRetentionSettings?: any}
 export def "put-app-instance-retention-settings" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6953,19 +6999,19 @@ export def "put-app-instance-retention-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  app_instance_retention_settings: record # The details of the data-retention settings for an AppInstance. — shape: {ChannelRetentionSettings?: any}
-]: any -> record<AppInstanceRetentionSettings: record<ChannelRetentionSettings: record<RetentionDays: record>>, InitiateDeletionTimestamp: record> {
+  app_instance_retention_settings: record # The details of the data-retention settings for an AppInstance. — shape: {ChannelRetentionSettings?: record}
+]: any -> oneof<record<AppInstanceRetentionSettings: record<ChannelRetentionSettings: record<RetentionDays: int>>, InitiateDeletionTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_instance_arn | is-empty) { error make --unspanned { msg: "path parameter 'appInstanceArn' must be non-empty" } }
   let full_url = (build-url $base ({app_instance_arn: (encode-path-segment $app_instance_arn)} | format pattern "/app-instances/{app_instance_arn}/retention-settings") $auth.query)
   let req_body = {"AppInstanceRetentionSettings": $app_instance_retention_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7003,16 +7049,16 @@ export def "get-bot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bot: record<BotId: record, UserId: record, DisplayName: record, BotType: record, Disabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, BotEmail: record, SecurityToken: record>> {
+]: nothing -> oneof<record<Bot: record<BotId: string, UserId: string, DisplayName: string, BotType: string, Disabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, BotEmail: string, SecurityToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7051,7 +7097,7 @@ export def "update-bot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --disabled: oneof<nothing, bool> # When true, stops the specified bot from running in your account.
-]: any -> record<Bot: record<BotId: record, UserId: record, DisplayName: record, BotType: record, Disabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, BotEmail: record, SecurityToken: record>> {
+]: any -> oneof<record<Bot: record<BotId: string, UserId: string, DisplayName: string, BotType: string, Disabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, BotEmail: string, SecurityToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7059,11 +7105,11 @@ export def "update-bot" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $auth.query)
   let req_body = {"Disabled": $disabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7099,14 +7145,14 @@ export def "get-global-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BusinessCalling: record<CdrBucket: record>, VoiceConnector: record<CdrBucket: record>> {
+]: nothing -> oneof<record<BusinessCalling: record<CdrBucket: string>, VoiceConnector: record<CdrBucket: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7125,8 +7171,6 @@ export def "get-global-settings" [
 #
 # PUT /settings
 # operationId: UpdateGlobalSettings
-# --BusinessCalling shape: {CdrBucket?: any}
-# --VoiceConnector shape: {CdrBucket?: any}
 export def "update-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7144,19 +7188,19 @@ export def "update-global-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --business-calling: record # The Amazon Chime Business Calling settings for the administrator's AWS account. Includes any Amazon S3 buckets designated for storing call detail records. — shape: {CdrBucket?: any}
-  --voice-connector: record # The Amazon Chime Voice Connector settings. Includes any Amazon S3 buckets designated for storing call detail records. — shape: {CdrBucket?: any}
+  --business-calling: record # The Amazon Chime Business Calling settings for the administrator's AWS account. Includes any Amazon S3 buckets designated for storing call detail records. — shape: {CdrBucket?: string}
+  --voice-connector: record # The Amazon Chime Voice Connector settings. Includes any Amazon S3 buckets designated for storing call detail records. — shape: {CdrBucket?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings" $auth.query)
   let req_body = {"BusinessCalling": $business_calling, "VoiceConnector": $voice_connector} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7192,14 +7236,14 @@ export def "get-messaging-session-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Endpoint: record<Url: record>> {
+]: nothing -> oneof<record<Endpoint: record<Url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/endpoints/messaging-session" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7236,15 +7280,15 @@ export def "get-phone-number-order" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumberOrder: record<PhoneNumberOrderId: record, ProductType: record, Status: record, OrderedPhoneNumbers: record, CreatedTimestamp: record, UpdatedTimestamp: record>> {
+]: nothing -> oneof<record<PhoneNumberOrder: record<PhoneNumberOrderId: string, ProductType: string, Status: string, OrderedPhoneNumbers: list<record>, CreatedTimestamp: string, UpdatedTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberOrderId' must be non-empty" } }
   let full_url = (build-url $base ({phone_number_order_id: (encode-path-segment $phone_number_order_id)} | format pattern "/phone-number-orders/{phone_number_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7280,14 +7324,14 @@ export def "get-phone-number-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CallingName: record, CallingNameUpdatedTimestamp: record> {
+]: nothing -> oneof<record<CallingName: string, CallingNameUpdatedTimestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/phone-number" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7330,11 +7374,11 @@ export def "update-phone-number-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/phone-number" $auth.query)
   let req_body = {"CallingName": $calling_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7371,15 +7415,15 @@ export def "get-retention-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RetentionSettings: record<RoomRetentionSettings: record<RetentionDays: record>, ConversationRetentionSettings: record<RetentionDays: record>>, InitiateDeletionTimestamp: record> {
+]: nothing -> oneof<record<RetentionSettings: record<RoomRetentionSettings: record<RetentionDays: int>, ConversationRetentionSettings: record<RetentionDays: int>>, InitiateDeletionTimestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7398,7 +7442,6 @@ export def "get-retention-settings" [
 #
 # PUT /accounts/{accountId}/retention-settings
 # operationId: PutRetentionSettings
-# --RetentionSettings shape: {RoomRetentionSettings?: any, ConversationRetentionSettings?: any}
 export def "put-retention-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7417,19 +7460,19 @@ export def "put-retention-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  retention_settings: record # The retention settings for an Amazon Chime Enterprise account that determine how long to retain items such as chat-room messages and chat-conversation messages. — shape: {RoomRetentionSettings?: any, ConversationRetentionSettings?: any}
-]: any -> any {
+  retention_settings: record # The retention settings for an Amazon Chime Enterprise account that determine how long to retain items such as chat-room messages and chat-conversation messages. — shape: {RoomRetentionSettings?: record, ConversationRetentionSettings?: record}
+]: any -> oneof<record<RetentionSettings: record<RoomRetentionSettings: record<RetentionDays: int>, ConversationRetentionSettings: record<RetentionDays: int>>, InitiateDeletionTimestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/retention-settings") $auth.query)
   let req_body = {"RetentionSettings": $retention_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7466,15 +7509,15 @@ export def "get-sip-media-application-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SipMediaApplicationLoggingConfiguration: record<EnableSipMediaApplicationMessageLogs: record>> {
+]: nothing -> oneof<record<SipMediaApplicationLoggingConfiguration: record<EnableSipMediaApplicationMessageLogs: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7493,7 +7536,6 @@ export def "get-sip-media-application-logging-configuration" [
 #
 # PUT /sip-media-applications/{sipMediaApplicationId}/logging-configuration
 # operationId: PutSipMediaApplicationLoggingConfiguration
-# --SipMediaApplicationLoggingConfiguration shape: {EnableSipMediaApplicationMessageLogs?: any}
 export def "put-sip-media-application-logging-configuration" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7512,19 +7554,19 @@ export def "put-sip-media-application-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --sip-media-application-logging-configuration: record # Logging configuration of the SIP media application. — shape: {EnableSipMediaApplicationMessageLogs?: any}
-]: any -> record<SipMediaApplicationLoggingConfiguration: record<EnableSipMediaApplicationMessageLogs: record>> {
+  --sip-media-application-logging-configuration: record # Logging configuration of the SIP media application. — shape: {EnableSipMediaApplicationMessageLogs?: bool}
+]: any -> oneof<record<SipMediaApplicationLoggingConfiguration: record<EnableSipMediaApplicationMessageLogs: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sip_media_application_id | is-empty) { error make --unspanned { msg: "path parameter 'sipMediaApplicationId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/logging-configuration") $auth.query)
   let req_body = {"SipMediaApplicationLoggingConfiguration": $sip_media_application_logging_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7562,16 +7604,16 @@ export def "get-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<User: record<UserId: record, AccountId: record, PrimaryEmail: record, PrimaryProvisionedNumber: record, DisplayName: record, LicenseType: record, UserType: record, UserRegistrationStatus: record, UserInvitationStatus: record, RegisteredOn: record, InvitedOn: record, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: record, AlexaForBusinessRoomArn: record>, PersonalPIN: record>> {
+]: nothing -> oneof<record<User: record<UserId: string, AccountId: string, PrimaryEmail: string, PrimaryProvisionedNumber: string, DisplayName: string, LicenseType: string, UserType: string, UserRegistrationStatus: string, UserInvitationStatus: string, RegisteredOn: string, InvitedOn: string, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: bool, AlexaForBusinessRoomArn: string>, PersonalPIN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7590,7 +7632,6 @@ export def "get-user" [
 #
 # POST /accounts/{accountId}/users/{userId}
 # operationId: UpdateUser
-# --AlexaForBusinessMetadata shape: {IsAlexaForBusinessEnabled?: any, AlexaForBusinessRoomArn?: any}
 export def "update-user" [
   account_id: string
   user_id: string
@@ -7612,8 +7653,8 @@ export def "update-user" [
   --x-amz-signed-headers: string
   --license-type: string@license-type-completer # The user license type to update. This must be a supported license type for the Amazon Chime account that the user belongs to.
   --user-type: string@user-type-completer # The user type.
-  --alexa-for-business-metadata: record # The Alexa for Business metadata associated with an Amazon Chime user, used to integrate Alexa for Business with a device. — shape: {IsAlexaForBusinessEnabled?: any, AlexaForBusinessRoomArn?: any}
-]: any -> record<User: record<UserId: record, AccountId: record, PrimaryEmail: record, PrimaryProvisionedNumber: record, DisplayName: record, LicenseType: record, UserType: record, UserRegistrationStatus: record, UserInvitationStatus: record, RegisteredOn: record, InvitedOn: record, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: record, AlexaForBusinessRoomArn: record>, PersonalPIN: record>> {
+  --alexa-for-business-metadata: record # The Alexa for Business metadata associated with an Amazon Chime user, used to integrate Alexa for Business with a device. — shape: {IsAlexaForBusinessEnabled?: bool, AlexaForBusinessRoomArn?: string}
+]: any -> oneof<record<User: record<UserId: string, AccountId: string, PrimaryEmail: string, PrimaryProvisionedNumber: string, DisplayName: string, LicenseType: string, UserType: string, UserRegistrationStatus: string, UserInvitationStatus: string, RegisteredOn: string, InvitedOn: string, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: bool, AlexaForBusinessRoomArn: string>, PersonalPIN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7621,11 +7662,11 @@ export def "update-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $auth.query)
   let req_body = {"LicenseType": $license_type, "UserType": $user_type, "AlexaForBusinessMetadata": $alexa_for_business_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7663,16 +7704,16 @@ export def "get-user-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<UserSettings: record<Telephony: record<InboundCalling: record, OutboundCalling: record, SMS: record>>> {
+]: nothing -> oneof<record<UserSettings: record<Telephony: record<InboundCalling: bool, OutboundCalling: bool, SMS: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7691,7 +7732,6 @@ export def "get-user-settings" [
 #
 # PUT /accounts/{accountId}/users/{userId}/settings
 # operationId: UpdateUserSettings
-# --UserSettings shape: {Telephony?: any}
 export def "update-user-settings" [
   account_id: string
   user_id: string
@@ -7711,7 +7751,7 @@ export def "update-user-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  user_settings: record # Settings associated with an Amazon Chime user, including inbound and outbound calling and text messaging. — shape: {Telephony?: any}
+  user_settings: record # Settings associated with an Amazon Chime user, including inbound and outbound calling and text messaging. — shape: {Telephony?: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7720,11 +7760,11 @@ export def "update-user-settings" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}/settings") $auth.query)
   let req_body = {"UserSettings": $user_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7761,15 +7801,15 @@ export def "get-voice-connector-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LoggingConfiguration: record<EnableSIPLogs: record, EnableMediaMetricLogs: record>> {
+]: nothing -> oneof<record<LoggingConfiguration: record<EnableSIPLogs: bool, EnableMediaMetricLogs: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7788,7 +7828,6 @@ export def "get-voice-connector-logging-configuration" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/logging-configuration
 # operationId: PutVoiceConnectorLoggingConfiguration
-# --LoggingConfiguration shape: {EnableSIPLogs?: any, EnableMediaMetricLogs?: any}
 export def "put-voice-connector-logging-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7807,19 +7846,19 @@ export def "put-voice-connector-logging-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  logging_configuration: record # The logging configuration associated with an Amazon Chime Voice Connector. Specifies whether SIP message logs are enabled for sending to Amazon CloudWatch Logs. — shape: {EnableSIPLogs?: any, EnableMediaMetricLogs?: any}
-]: any -> record<LoggingConfiguration: record<EnableSIPLogs: record, EnableMediaMetricLogs: record>> {
+  logging_configuration: record # The logging configuration associated with an Amazon Chime Voice Connector. Specifies whether SIP message logs are enabled for sending to Amazon CloudWatch Logs. — shape: {EnableSIPLogs?: bool, EnableMediaMetricLogs?: bool}
+]: any -> oneof<record<LoggingConfiguration: record<EnableSIPLogs: bool, EnableMediaMetricLogs: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/logging-configuration") $auth.query)
   let req_body = {"LoggingConfiguration": $logging_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7856,15 +7895,15 @@ export def "get-voice-connector-termination-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TerminationHealth: record<Timestamp: record, Source: record>> {
+]: nothing -> oneof<record<TerminationHealth: record<Timestamp: string, Source: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/health") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7894,7 +7933,7 @@ export def "invite-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-14
+  --operation: string@operation-completer-14 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -7904,19 +7943,20 @@ export def "invite-users" [
   --x-amz-signed-headers: string
   user_email_list: list<string> # The user email addresses to which to send the email invitation.
   --user-type: string@user-type-completer # The user type.
-]: any -> record<Invites: record> {
+]: any -> oneof<record<Invites: table<InviteId: string, Status: string, EmailAddress: string, EmailStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  let operation = ($operation | default "add")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/users") $qp $auth.query)
   let req_body = {"UserEmailList": $user_email_list, "UserType": $user_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7945,11 +7985,11 @@ export def "list-app-instance-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-instance-arn: string # The ARN of the AppInstance.
+  --app-instance-arn: string # The ARN of the AppInstance. (required)
   --max-results: int # The maximum number of requests that you want returned.
   --next-token: string # The token passed by previous API calls until all requested users are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -7957,19 +7997,20 @@ export def "list-app-instance-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AppInstanceArn: record, AppInstanceUsers: record, NextToken: record> {
+]: nothing -> oneof<record<AppInstanceArn: string, AppInstanceUsers: table<AppInstanceUserArn: string, Name: string, Metadata: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  if ($app_instance_arn == null) { error make --unspanned { msg: "required query parameter 'app-instance-arn' missing: pass --app-instance-arn" } }
+  let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/app-instance-users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"app-instance-arn": $app_instance_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"app-instance-arn": $app_instance_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8003,16 +8044,16 @@ export def "list-attendee-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8044,9 +8085,9 @@ export def "list-channel-memberships-for-app-instance-user" [
   --app-instance-user-arn: string # The ARN of the AppInstanceUsers
   --max-results: int # The maximum number of users that you want returned.
   --next-token: string # The token returned from previous API requests until the number of channel memberships is reached. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
-  --scope: string@scope-completer-2
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
+  --scope: string@scope-completer-2 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8055,19 +8096,20 @@ export def "list-channel-memberships-for-app-instance-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelMemberships: record, NextToken: record> {
+]: nothing -> oneof<record<ChannelMemberships: table<ChannelSummary: record, AppInstanceUserMembershipSummary: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
+  let scope = ($scope | default "app-instance-user-memberships")
+  let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact)
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token, "scope": $scope} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8098,8 +8140,8 @@ export def "list-channel-messages" [
   --not-after: string # The final or ending time stamp for your requested messages. (format: date-time)
   --max-results: int # The maximum number of messages that you want returned.
   --next-token: string # The token passed by previous API calls until all requested messages are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8108,20 +8150,20 @@ export def "list-channel-messages" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record, NextToken: record, ChannelMessages: record> {
+]: nothing -> oneof<record<ChannelArn: string, NextToken: string, ChannelMessages: table<MessageId: string, Content: string, Metadata: string, Type: string, CreatedTimestamp: string, LastUpdatedTimestamp: string, LastEditedTimestamp: string, Sender: record, Redacted: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
-  let qp = [(serialize-qp "sort-order" $sort_order "scalar") (serialize-qp "not-before" $not_before "scalar") (serialize-qp "not-after" $not_after "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort-order" $sort_order "scalar") (serialize-qp "not-before" $not_before "scalar") (serialize-qp "not-after" $not_after "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort-order": $sort_order, "not-before": $not_before, "not-after": $not_after, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"sort-order": $sort_order, "not-before": $not_before, "not-after": $not_after, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8160,18 +8202,18 @@ export def "send-channel-message" [
   persistence: string@persistence-completer # Boolean that controls whether the message is persisted on the back end. Required.
   --metadata: string # The optional metadata for each message. (format: password)
   client_request_token: string # The Idempotency token for each client request. (format: password)
-]: any -> record<ChannelArn: record, MessageId: record> {
+]: any -> oneof<record<ChannelArn: string, MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/messages") $auth.query)
   let req_body = {"Content": $content, "Type": $type, "Persistence": $persistence, "Metadata": $metadata, "ClientRequestToken": $client_request_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8200,12 +8242,12 @@ export def "list-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --app-instance-arn: string # The ARN of the AppInstance.
+  --app-instance-arn: string # The ARN of the AppInstance. (required)
   --privacy: string@privacy-completer # The privacy setting. PUBLIC retrieves all the public channels. PRIVATE retrieves private channels. Only an AppInstanceAdmin can retrieve private channels.
   --max-results: int # The maximum number of channels that you want to return.
   --next-token: string # The token passed by previous API calls until all requested channels are returned. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8214,19 +8256,20 @@ export def "list-channels" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<Channels: record, NextToken: record> {
+]: nothing -> oneof<record<Channels: table<Name: string, ChannelArn: string, Mode: string, Privacy: string, Metadata: string, LastMessageTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  if ($app_instance_arn == null) { error make --unspanned { msg: "required query parameter 'app-instance-arn' missing: pass --app-instance-arn" } }
+  let qp = [(serialize-qp "app-instance-arn" $app_instance_arn "scalar") (serialize-qp "privacy" $privacy "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"app-instance-arn": $app_instance_arn, "privacy": $privacy, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"app-instance-arn": $app_instance_arn, "privacy": $privacy, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8254,9 +8297,9 @@ export def "list-channels-moderated-by-app-instance-user" [
   --app-instance-user-arn: string # The ARN of the user in the moderated channel.
   --max-results: int # The maximum number of channels in the request.
   --next-token: string # The token returned from previous API requests until the number of channels moderated by the user is reached. (format: password)
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
-  --scope: string@scope-completer-3
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
+  --scope: string@scope-completer-3 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8265,19 +8308,20 @@ export def "list-channels-moderated-by-app-instance-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<Channels: record, NextToken: record> {
+]: nothing -> oneof<record<Channels: table<ChannelSummary: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
+  let scope = ($scope | default "app-instance-user-moderated-channels")
+  let qp = [(serialize-qp "app-instance-user-arn" $app_instance_user_arn "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "scope": $scope} | compact)
+    query: ({"app-instance-user-arn": $app_instance_user_arn, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token, "scope": $scope} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8310,15 +8354,15 @@ export def "list-meeting-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8353,8 +8397,8 @@ export def "list-phone-numbers" [
   --filter-value: string # The value to use for the filter.
   --max-results: int # The maximum number of results to return in a single call.
   --next-token: string # The token to use to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8362,19 +8406,19 @@ export def "list-phone-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumbers: record, NextToken: record> {
+]: nothing -> oneof<record<PhoneNumbers: table<PhoneNumberId: string, E164PhoneNumber: string, Country: string, Type: string, ProductType: string, Status: string, Capabilities: record, Associations: list, CallingName: string, CallingNameStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, DeletionTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "product-type" $product_type "scalar") (serialize-qp "filter-name" $filter_name "scalar") (serialize-qp "filter-value" $filter_value "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "product-type" $product_type "scalar") (serialize-qp "filter-name" $filter_name "scalar") (serialize-qp "filter-value" $filter_value "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-numbers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"status": $status, "product-type": $product_type, "filter-name": $filter_name, "filter-value": $filter_value, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2} | compact)
+    query: ({"status": $status, "product-type": $product_type, "filter-name": $filter_name, "filter-value": $filter_value, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8399,7 +8443,7 @@ export def "list-supported-phone-number-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --product-type: string@product-type-completer # The phone number product type.
+  --product-type: string@product-type-completer # The phone number product type. (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8407,15 +8451,16 @@ export def "list-supported-phone-number-countries" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumberCountries: record> {
+]: nothing -> oneof<record<PhoneNumberCountries: table<CountryCode: string, SupportedPhoneNumberTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($product_type == null) { error make --unspanned { msg: "required query parameter 'product-type' missing: pass --product-type" } }
   let qp = [(serialize-qp "product-type" $product_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-number-countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8444,7 +8489,7 @@ export def "list-tags-for-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --arn: string # The resource ARN. (format: password)
+  --arn: string # The resource ARN. (required, format: password)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8452,15 +8497,16 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
   let qp = [(serialize-qp "arn" $arn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8497,15 +8543,15 @@ export def "list-voice-connector-termination-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Usernames: record> {
+]: nothing -> oneof<record<Usernames: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8536,7 +8582,7 @@ export def "logout-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-15
+  --operation: string@operation-completer-15 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8544,17 +8590,18 @@ export def "logout-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  let operation = ($operation | default "logout")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8573,7 +8620,6 @@ export def "logout-user" [
 #
 # POST /voice-connectors/{voiceConnectorId}/termination/credentials
 # operationId: PutVoiceConnectorTerminationCredentials
-# --Credentials item shape: {Username?: any, Password?: any}
 export def "put-voice-connector-termination-credentials" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8585,7 +8631,7 @@ export def "put-voice-connector-termination-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-16
+  --operation: string@operation-completer-16 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8593,20 +8639,21 @@ export def "put-voice-connector-termination-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --credentials: list # The termination SIP credentials. — item shape: {Username?: any, Password?: any}
+  --credentials: list # The termination SIP credentials. — item shape: {Username?: string, Password?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_connector_id | is-empty) { error make --unspanned { msg: "path parameter 'voiceConnectorId' must be non-empty" } }
+  let operation = ($operation | default "put")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_connector_id: (encode-path-segment $voice_connector_id)} | format pattern "/voice-connectors/{voice_connector_id}/termination/credentials") $qp $auth.query)
   let req_body = {"Credentials": $credentials} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8637,7 +8684,7 @@ export def "redact-channel-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-17
+  --operation: string@operation-completer-17 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8646,17 +8693,18 @@ export def "redact-channel-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record, MessageId: record> {
+]: nothing -> oneof<record<ChannelArn: string, MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
+  let operation = ($operation | default "redact")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn), message_id: (encode-path-segment $message_id)} | format pattern "/channels/{channel_arn}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8688,7 +8736,7 @@ export def "redact-conversation-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-17
+  --operation: string@operation-completer-17 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8696,18 +8744,19 @@ export def "redact-conversation-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'conversationId' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
+  let operation = ($operation | default "redact")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), conversation_id: (encode-path-segment $conversation_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/conversations/{conversation_id}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8739,7 +8788,7 @@ export def "redact-room-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-17
+  --operation: string@operation-completer-17 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8747,18 +8796,19 @@ export def "redact-room-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'roomId' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
+  let operation = ($operation | default "redact")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), room_id: (encode-path-segment $room_id), message_id: (encode-path-segment $message_id)} | format pattern "/accounts/{account_id}/rooms/{room_id}/messages/{message_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8789,7 +8839,7 @@ export def "regenerate-security-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-18
+  --operation: string@operation-completer-18 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8797,17 +8847,18 @@ export def "regenerate-security-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Bot: record<BotId: record, UserId: record, DisplayName: record, BotType: record, Disabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, BotEmail: record, SecurityToken: record>> {
+]: nothing -> oneof<record<Bot: record<BotId: string, UserId: string, DisplayName: string, BotType: string, Disabled: bool, CreatedTimestamp: string, UpdatedTimestamp: string, BotEmail: string, SecurityToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
+  let operation = ($operation | default "regenerate-security-token")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bot_id: (encode-path-segment $bot_id)} | format pattern "/accounts/{account_id}/bots/{bot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8838,7 +8889,7 @@ export def "reset-personal-pin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-19
+  --operation: string@operation-completer-19 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8846,17 +8897,18 @@ export def "reset-personal-pin" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<User: record<UserId: record, AccountId: record, PrimaryEmail: record, PrimaryProvisionedNumber: record, DisplayName: record, LicenseType: record, UserType: record, UserRegistrationStatus: record, UserInvitationStatus: record, RegisteredOn: record, InvitedOn: record, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: record, AlexaForBusinessRoomArn: record>, PersonalPIN: record>> {
+]: nothing -> oneof<record<User: record<UserId: string, AccountId: string, PrimaryEmail: string, PrimaryProvisionedNumber: string, DisplayName: string, LicenseType: string, UserType: string, UserRegistrationStatus: string, UserInvitationStatus: string, RegisteredOn: string, InvitedOn: string, AlexaForBusinessMetadata: record<IsAlexaForBusinessEnabled: bool, AlexaForBusinessRoomArn: string>, PersonalPIN: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  let operation = ($operation | default "reset-personal-pin")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/accounts/{account_id}/users/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8886,7 +8938,7 @@ export def "restore-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-20
+  --operation: string@operation-completer-20 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8894,16 +8946,17 @@ export def "restore-phone-number" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PhoneNumber: record<PhoneNumberId: record, E164PhoneNumber: record, Country: record, Type: record, ProductType: record, Status: record, Capabilities: record<InboundCall: record, OutboundCall: record, InboundSMS: record, OutboundSMS: record, InboundMMS: record, OutboundMMS: record>, Associations: record, CallingName: record, CallingNameStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, DeletionTimestamp: record>> {
+]: nothing -> oneof<record<PhoneNumber: record<PhoneNumberId: string, E164PhoneNumber: string, Country: string, Type: string, ProductType: string, Status: string, Capabilities: record<InboundCall: bool, OutboundCall: bool, InboundSMS: bool, OutboundSMS: bool, InboundMMS: bool, OutboundMMS: bool>, Associations: list<record>, CallingName: string, CallingNameStatus: string, CreatedTimestamp: string, UpdatedTimestamp: string, DeletionTimestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumberId' must be non-empty" } }
+  let operation = ($operation | default "restore")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({phone_number_id: (encode-path-segment $phone_number_id)} | format pattern "/phone-numbers/{phone_number_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8940,9 +8993,9 @@ export def "search-available-phone-numbers" [
   --phone-number-type: string@phone-number-type-completer # The phone number type used to filter results. Required for non-US numbers.
   --max-results: int # The maximum number of results to return in a single call.
   --next-token: string # The token used to retrieve the next page of results.
-  --max-results-2: string # Pagination limit (disambiguated-2)
-  --next-token-2: string # Pagination token (disambiguated-2)
-  --type: string@type-completer-2
+  --qp-max-results: string # Pagination limit (spec name: MaxResults)
+  --qp-next-token: string # Pagination token (spec name: NextToken)
+  --type: string@type-completer-2 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8950,19 +9003,20 @@ export def "search-available-phone-numbers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<E164PhoneNumbers: record, NextToken: record> {
+]: nothing -> oneof<record<E164PhoneNumbers: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "area-code" $area_code "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "toll-free-prefix" $toll_free_prefix "scalar") (serialize-qp "phone-number-type" $phone_number_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let type = ($type | default "phone-numbers")
+  let qp = [(serialize-qp "area-code" $area_code "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "toll-free-prefix" $toll_free_prefix "scalar") (serialize-qp "phone-number-type" $phone_number_type "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "MaxResults" $qp_max_results "scalar") (serialize-qp "NextToken" $qp_next_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"area-code": $area_code, "city": $city, "country": $country, "state": $state, "toll-free-prefix": $toll_free_prefix, "phone-number-type": $phone_number_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $max_results_2, "NextToken": $next_token_2, "type": $type} | compact)
+    query: ({"area-code": $area_code, "city": $city, "country": $country, "state": $state, "toll-free-prefix": $toll_free_prefix, "phone-number-type": $phone_number_type, "max-results": $max_results, "next-token": $next_token, "MaxResults": $qp_max_results, "NextToken": $qp_next_token, "type": $type} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -8977,7 +9031,6 @@ export def "search-available-phone-numbers" [
 #
 # POST /meetings/{meetingId}/transcription
 # operationId: StartMeetingTranscription
-# --TranscriptionConfiguration shape: {EngineTranscribeSettings?: any, EngineTranscribeMedicalSettings?: any}
 export def "start-meeting-transcription" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8989,7 +9042,7 @@ export def "start-meeting-transcription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-21
+  --operation: string@operation-completer-21 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -8997,20 +9050,21 @@ export def "start-meeting-transcription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  transcription_configuration: record # The configuration for the current transcription operation. Must contain EngineTranscribeSettings or EngineTranscribeMedicalSettings. — shape: {EngineTranscribeSettings?: any, EngineTranscribeMedicalSettings?: any}
-]: any -> record {
+  transcription_configuration: record # The configuration for the current transcription operation. Must contain EngineTranscribeSettings or EngineTranscribeMedicalSettings. — shape: {EngineTranscribeSettings?: record, EngineTranscribeMedicalSettings?: record}
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  let operation = ($operation | default "start")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp $auth.query)
   let req_body = {"TranscriptionConfiguration": $transcription_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9040,7 +9094,7 @@ export def "stop-meeting-transcription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-22
+  --operation: string@operation-completer-22 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9048,16 +9102,17 @@ export def "stop-meeting-transcription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  let operation = ($operation | default "stop")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/transcription") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9076,7 +9131,6 @@ export def "stop-meeting-transcription" [
 #
 # POST /meetings/{meetingId}/attendees/{attendeeId}/tags
 # operationId: TagAttendee
-# --Tags item shape: {Key: any, Value: any}
 export def "tag-attendee" [
   meeting_id: string
   attendee_id: string
@@ -9089,7 +9143,7 @@ export def "tag-attendee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-14
+  --operation: string@operation-completer-14 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9097,21 +9151,22 @@ export def "tag-attendee" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
+  tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
+  let operation = ($operation | default "add")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp $auth.query)
   let req_body = {"Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9130,7 +9185,6 @@ export def "tag-attendee" [
 #
 # POST /meetings/{meetingId}/tags
 # operationId: TagMeeting
-# --Tags item shape: {Key: any, Value: any}
 export def "tag-meeting" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9142,7 +9196,7 @@ export def "tag-meeting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-14
+  --operation: string@operation-completer-14 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9150,20 +9204,21 @@ export def "tag-meeting" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
+  tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  let operation = ($operation | default "add")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp $auth.query)
   let req_body = {"Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9182,7 +9237,6 @@ export def "tag-meeting" [
 #
 # POST /tags
 # operationId: TagResource
-# --Tags item shape: {Key: any, Value: any}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9193,7 +9247,7 @@ export def "tag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-23
+  --operation: string@operation-completer-23 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9202,19 +9256,20 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The resource ARN. (format: password)
-  tags: list # The tag key-value pairs. — item shape: {Key: any, Value: any}
+  tags: list # The tag key-value pairs. — item shape: {Key: string, Value: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let operation = ($operation | default "tag-resource")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9245,7 +9300,7 @@ export def "untag-attendee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-10
+  --operation: string@operation-completer-10 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9260,14 +9315,15 @@ export def "untag-attendee" [
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
   if ($attendee_id | is-empty) { error make --unspanned { msg: "path parameter 'attendeeId' must be non-empty" } }
+  let operation = ($operation | default "delete")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id), attendee_id: (encode-path-segment $attendee_id)} | format pattern "/meetings/{meeting_id}/attendees/{attendee_id}/tags") $qp $auth.query)
   let req_body = {"TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9297,7 +9353,7 @@ export def "untag-meeting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-10
+  --operation: string@operation-completer-10 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9311,14 +9367,15 @@ export def "untag-meeting" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($meeting_id | is-empty) { error make --unspanned { msg: "path parameter 'meetingId' must be non-empty" } }
+  let operation = ($operation | default "delete")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({meeting_id: (encode-path-segment $meeting_id)} | format pattern "/meetings/{meeting_id}/tags") $qp $auth.query)
   let req_body = {"TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9347,7 +9404,7 @@ export def "untag-resource" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --operation: string@operation-completer-24
+  --operation: string@operation-completer-24 # required
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -9361,14 +9418,15 @@ export def "untag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let operation = ($operation | default "untag-resource")
   let qp = [(serialize-qp "operation" $operation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let req_body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9406,15 +9464,15 @@ export def "update-channel-read-marker" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-chime-bearer: string # The AppInstanceUserArn of the user that makes the API call.
-]: nothing -> record<ChannelArn: record> {
+]: nothing -> oneof<record<ChannelArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_arn | is-empty) { error make --unspanned { msg: "path parameter 'channelArn' must be non-empty" } }
   let full_url = (build-url $base ({channel_arn: (encode-path-segment $channel_arn)} | format pattern "/channels/{channel_arn}/readMarker") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-chime-bearer": $x_amz_chime_bearer} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9453,7 +9511,7 @@ export def "update-sip-media-application-call" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arguments: record # Arguments made available to the Lambda function as part of the CALL_UPDATE_REQUESTED event. Can contain 0-20 key-value pairs.
-]: any -> record<SipMediaApplicationCall: record<TransactionId: record>> {
+]: any -> oneof<record<SipMediaApplicationCall: record<TransactionId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9461,11 +9519,11 @@ export def "update-sip-media-application-call" [
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
   let full_url = (build-url $base ({sip_media_application_id: (encode-path-segment $sip_media_application_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/sip-media-applications/{sip_media_application_id}/calls/{transaction_id}") $auth.query)
   let req_body = {"Arguments": $arguments} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9508,17 +9566,17 @@ export def "validate-e911-address" [
   state: string # The address state, such as ME. (format: password)
   country: string # The address country, such as US. (format: password)
   postal_code: string # The address postal code, such as 04352. (format: password)
-]: any -> record<ValidationResult: record, AddressExternalId: record, Address: record<streetName: record, streetSuffix: record, postDirectional: record, preDirectional: record, streetNumber: record, city: record, state: record, postalCode: record, postalCodePlus4: record, country: record>, CandidateAddressList: record> {
+]: any -> oneof<record<ValidationResult: int, AddressExternalId: string, Address: record<streetName: string, streetSuffix: string, postDirectional: string, preDirectional: string, streetNumber: string, city: string, state: string, postalCode: string, postalCodePlus4: string, country: string>, CandidateAddressList: table<streetInfo: string, streetNumber: string, city: string, state: string, postalCode: string, postalCodePlus4: string, country: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/emergency-calling/address" $auth.query)
   let req_body = {"AwsAccountId": $aws_account_id, "StreetNumber": $street_number, "StreetInfo": $street_info, "City": $city, "State": $state, "Country": $country, "PostalCode": $postal_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

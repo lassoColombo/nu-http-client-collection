@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -177,13 +204,13 @@ export def "airtravel-coordinates" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_latitude": $destination_airport_latitude, "destination_airport_longitude": $destination_airport_longitude, "number_of_passengers": $number_of_passengers, "origin_airport_latitude": $origin_airport_latitude, "origin_airport_longitude": $origin_airport_longitude, "travel_class": $travel_class, "travel_mode": $travel_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -223,9 +250,9 @@ export def "confirm-carbon-offset4" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmCarbonOffset" $auth.query)
   let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -266,9 +293,9 @@ export def "confirm-payment4" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPayment" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -308,9 +335,9 @@ export def "confirms-planting4" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPlanting" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -348,9 +375,9 @@ export def "confirm-payment-of-transaction4" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmTransaction" $auth.query)
   let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -397,9 +424,9 @@ export def "airtravel-multileg" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "leg1": $leg1, "leg2": $leg2, "leg3": $leg3, "legs_count": $legs_count, "number_of_passengers": $number_of_passengers, "travel_mode": $travel_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -439,9 +466,9 @@ export def "confirm-carbon-offset3" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmCarbonOffset" $auth.query)
   let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -482,9 +509,9 @@ export def "confirm-payment3" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPayment" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -524,9 +551,9 @@ export def "confirms-planting3" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPlanting" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -564,9 +591,9 @@ export def "confirm-payment-of-transaction3" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmTransaction" $auth.query)
   let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -613,13 +640,13 @@ export def "ecommerce-delivery" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_code": $destination_airport_code, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "origin_airport_code": $origin_airport_code, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "volumetric_weight": $volumetric_weight, "waybill_type": $waybill_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -659,9 +686,9 @@ export def "confirm-carbon-offset1" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmCarbonOffset" $auth.query)
   let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -702,9 +729,9 @@ export def "confirm-payment1" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPayment" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -744,9 +771,9 @@ export def "confirms-planting2" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPlanting" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -784,9 +811,9 @@ export def "confirm-payment-of-transaction1" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmTransaction" $auth.query)
   let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -828,9 +855,9 @@ export def "request-api-key" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/requestApiKey" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "email": $email, "password": $password, "userFirstName": $user_first_name, "userLastName": $user_last_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -874,9 +901,9 @@ export def "road-distance" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "travel_distance": $travel_distance, "trip_end": $trip_end, "trip_start": $trip_start, "vehicle_make": $vehicle_make, "vehicle_type": $vehicle_type, "vehicle_year": $vehicle_year} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -917,9 +944,9 @@ export def "confirm-carbon-offset5" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmCarbonOffset" $auth.query)
   let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -960,9 +987,9 @@ export def "confirm-payment5" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPayment" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1002,9 +1029,9 @@ export def "confirms-planting5" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPlanting" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1042,9 +1069,9 @@ export def "confirm-payment-of-transaction5" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmTransaction" $auth.query)
   let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1088,9 +1115,9 @@ export def "urban-delivery" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "item_count": $item_count, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "vehicle_type": $vehicle_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1131,9 +1158,9 @@ export def "confirm-carbon-offset" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmCarbonOffset" $auth.query)
   let req_body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1174,9 +1201,9 @@ export def "confirm-payment" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPayment" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1216,9 +1243,9 @@ export def "confirms-planting" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPlanting" $auth.query)
   let req_body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"
@@ -1256,9 +1283,9 @@ export def "confirm-payment-of-transaction" [
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmTransaction" $auth.query)
   let req_body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "patch"

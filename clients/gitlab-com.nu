@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -236,7 +263,7 @@ export def "get-v3-application-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/application/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -335,10 +362,10 @@ export def "put-v3-application-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/application/settings" $auth.query)
   let req_body = {"default_branch_protection": $default_branch_protection, "default_project_visibility": $default_project_visibility, "default_snippet_visibility": $default_snippet_visibility, "default_group_visibility": $default_group_visibility, "restricted_visibility_levels": (if ($restricted_visibility_levels | describe | str starts-with "list") { $restricted_visibility_levels | compact | each { into string } | str join "," } else { $restricted_visibility_levels }), "import_sources": (if ($import_sources | describe | str starts-with "list") { $import_sources | compact | each { into string } | str join "," } else { $import_sources }), "disabled_oauth_sign_in_sources": (if ($disabled_oauth_sign_in_sources | describe | str starts-with "list") { $disabled_oauth_sign_in_sources | compact | each { into string } | str join "," } else { $disabled_oauth_sign_in_sources }), "enabled_git_access_protocol": $enabled_git_access_protocol, "gravatar_enabled": $gravatar_enabled, "default_projects_limit": $default_projects_limit, "max_attachment_size": $max_attachment_size, "session_expire_delay": $session_expire_delay, "user_oauth_applications": $user_oauth_applications, "user_default_external": $user_default_external, "signup_enabled": $signup_enabled, "send_user_confirmation_email": $send_user_confirmation_email, "domain_whitelist": $domain_whitelist, "domain_blacklist_enabled": $domain_blacklist_enabled, "domain_blacklist": $domain_blacklist, "after_sign_up_text": $after_sign_up_text, "signin_enabled": $signin_enabled, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "home_page_url": $home_page_url, "after_sign_out_path": $after_sign_out_path, "sign_in_text": $sign_in_text, "help_page_text": $help_page_text, "shared_runners_enabled": $shared_runners_enabled, "shared_runners_text": $shared_runners_text, "max_artifacts_size": $max_artifacts_size, "container_registry_token_expire_delay": $container_registry_token_expire_delay, "metrics_enabled": $metrics_enabled, "metrics_host": $metrics_host, "metrics_port": $metrics_port, "metrics_pool_size": $metrics_pool_size, "metrics_timeout": $metrics_timeout, "metrics_method_call_threshold": $metrics_method_call_threshold, "metrics_sample_interval": $metrics_sample_interval, "metrics_packet_size": $metrics_packet_size, "sidekiq_throttling_enabled": $sidekiq_throttling_enabled, "sidekiq_throttling_queus": (if ($sidekiq_throttling_queus | describe | str starts-with "list") { $sidekiq_throttling_queus | compact | each { into string } | str join "," } else { $sidekiq_throttling_queus }), "sidekiq_throttling_factor": $sidekiq_throttling_factor, "recaptcha_enabled": $recaptcha_enabled, "recaptcha_site_key": $recaptcha_site_key, "recaptcha_private_key": $recaptcha_private_key, "akismet_enabled": $akismet_enabled, "akismet_api_key": $akismet_api_key, "admin_notification_email": $admin_notification_email, "sentry_enabled": $sentry_enabled, "sentry_dsn": $sentry_dsn, "repository_storage": $repository_storage, "repository_checks_enabled": $repository_checks_enabled, "koding_enabled": $koding_enabled, "koding_url": $koding_url, "plantuml_enabled": $plantuml_enabled, "plantuml_url": $plantuml_url, "version_check_enabled": $version_check_enabled, "email_author_in_body": $email_author_in_body, "html_emails_enabled": $html_emails_enabled, "housekeeping_enabled": $housekeeping_enabled, "housekeeping_bitmaps_enabled": $housekeeping_bitmaps_enabled, "housekeeping_incremental_repack_period": $housekeeping_incremental_repack_period, "housekeeping_full_repack_period": $housekeeping_full_repack_period, "housekeeping_gc_period": $housekeeping_gc_period} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "housekeeping_bitmaps_enabled") == null) { error make --unspanned { msg: "required body field 'housekeeping_bitmaps_enabled' missing: pass --housekeeping-bitmaps-enabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -375,9 +402,9 @@ export def "post-v3-ci-lint" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/ci/lint" $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -411,7 +438,7 @@ export def "get-v3-deploy-keys" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/deploy_keys" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -445,7 +472,7 @@ export def "get-v3-dockerfiles" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/dockerfiles" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -481,7 +508,7 @@ export def "get-v3-dockerfiles-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/dockerfiles/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -515,7 +542,7 @@ export def "get-v3-gitignores" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/gitignores" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -551,7 +578,7 @@ export def "get-v3-gitignores-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/gitignores/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -585,7 +612,7 @@ export def "get-v3-gitlab-ci-ymls" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/gitlab_ci_ymls" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -621,7 +648,7 @@ export def "get-v3-gitlab-ci-ymls-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/gitlab_ci_ymls/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "get-v3-groups" [
   let qp = [(serialize-qp "statistics" $statistics "scalar") (serialize-qp "all_available" $all_available "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -704,9 +731,9 @@ export def "post-v3-groups" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/groups" $auth.query)
   let req_body = {"name": $name, "path": $path, "description": $description, "visibility_level": $visibility_level, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -745,7 +772,7 @@ export def "get-v3-groups-owned" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/groups/owned" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -781,7 +808,7 @@ export def "delete-v3-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -817,7 +844,7 @@ export def "get-v3-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -860,9 +887,9 @@ export def "put-v3-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}") $auth.query)
   let req_body = {"name": $name, "path": $path, "description": $description, "visibility_level": $visibility_level, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -902,7 +929,7 @@ export def "get-v3-groups-id-access-requests" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/access_requests") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -938,7 +965,7 @@ export def "post-v3-groups-id-access-requests" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/access_requests") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -976,7 +1003,7 @@ export def "delete-v3-groups-id-access-requests-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/groups/{id}/access_requests/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1016,9 +1043,9 @@ export def "put-v3-groups-id-access-requests-user-id-approve" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/groups/{id}/access_requests/{user_id}/approve") $auth.query)
   let req_body = {"access_level": $access_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -1063,7 +1090,7 @@ export def "get-v3-groups-id-issues" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/issues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1103,7 +1130,7 @@ export def "get-v3-groups-id-members" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1143,9 +1170,9 @@ export def "post-v3-groups-id-members" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/members") $auth.query)
   let req_body = {"user_id": $user_id, "access_level": $access_level, "expires_at": $expires_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1184,7 +1211,7 @@ export def "delete-v3-groups-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/groups/{id}/members/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1222,7 +1249,7 @@ export def "get-v3-groups-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/groups/{id}/members/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1263,9 +1290,9 @@ export def "put-v3-groups-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/groups/{id}/members/{user_id}") $auth.query)
   let req_body = {"access_level": $access_level, "expires_at": $expires_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -1302,7 +1329,7 @@ export def "get-v3-groups-id-notification-settings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/notification_settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1352,9 +1379,9 @@ export def "put-v3-groups-id-notification-settings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/notification_settings") $auth.query)
   let req_body = {"level": $level, "new_note": $new_note, "new_issue": $new_issue, "reopen_issue": $reopen_issue, "close_issue": $close_issue, "reassign_issue": $reassign_issue, "new_merge_request": $new_merge_request, "reopen_merge_request": $reopen_merge_request, "close_merge_request": $close_merge_request, "reassign_merge_request": $reassign_merge_request, "merge_merge_request": $merge_merge_request, "failed_pipeline": $failed_pipeline, "success_pipeline": $success_pipeline} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -1400,7 +1427,7 @@ export def "get-v3-groups-id-projects" [
   let qp = [(serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/groups/{id}/projects") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1438,7 +1465,7 @@ export def "post-v3-groups-id-projects-project-id" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), project_id: (encode-path-segment $project_id)} | format pattern "/v3/groups/{id}/projects/{project_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1472,7 +1499,7 @@ export def "get-v3-hooks" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/hooks" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1502,7 +1529,7 @@ export def "post-v3-hooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string # The URL to send the request to
-  --body-token: string # The token used to validate payloads
+  --body-token: string # The token used to validate payloads (spec name: token)
   --push-events: oneof<nothing, bool> # Trigger hook on push events
   --tag-push-events: oneof<nothing, bool> # Trigger hook on tag push events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
@@ -1512,9 +1539,9 @@ export def "post-v3-hooks" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/hooks" $auth.query)
   let req_body = {"url": $url, "token": $body_token, "push_events": $push_events, "tag_push_events": $tag_push_events, "enable_ssl_verification": $enable_ssl_verification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1551,7 +1578,7 @@ export def "delete-v3-hooks-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/hooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1587,7 +1614,7 @@ export def "get-v3-hooks-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/hooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1620,7 +1647,7 @@ export def "post-v3-internal-allowed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/allowed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1653,7 +1680,7 @@ export def "get-v3-internal-broadcast-message" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/broadcast_message" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1686,7 +1713,7 @@ export def "get-v3-internal-check" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/check" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1719,7 +1746,7 @@ export def "get-v3-internal-discover" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/discover" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1752,7 +1779,7 @@ export def "post-v3-internal-lfs-authenticate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/lfs_authenticate" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1785,7 +1812,7 @@ export def "get-v3-internal-merge-request-urls" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/merge_request_urls" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1818,7 +1845,7 @@ export def "post-v3-internal-two-factor-recovery-codes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/internal/two_factor_recovery_codes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1860,7 +1887,7 @@ export def "get-v3-issues" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/issues" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1896,7 +1923,7 @@ export def "get-v3-keys-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1932,7 +1959,7 @@ export def "get-v3-licenses" [
   let qp = [(serialize-qp "popular" $popular "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/licenses" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1968,7 +1995,7 @@ export def "get-v3-licenses-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/licenses/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2006,7 +2033,7 @@ export def "get-v3-namespaces" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/namespaces" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2040,7 +2067,7 @@ export def "get-v3-notification-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/notification_settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2089,9 +2116,9 @@ export def "put-v3-notification-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/notification_settings" $auth.query)
   let req_body = {"level": $level, "notification_email": $notification_email, "new_note": $new_note, "new_issue": $new_issue, "reopen_issue": $reopen_issue, "close_issue": $close_issue, "reassign_issue": $reassign_issue, "new_merge_request": $new_merge_request, "reopen_merge_request": $reopen_merge_request, "close_merge_request": $close_merge_request, "reassign_merge_request": $reassign_merge_request, "merge_merge_request": $merge_merge_request, "failed_pipeline": $failed_pipeline, "success_pipeline": $success_pipeline} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -2135,7 +2162,7 @@ export def "get-v3-projects" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2189,9 +2216,9 @@ export def "post-v3-projects" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/projects" $auth.query)
   let req_body = {"name": $name, "path": $path, "description": $description, "issues_enabled": $issues_enabled, "merge_requests_enabled": $merge_requests_enabled, "wiki_enabled": $wiki_enabled, "builds_enabled": $builds_enabled, "snippets_enabled": $snippets_enabled, "shared_runners_enabled": $shared_runners_enabled, "container_registry_enabled": $container_registry_enabled, "lfs_enabled": $lfs_enabled, "public": $public, "visibility_level": $visibility_level, "public_builds": $public_builds, "request_access_enabled": $request_access_enabled, "only_allow_merge_if_build_succeeds": $only_allow_merge_if_build_succeeds, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved, "namespace_id": $namespace_id, "import_url": $import_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2236,7 +2263,7 @@ export def "get-v3-projects-all" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/all" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2274,9 +2301,9 @@ export def "post-v3-projects-fork-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/fork/{id}") $auth.query)
   let req_body = {"namespace": $namespace} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2321,7 +2348,7 @@ export def "get-v3-projects-owned" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/owned" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2362,7 +2389,7 @@ export def "get-v3-projects-search-query" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/v3/projects/search/{query}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2405,7 +2432,7 @@ export def "get-v3-projects-starred" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/starred" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2461,9 +2488,9 @@ export def "post-v3-projects-user-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/user/{user_id}") $auth.query)
   let req_body = {"name": $name, "default_branch": $default_branch, "description": $description, "issues_enabled": $issues_enabled, "merge_requests_enabled": $merge_requests_enabled, "wiki_enabled": $wiki_enabled, "builds_enabled": $builds_enabled, "snippets_enabled": $snippets_enabled, "shared_runners_enabled": $shared_runners_enabled, "container_registry_enabled": $container_registry_enabled, "lfs_enabled": $lfs_enabled, "public": $public, "visibility_level": $visibility_level, "public_builds": $public_builds, "request_access_enabled": $request_access_enabled, "only_allow_merge_if_build_succeeds": $only_allow_merge_if_build_succeeds, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved, "namespace_id": $namespace_id, "import_url": $import_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2507,7 +2534,7 @@ export def "get-v3-projects-visible" [
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/projects/visible" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2543,7 +2570,7 @@ export def "delete-v3-projects-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2579,7 +2606,7 @@ export def "get-v3-projects-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2634,9 +2661,9 @@ export def "put-v3-projects-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}") $auth.query)
   let req_body = {"name": $name, "default_branch": $default_branch, "path": $path, "description": $description, "issues_enabled": $issues_enabled, "merge_requests_enabled": $merge_requests_enabled, "wiki_enabled": $wiki_enabled, "builds_enabled": $builds_enabled, "snippets_enabled": $snippets_enabled, "shared_runners_enabled": $shared_runners_enabled, "container_registry_enabled": $container_registry_enabled, "lfs_enabled": $lfs_enabled, "public": $public, "visibility_level": $visibility_level, "public_builds": $public_builds, "request_access_enabled": $request_access_enabled, "only_allow_merge_if_build_succeeds": $only_allow_merge_if_build_succeeds, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -2668,7 +2695,7 @@ export def "post-v3-projects-idref-reftrigger-builds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The unique token of trigger
+  --body-token: string # The unique token of trigger (spec name: token)
 ]: any -> oneof<record<id: string, variables: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -2677,10 +2704,10 @@ export def "post-v3-projects-idref-reftrigger-builds" [
   if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ref: (encode-path-segment $ref)} | format pattern "/v3/projects/{id}/(ref/{ref}/)trigger/builds") $auth.query)
   let req_body = {"token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2720,7 +2747,7 @@ export def "get-v3-projects-id-access-requests" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/access_requests") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2756,7 +2783,7 @@ export def "post-v3-projects-id-access-requests" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/access_requests") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2794,7 +2821,7 @@ export def "delete-v3-projects-id-access-requests-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/{id}/access_requests/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2834,9 +2861,9 @@ export def "put-v3-projects-id-access-requests-user-id-approve" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/{id}/access_requests/{user_id}/approve") $auth.query)
   let req_body = {"access_level": $access_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -2873,7 +2900,7 @@ export def "post-v3-projects-id-archive" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/archive") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2909,7 +2936,7 @@ export def "get-v3-projects-id-boards" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/boards") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2947,7 +2974,7 @@ export def "get-v3-projects-id-boards-board-id-lists" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), board_id: (encode-path-segment $board_id)} | format pattern "/v3/projects/{id}/boards/{board_id}/lists") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2987,9 +3014,9 @@ export def "post-v3-projects-id-boards-board-id-lists" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), board_id: (encode-path-segment $board_id)} | format pattern "/v3/projects/{id}/boards/{board_id}/lists") $auth.query)
   let req_body = {"label_id": $label_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3030,7 +3057,7 @@ export def "delete-v3-projects-id-boards-board-id-lists-list-id" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), board_id: (encode-path-segment $board_id), list_id: (encode-path-segment $list_id)} | format pattern "/v3/projects/{id}/boards/{board_id}/lists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3070,7 +3097,7 @@ export def "get-v3-projects-id-boards-board-id-lists-list-id" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), board_id: (encode-path-segment $board_id), list_id: (encode-path-segment $list_id)} | format pattern "/v3/projects/{id}/boards/{board_id}/lists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3112,9 +3139,9 @@ export def "put-v3-projects-id-boards-board-id-lists-list-id" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), board_id: (encode-path-segment $board_id), list_id: (encode-path-segment $list_id)} | format pattern "/v3/projects/{id}/boards/{board_id}/lists/{list_id}") $auth.query)
   let req_body = {"position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3155,7 +3182,7 @@ export def "get-v3-projects-id-builds" [
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/builds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3196,7 +3223,7 @@ export def "get-v3-projects-id-builds-artifacts-ref-name-download" [
   let qp = [(serialize-qp "job" $job "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ref_name: (encode-path-segment $ref_name)} | format pattern "/v3/projects/{id}/builds/artifacts/{ref_name}/download") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3234,7 +3261,7 @@ export def "get-v3-projects-id-builds-build-id" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3272,7 +3299,7 @@ export def "get-v3-projects-id-builds-build-id-artifacts" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/artifacts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3310,7 +3337,7 @@ export def "post-v3-projects-id-builds-build-id-artifacts-keep" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/artifacts/keep") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3348,7 +3375,7 @@ export def "post-v3-projects-id-builds-build-id-cancel" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3386,7 +3413,7 @@ export def "post-v3-projects-id-builds-build-id-erase" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/erase") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3424,7 +3451,7 @@ export def "post-v3-projects-id-builds-build-id-play" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/play") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3462,7 +3489,7 @@ export def "post-v3-projects-id-builds-build-id-retry" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/retry") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3500,7 +3527,7 @@ export def "get-v3-projects-id-builds-build-id-trace" [
   if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), build_id: (encode-path-segment $build_id)} | format pattern "/v3/projects/{id}/builds/{build_id}/trace") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3536,7 +3563,7 @@ export def "get-v3-projects-id-deploy-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/deploy_keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3575,9 +3602,9 @@ export def "post-v3-projects-id-deploy-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/deploy_keys") $auth.query)
   let req_body = {"key": $key, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3616,7 +3643,7 @@ export def "delete-v3-projects-id-deploy-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/deploy_keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3654,7 +3681,7 @@ export def "get-v3-projects-id-deploy-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/deploy_keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3692,7 +3719,7 @@ export def "delete-v3-projects-id-deploy-keys-key-id-disable" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/deploy_keys/{key_id}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3730,7 +3757,7 @@ export def "post-v3-projects-id-deploy-keys-key-id-enable" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/deploy_keys/{key_id}/enable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3769,7 +3796,7 @@ export def "get-v3-projects-id-deployments" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/deployments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3807,7 +3834,7 @@ export def "get-v3-projects-id-deployments-deployment-id" [
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/v3/projects/{id}/deployments/{deployment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3846,7 +3873,7 @@ export def "get-v3-projects-id-environments" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/environments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3886,9 +3913,9 @@ export def "post-v3-projects-id-environments" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/environments") $auth.query)
   let req_body = {"name": $name, "external_url": $external_url, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3927,7 +3954,7 @@ export def "delete-v3-projects-id-environments-environment-id" [
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environment_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), environment_id: (encode-path-segment $environment_id)} | format pattern "/v3/projects/{id}/environments/{environment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3969,9 +3996,9 @@ export def "put-v3-projects-id-environments-environment-id" [
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environment_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), environment_id: (encode-path-segment $environment_id)} | format pattern "/v3/projects/{id}/environments/{environment_id}") $auth.query)
   let req_body = {"name": $name, "external_url": $external_url, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -4011,7 +4038,7 @@ export def "get-v3-projects-id-events" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4047,7 +4074,7 @@ export def "delete-v3-projects-id-fork" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/fork") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4085,7 +4112,7 @@ export def "post-v3-projects-id-fork-forked-from-id" [
   if ($forked_from_id | is-empty) { error make --unspanned { msg: "path parameter 'forked_from_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), forked_from_id: (encode-path-segment $forked_from_id)} | format pattern "/v3/projects/{id}/fork/{forked_from_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4124,7 +4151,7 @@ export def "get-v3-projects-id-hooks" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/hooks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4164,7 +4191,7 @@ export def "post-v3-projects-id-hooks" [
   --pipeline-events: oneof<nothing, bool> # Trigger hook on pipeline events
   --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
-  --body-token: string # Secret token to validate received payloads; this will not be returned in the response
+  --body-token: string # Secret token to validate received payloads; this will not be returned in the response (spec name: token)
 ]: any -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -4172,9 +4199,9 @@ export def "post-v3-projects-id-hooks" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/hooks") $auth.query)
   let req_body = {"url": $url, "push_events": $push_events, "issues_events": $issues_events, "merge_requests_events": $merge_requests_events, "tag_push_events": $tag_push_events, "note_events": $note_events, "build_events": $build_events, "pipeline_events": $pipeline_events, "wiki_page_events": $wiki_page_events, "enable_ssl_verification": $enable_ssl_verification, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4213,7 +4240,7 @@ export def "delete-v3-projects-id-hooks-hook-id" [
   if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), hook_id: (encode-path-segment $hook_id)} | format pattern "/v3/projects/{id}/hooks/{hook_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4251,7 +4278,7 @@ export def "get-v3-projects-id-hooks-hook-id" [
   if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), hook_id: (encode-path-segment $hook_id)} | format pattern "/v3/projects/{id}/hooks/{hook_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4292,7 +4319,7 @@ export def "put-v3-projects-id-hooks-hook-id" [
   --pipeline-events: oneof<nothing, bool> # Trigger hook on pipeline events
   --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
-  --body-token: string # Secret token to validate received payloads; this will not be returned in the response
+  --body-token: string # Secret token to validate received payloads; this will not be returned in the response (spec name: token)
 ]: any -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -4301,9 +4328,9 @@ export def "put-v3-projects-id-hooks-hook-id" [
   if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), hook_id: (encode-path-segment $hook_id)} | format pattern "/v3/projects/{id}/hooks/{hook_id}") $auth.query)
   let req_body = {"url": $url, "push_events": $push_events, "issues_events": $issues_events, "merge_requests_events": $merge_requests_events, "tag_push_events": $tag_push_events, "note_events": $note_events, "build_events": $build_events, "pipeline_events": $pipeline_events, "wiki_page_events": $wiki_page_events, "enable_ssl_verification": $enable_ssl_verification, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -4349,7 +4376,7 @@ export def "get-v3-projects-id-issues" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "iid" $iid "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/issues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4395,9 +4422,9 @@ export def "post-v3-projects-id-issues" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/issues") $auth.query)
   let req_body = {"title": $title, "created_at": $created_at, "merge_request_for_resolving_discussions": $merge_request_for_resolving_discussions, "description": $description, "assignee_id": $assignee_id, "milestone_id": $milestone_id, "labels": $labels, "due_date": $due_date, "confidential": $confidential} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4436,7 +4463,7 @@ export def "delete-v3-projects-id-issues-issue-id" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4474,7 +4501,7 @@ export def "get-v3-projects-id-issues-issue-id" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4523,9 +4550,9 @@ export def "put-v3-projects-id-issues-issue-id" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}") $auth.query)
   let req_body = {"title": $title, "updated_at": $updated_at, "state_event": $state_event, "description": $description, "assignee_id": $assignee_id, "milestone_id": $milestone_id, "labels": $labels, "due_date": $due_date, "confidential": $confidential, "created_at": $created_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -4566,9 +4593,9 @@ export def "post-v3-projects-id-issues-issue-id-add-spent-time" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/add_spent_time") $auth.query)
   let req_body = {"duration": $duration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4610,7 +4637,7 @@ export def "get-v3-projects-id-issues-issue-id-award-emoji" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4650,9 +4677,9 @@ export def "post-v3-projects-id-issues-issue-id-award-emoji" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4693,7 +4720,7 @@ export def "delete-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4733,7 +4760,7 @@ export def "get-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4773,9 +4800,9 @@ export def "post-v3-projects-id-issues-issue-id-move" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/move") $auth.query)
   let req_body = {"to_project_id": $to_project_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4819,7 +4846,7 @@ export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4861,9 +4888,9 @@ export def "post-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4906,7 +4933,7 @@ export def "delete-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-awar
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4948,7 +4975,7 @@ export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-i
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4986,7 +5013,7 @@ export def "post-v3-projects-id-issues-issue-id-reset-spent-time" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/reset_spent_time") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5024,7 +5051,7 @@ export def "post-v3-projects-id-issues-issue-id-reset-time-estimate" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/reset_time_estimate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5064,9 +5091,9 @@ export def "post-v3-projects-id-issues-issue-id-time-estimate" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/time_estimate") $auth.query)
   let req_body = {"duration": $duration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5105,7 +5132,7 @@ export def "get-v3-projects-id-issues-issue-id-time-stats" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/time_stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5143,7 +5170,7 @@ export def "post-v3-projects-id-issues-issue-id-todo" [
   if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_id: (encode-path-segment $issue_id)} | format pattern "/v3/projects/{id}/issues/{issue_id}/todo") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5184,7 +5211,7 @@ export def "get-v3-projects-id-issues-noteable-id-notes" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/issues/{noteable_id}/notes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5225,9 +5252,9 @@ export def "post-v3-projects-id-issues-noteable-id-notes" [
   if ($noteable_id | is-empty) { error make --unspanned { msg: "path parameter 'noteable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/issues/{noteable_id}/notes") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5268,7 +5295,7 @@ export def "delete-v3-projects-id-issues-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/issues/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5308,7 +5335,7 @@ export def "get-v3-projects-id-issues-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/issues/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5350,9 +5377,9 @@ export def "put-v3-projects-id-issues-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/issues/{noteable_id}/notes/{note_id}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -5391,7 +5418,7 @@ export def "delete-v3-projects-id-issues-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/issues/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5429,7 +5456,7 @@ export def "post-v3-projects-id-issues-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/issues/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5465,7 +5492,7 @@ export def "get-v3-projects-id-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5504,9 +5531,9 @@ export def "post-v3-projects-id-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/keys") $auth.query)
   let req_body = {"key": $key, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5545,7 +5572,7 @@ export def "delete-v3-projects-id-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5583,7 +5610,7 @@ export def "get-v3-projects-id-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5621,7 +5648,7 @@ export def "delete-v3-projects-id-keys-key-id-disable" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/keys/{key_id}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5659,7 +5686,7 @@ export def "post-v3-projects-id-keys-key-id-enable" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/projects/{id}/keys/{key_id}/enable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5698,7 +5725,7 @@ export def "delete-v3-projects-id-labels" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/labels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5734,7 +5761,7 @@ export def "get-v3-projects-id-labels" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/labels") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5775,9 +5802,9 @@ export def "post-v3-projects-id-labels" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/labels") $auth.query)
   let req_body = {"name": $name, "color": $color, "description": $description, "priority": $priority} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5820,9 +5847,9 @@ export def "put-v3-projects-id-labels" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/labels") $auth.query)
   let req_body = {"name": $name, "new_name": $new_name, "color": $color, "description": $description, "priority": $priority} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -5861,7 +5888,7 @@ export def "delete-v3-projects-id-labels-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/labels/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5899,7 +5926,7 @@ export def "post-v3-projects-id-labels-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/labels/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5939,7 +5966,7 @@ export def "get-v3-projects-id-members" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5979,9 +6006,9 @@ export def "post-v3-projects-id-members" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/members") $auth.query)
   let req_body = {"user_id": $user_id, "access_level": $access_level, "expires_at": $expires_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6020,7 +6047,7 @@ export def "delete-v3-projects-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/{id}/members/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6058,7 +6085,7 @@ export def "get-v3-projects-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/{id}/members/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6099,9 +6126,9 @@ export def "put-v3-projects-id-members-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/v3/projects/{id}/members/{user_id}") $auth.query)
   let req_body = {"access_level": $access_level, "expires_at": $expires_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -6140,7 +6167,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6187,9 +6214,9 @@ export def "put-v3-projects-id-merge-request-merge-request-id" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}") $auth.query)
   let req_body = {"title": $title, "target_branch": $target_branch, "state_event": $state_event, "description": $description, "assignee_id": $assignee_id, "milestone_id": $milestone_id, "labels": $labels, "remove_source_branch": $remove_source_branch} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -6228,7 +6255,7 @@ export def "post-v3-projects-id-merge-request-merge-request-id-cancel-merge-when
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/cancel_merge_when_build_succeeds") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6266,7 +6293,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-changes" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/changes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6307,7 +6334,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-closes-issues" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/closes_issues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6348,7 +6375,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-comments" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6388,9 +6415,9 @@ export def "post-v3-projects-id-merge-request-merge-request-id-comments" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/comments") $auth.query)
   let req_body = {"note": $note} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6429,7 +6456,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-commits" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/commits") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6472,9 +6499,9 @@ export def "put-v3-projects-id-merge-request-merge-request-id-merge" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_request/{merge_request_id}/merge") $auth.query)
   let req_body = {"merge_commit_message": $merge_commit_message, "should_remove_source_branch": $should_remove_source_branch, "merge_when_build_succeeds": $merge_when_build_succeeds, "sha": $sha} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -6513,7 +6540,7 @@ export def "delete-v3-projects-id-merge-request-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/merge_request/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6551,7 +6578,7 @@ export def "post-v3-projects-id-merge-request-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/merge_request/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6593,7 +6620,7 @@ export def "get-v3-projects-id-merge-requests" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/merge_requests") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6639,9 +6666,9 @@ export def "post-v3-projects-id-merge-requests" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/merge_requests") $auth.query)
   let req_body = {"title": $title, "source_branch": $source_branch, "target_branch": $target_branch, "target_project_id": $target_project_id, "description": $description, "assignee_id": $assignee_id, "milestone_id": $milestone_id, "labels": $labels, "remove_source_branch": $remove_source_branch} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6680,7 +6707,7 @@ export def "delete-v3-projects-id-merge-requests-merge-request-id" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6718,7 +6745,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6765,9 +6792,9 @@ export def "put-v3-projects-id-merge-requests-merge-request-id" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}") $auth.query)
   let req_body = {"title": $title, "target_branch": $target_branch, "state_event": $state_event, "description": $description, "assignee_id": $assignee_id, "milestone_id": $milestone_id, "labels": $labels, "remove_source_branch": $remove_source_branch} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -6808,9 +6835,9 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-add-spent-time" 
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/add_spent_time") $auth.query)
   let req_body = {"duration": $duration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6852,7 +6879,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6892,9 +6919,9 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6935,7 +6962,7 @@ export def "delete-v3-projects-id-merge-requests-merge-request-id-award-emoji-aw
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6975,7 +7002,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji-award
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7013,7 +7040,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-cancel-merge-whe
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/cancel_merge_when_build_succeeds") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7051,7 +7078,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-changes" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/changes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7092,7 +7119,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-closes-issues" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/closes_issues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7133,7 +7160,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-comments" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7173,9 +7200,9 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-comments" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/comments") $auth.query)
   let req_body = {"note": $note} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7214,7 +7241,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-commits" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/commits") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7257,9 +7284,9 @@ export def "put-v3-projects-id-merge-requests-merge-request-id-merge" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/merge") $auth.query)
   let req_body = {"merge_commit_message": $merge_commit_message, "should_remove_source_branch": $should_remove_source_branch, "merge_when_build_succeeds": $merge_when_build_succeeds, "sha": $sha} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -7303,7 +7330,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-awa
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7345,9 +7372,9 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-notes-note-id-aw
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7390,7 +7417,7 @@ export def "delete-v3-projects-id-merge-requests-merge-request-id-notes-note-id-
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7432,7 +7459,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-awa
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7470,7 +7497,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-reset-spent-time
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/reset_spent_time") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7508,7 +7535,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-reset-time-estim
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/reset_time_estimate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7548,9 +7575,9 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-time-estimate" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/time_estimate") $auth.query)
   let req_body = {"duration": $duration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7589,7 +7616,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-time-stats" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/time_stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7627,7 +7654,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-todo" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/todo") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7665,7 +7692,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-versions" [
   if ($merge_request_id | is-empty) { error make --unspanned { msg: "path parameter 'merge_request_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/versions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7705,7 +7732,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-versions-version-
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), merge_request_id: (encode-path-segment $merge_request_id), version_id: (encode-path-segment $version_id)} | format pattern "/v3/projects/{id}/merge_requests/{merge_request_id}/versions/{version_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7746,7 +7773,7 @@ export def "get-v3-projects-id-merge-requests-noteable-id-notes" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/merge_requests/{noteable_id}/notes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7787,9 +7814,9 @@ export def "post-v3-projects-id-merge-requests-noteable-id-notes" [
   if ($noteable_id | is-empty) { error make --unspanned { msg: "path parameter 'noteable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/merge_requests/{noteable_id}/notes") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7830,7 +7857,7 @@ export def "delete-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7870,7 +7897,7 @@ export def "get-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7912,9 +7939,9 @@ export def "put-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -7953,7 +7980,7 @@ export def "delete-v3-projects-id-merge-requests-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/merge_requests/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7991,7 +8018,7 @@ export def "post-v3-projects-id-merge-requests-subscribable-id-subscription" [
   if ($subscribable_id | is-empty) { error make --unspanned { msg: "path parameter 'subscribable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), subscribable_id: (encode-path-segment $subscribable_id)} | format pattern "/v3/projects/{id}/merge_requests/{subscribable_id}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8031,7 +8058,7 @@ export def "get-v3-projects-id-milestones" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/milestones") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8072,9 +8099,9 @@ export def "post-v3-projects-id-milestones" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/milestones") $auth.query)
   let req_body = {"title": $title, "description": $description, "due_date": $due_date, "start_date": $start_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8113,7 +8140,7 @@ export def "get-v3-projects-id-milestones-milestone-id" [
   if ($milestone_id | is-empty) { error make --unspanned { msg: "path parameter 'milestone_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), milestone_id: (encode-path-segment $milestone_id)} | format pattern "/v3/projects/{id}/milestones/{milestone_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8157,9 +8184,9 @@ export def "put-v3-projects-id-milestones-milestone-id" [
   if ($milestone_id | is-empty) { error make --unspanned { msg: "path parameter 'milestone_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), milestone_id: (encode-path-segment $milestone_id)} | format pattern "/v3/projects/{id}/milestones/{milestone_id}") $auth.query)
   let req_body = {"title": $title, "state_event": $state_event, "description": $description, "due_date": $due_date, "start_date": $start_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -8201,7 +8228,7 @@ export def "get-v3-projects-id-milestones-milestone-id-issues" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), milestone_id: (encode-path-segment $milestone_id)} | format pattern "/v3/projects/{id}/milestones/{milestone_id}/issues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8237,7 +8264,7 @@ export def "get-v3-projects-id-notification-settings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/notification_settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8287,9 +8314,9 @@ export def "put-v3-projects-id-notification-settings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/notification_settings") $auth.query)
   let req_body = {"level": $level, "new_note": $new_note, "new_issue": $new_issue, "reopen_issue": $reopen_issue, "close_issue": $close_issue, "reassign_issue": $reassign_issue, "new_merge_request": $new_merge_request, "reopen_merge_request": $reopen_merge_request, "close_merge_request": $close_merge_request, "reassign_merge_request": $reassign_merge_request, "merge_merge_request": $merge_merge_request, "failed_pipeline": $failed_pipeline, "success_pipeline": $success_pipeline} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -8328,9 +8355,9 @@ export def "post-v3-projects-id-pipeline" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/pipeline") $auth.query)
   let req_body = {"ref": $ref} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8371,7 +8398,7 @@ export def "get-v3-projects-id-pipelines" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/pipelines") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8409,7 +8436,7 @@ export def "get-v3-projects-id-pipelines-pipeline-id" [
   if ($pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), pipeline_id: (encode-path-segment $pipeline_id)} | format pattern "/v3/projects/{id}/pipelines/{pipeline_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8447,7 +8474,7 @@ export def "post-v3-projects-id-pipelines-pipeline-id-cancel" [
   if ($pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), pipeline_id: (encode-path-segment $pipeline_id)} | format pattern "/v3/projects/{id}/pipelines/{pipeline_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8485,7 +8512,7 @@ export def "post-v3-projects-id-pipelines-pipeline-id-retry" [
   if ($pipeline_id | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), pipeline_id: (encode-path-segment $pipeline_id)} | format pattern "/v3/projects/{id}/pipelines/{pipeline_id}/retry") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8524,7 +8551,7 @@ export def "get-v3-projects-id-repository-archive" [
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/archive") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8565,7 +8592,7 @@ export def "get-v3-projects-id-repository-blobs-sha" [
   let qp = [(serialize-qp "filepath" $filepath "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/blobs/{sha}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8601,7 +8628,7 @@ export def "get-v3-projects-id-repository-branches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/branches") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8640,9 +8667,9 @@ export def "post-v3-projects-id-repository-branches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/branches") $auth.query)
   let req_body = {"branch_name": $branch_name, "ref": $ref} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8681,7 +8708,7 @@ export def "delete-v3-projects-id-repository-branches-branch" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), branch: (encode-path-segment $branch)} | format pattern "/v3/projects/{id}/repository/branches/{branch}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8719,7 +8746,7 @@ export def "get-v3-projects-id-repository-branches-branch" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), branch: (encode-path-segment $branch)} | format pattern "/v3/projects/{id}/repository/branches/{branch}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8760,9 +8787,9 @@ export def "put-v3-projects-id-repository-branches-branch-protect" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), branch: (encode-path-segment $branch)} | format pattern "/v3/projects/{id}/repository/branches/{branch}/protect") $auth.query)
   let req_body = {"developers_can_push": $developers_can_push, "developers_can_merge": $developers_can_merge} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -8801,7 +8828,7 @@ export def "put-v3-projects-id-repository-branches-branch-unprotect" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), branch: (encode-path-segment $branch)} | format pattern "/v3/projects/{id}/repository/branches/{branch}/unprotect") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8844,7 +8871,7 @@ export def "get-v3-projects-id-repository-commits" [
   let qp = [(serialize-qp "ref_name" $ref_name "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/commits") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8886,9 +8913,9 @@ export def "post-v3-projects-id-repository-commits" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/commits") $auth.query)
   let req_body = {"branch_name": $branch_name, "commit_message": $commit_message, "actions": (if ($actions | describe | str starts-with "list") { $actions | compact | each { into string } | str join "," } else { $actions }), "author_email": $author_email, "author_name": $author_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8927,7 +8954,7 @@ export def "get-v3-projects-id-repository-commits-sha" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8968,7 +8995,7 @@ export def "get-v3-projects-id-repository-commits-sha-blob" [
   let qp = [(serialize-qp "filepath" $filepath "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/blob") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9010,7 +9037,7 @@ export def "get-v3-projects-id-repository-commits-sha-builds" [
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/builds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9050,9 +9077,9 @@ export def "post-v3-projects-id-repository-commits-sha-cherry-pick" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/cherry_pick") $auth.query)
   let req_body = {"branch": $branch} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9094,7 +9121,7 @@ export def "get-v3-projects-id-repository-commits-sha-comments" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9137,9 +9164,9 @@ export def "post-v3-projects-id-repository-commits-sha-comments" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/comments") $auth.query)
   let req_body = {"note": $note, "path": $path, "line": $line, "line_type": $line_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9178,7 +9205,7 @@ export def "get-v3-projects-id-repository-commits-sha-diff" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/diff") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9223,7 +9250,7 @@ export def "get-v3-projects-id-repository-commits-sha-statuses" [
   let qp = [(serialize-qp "ref" $ref "scalar") (serialize-qp "stage" $stage "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/commits/{sha}/statuses") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9264,7 +9291,7 @@ export def "get-v3-projects-id-repository-compare" [
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/compare") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9300,7 +9327,7 @@ export def "get-v3-projects-id-repository-contributors" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/contributors") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9345,7 +9372,7 @@ export def "delete-v3-projects-id-repository-files" [
   let qp = [(serialize-qp "file_path" $file_path "scalar") (serialize-qp "branch_name" $branch_name "scalar") (serialize-qp "commit_message" $commit_message "scalar") (serialize-qp "author_email" $author_email "scalar") (serialize-qp "author_name" $author_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9386,7 +9413,7 @@ export def "get-v3-projects-id-repository-files" [
   let qp = [(serialize-qp "file_path" $file_path "scalar") (serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9430,9 +9457,9 @@ export def "post-v3-projects-id-repository-files" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $auth.query)
   let req_body = {"file_path": $file_path, "branch_name": $branch_name, "commit_message": $commit_message, "author_email": $author_email, "author_name": $author_name, "content": $content, "encoding": $encoding} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9477,9 +9504,9 @@ export def "put-v3-projects-id-repository-files" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/files") $auth.query)
   let req_body = {"file_path": $file_path, "branch_name": $branch_name, "commit_message": $commit_message, "author_email": $author_email, "author_name": $author_name, "content": $content, "encoding": $encoding} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -9515,7 +9542,7 @@ export def "delete-v3-projects-id-repository-merged-branches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/merged_branches") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9553,7 +9580,7 @@ export def "get-v3-projects-id-repository-raw-blobs-sha" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/repository/raw_blobs/{sha}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9589,7 +9616,7 @@ export def "get-v3-projects-id-repository-tags" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9630,9 +9657,9 @@ export def "post-v3-projects-id-repository-tags" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/tags") $auth.query)
   let req_body = {"tag_name": $tag_name, "ref": $ref, "message": $message, "release_description": $release_description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9671,7 +9698,7 @@ export def "delete-v3-projects-id-repository-tags-tag-name" [
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag_name' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v3/projects/{id}/repository/tags/{tag_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9709,7 +9736,7 @@ export def "get-v3-projects-id-repository-tags-tag-name" [
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag_name' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v3/projects/{id}/repository/tags/{tag_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9749,9 +9776,9 @@ export def "post-v3-projects-id-repository-tags-tag-name-release" [
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag_name' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v3/projects/{id}/repository/tags/{tag_name}/release") $auth.query)
   let req_body = {"description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9792,9 +9819,9 @@ export def "put-v3-projects-id-repository-tags-tag-name-release" [
   if ($tag_name | is-empty) { error make --unspanned { msg: "path parameter 'tag_name' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tag_name: (encode-path-segment $tag_name)} | format pattern "/v3/projects/{id}/repository/tags/{tag_name}/release") $auth.query)
   let req_body = {"description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -9835,7 +9862,7 @@ export def "get-v3-projects-id-repository-tree" [
   let qp = [(serialize-qp "ref_name" $ref_name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/tree") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9875,7 +9902,7 @@ export def "get-v3-projects-id-runners" [
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/runners") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9913,9 +9940,9 @@ export def "post-v3-projects-id-runners" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/runners") $auth.query)
   let req_body = {"runner_id": $runner_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9954,7 +9981,7 @@ export def "delete-v3-projects-id-runners-runner-id" [
   if ($runner_id | is-empty) { error make --unspanned { msg: "path parameter 'runner_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), runner_id: (encode-path-segment $runner_id)} | format pattern "/v3/projects/{id}/runners/{runner_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9994,9 +10021,9 @@ export def "put-v3-projects-id-services-asana" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/asana") $auth.query)
   let req_body = {"api_key": $api_key, "restrict_to_branch": $restrict_to_branch, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10027,7 +10054,7 @@ export def "put-v3-projects-id-services-assembla" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The authentication token
+  --body-token: string # The authentication token (spec name: token)
   --subdomain: string # Subdomain setting
   --push-events: string # Event will be triggered by a push to the repository
 ]: any -> any {
@@ -10037,10 +10064,10 @@ export def "put-v3-projects-id-services-assembla" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/assembla") $auth.query)
   let req_body = {"token": $body_token, "subdomain": $subdomain, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10083,9 +10110,9 @@ export def "put-v3-projects-id-services-bamboo" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/bamboo") $auth.query)
   let req_body = {"bamboo_url": $bamboo_url, "build_key": $build_key, "username": $username, "password": $password, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10129,9 +10156,9 @@ export def "put-v3-projects-id-services-bugzilla" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/bugzilla") $auth.query)
   let req_body = {"new_issue_url": $new_issue_url, "issues_url": $issues_url, "project_url": $project_url, "description": $description, "title": $title, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10162,7 +10189,7 @@ export def "put-v3-projects-id-services-buildkite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # Buildkite project GitLab token
+  --body-token: string # Buildkite project GitLab token (spec name: token)
   project_url: string # The buildkite project URL
   --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification for communication
   --push-events: string # Event will be triggered by a push to the repository
@@ -10173,10 +10200,10 @@ export def "put-v3-projects-id-services-buildkite" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/buildkite") $auth.query)
   let req_body = {"token": $body_token, "project_url": $project_url, "enable_ssl_verification": $enable_ssl_verification, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10218,9 +10245,9 @@ export def "put-v3-projects-id-services-builds-email" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/builds-email") $auth.query)
   let req_body = {"recipients": $recipients, "add_pusher": $add_pusher, "notify_only_broken_builds": $notify_only_broken_builds, "build_events": $build_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10251,7 +10278,7 @@ export def "put-v3-projects-id-services-campfire" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # Campfire token
+  --body-token: string # Campfire token (spec name: token)
   --subdomain: string # Campfire subdomain
   --room: string # Campfire room
   --push-events: string # Event will be triggered by a push to the repository
@@ -10262,10 +10289,10 @@ export def "put-v3-projects-id-services-campfire" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/campfire") $auth.query)
   let req_body = {"token": $body_token, "subdomain": $subdomain, "room": $room, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10309,9 +10336,9 @@ export def "put-v3-projects-id-services-custom-issue-tracker" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/custom-issue-tracker") $auth.query)
   let req_body = {"new_issue_url": $new_issue_url, "issues_url": $issues_url, "project_url": $project_url, "description": $description, "title": $title, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10342,7 +10369,7 @@ export def "put-v3-projects-id-services-drone-ci" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # Drone CI token
+  --body-token: string # Drone CI token (spec name: token)
   drone_url: string # Drone CI URL
   --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification for communication
   --push-events: string # Event will be triggered by a push to the repository
@@ -10355,10 +10382,10 @@ export def "put-v3-projects-id-services-drone-ci" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/drone-ci") $auth.query)
   let req_body = {"token": $body_token, "drone_url": $drone_url, "enable_ssl_verification": $enable_ssl_verification, "push_events": $push_events, "merge_request_events": $merge_request_events, "tag_push_events": $tag_push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10401,9 +10428,9 @@ export def "put-v3-projects-id-services-emails-on-push" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/emails-on-push") $auth.query)
   let req_body = {"recipients": $recipients, "disable_diffs": $disable_diffs, "send_from_committer_email": $send_from_committer_email, "push_events": $push_events, "tag_push_events": $tag_push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10442,9 +10469,9 @@ export def "put-v3-projects-id-services-external-wiki" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/external-wiki") $auth.query)
   let req_body = {"external_wiki_url": $external_wiki_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10475,7 +10502,7 @@ export def "put-v3-projects-id-services-flowdock" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # Flowdock token
+  --body-token: string # Flowdock token (spec name: token)
   --push-events: string # Event will be triggered by a push to the repository
 ]: any -> any {
   let input = $in
@@ -10484,10 +10511,10 @@ export def "put-v3-projects-id-services-flowdock" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/flowdock") $auth.query)
   let req_body = {"token": $body_token, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10519,7 +10546,7 @@ export def "put-v3-projects-id-services-gemnasium" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string # Your personal API key on gemnasium.com
-  --body-token: string # The project's slug on gemnasium.com
+  --body-token: string # The project's slug on gemnasium.com (spec name: token)
   --push-events: string # Event will be triggered by a push to the repository
 ]: any -> any {
   let input = $in
@@ -10528,10 +10555,10 @@ export def "put-v3-projects-id-services-gemnasium" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/gemnasium") $auth.query)
   let req_body = {"api_key": $api_key, "token": $body_token, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10562,7 +10589,7 @@ export def "put-v3-projects-id-services-hipchat" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The room token
+  --body-token: string # The room token (spec name: token)
   --room: string # The room name or ID
   --color: string # The room color
   --notify: oneof<nothing, bool> # Enable notifications
@@ -10582,10 +10609,10 @@ export def "put-v3-projects-id-services-hipchat" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/hipchat") $auth.query)
   let req_body = {"token": $body_token, "room": $room, "color": $color, "notify": $notify, "api_version": $api_version, "server": $server, "push_events": $push_events, "issue_events": $issue_events, "confidential_issue_events": $confidential_issue_events, "merge_request_events": $merge_request_events, "note_events": $note_events, "tag_push_events": $tag_push_events, "build_events": $build_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10629,9 +10656,9 @@ export def "put-v3-projects-id-services-irker" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/irker") $auth.query)
   let req_body = {"recipients": $recipients, "default_irc_uri": $default_irc_uri, "server_host": $server_host, "server_port": $server_port, "colorize_messages": $colorize_messages, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10676,9 +10703,9 @@ export def "put-v3-projects-id-services-jira" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/jira") $auth.query)
   let req_body = {"url": $url, "project_key": $project_key, "username": $username, "password": $password, "jira_issue_transition_id": $jira_issue_transition_id, "commit_events": $commit_events, "merge_request_events": $merge_request_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10711,7 +10738,7 @@ export def "put-v3-projects-id-services-kubernetes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The Kubernetes namespace to use
   api_url: string # The URL to the Kubernetes cluster API, e.g., https://kubernetes.example.com
-  --body-token: string # The service token to authenticate against the Kubernetes cluster with
+  --body-token: string # The service token to authenticate against the Kubernetes cluster with (spec name: token)
   --ca-pem: string # A custom certificate authority bundle to verify the Kubernetes cluster with (PEM format)
 ]: any -> any {
   let input = $in
@@ -10720,10 +10747,10 @@ export def "put-v3-projects-id-services-kubernetes" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/kubernetes") $auth.query)
   let req_body = {"namespace": $namespace, "api_url": $api_url, "token": $body_token, "ca_pem": $ca_pem} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10771,9 +10798,9 @@ export def "put-v3-projects-id-services-mattermost" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/mattermost") $auth.query)
   let req_body = {"webhook": $webhook, "push_events": $push_events, "issue_events": $issue_events, "confidential_issue_events": $confidential_issue_events, "merge_request_events": $merge_request_events, "note_events": $note_events, "tag_push_events": $tag_push_events, "build_events": $build_events, "pipeline_events": $pipeline_events, "wiki_page_events": $wiki_page_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10804,7 +10831,7 @@ export def "put-v3-projects-id-services-mattermost-slash-commands" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The Mattermost token
+  --body-token: string # The Mattermost token (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -10812,10 +10839,10 @@ export def "put-v3-projects-id-services-mattermost-slash-commands" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/mattermost-slash-commands") $auth.query)
   let req_body = {"token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10846,7 +10873,7 @@ export def "post-v3-projects-id-services-mattermost-slash-commands-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The Mattermost token
+  --body-token: string # The Mattermost token (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -10854,10 +10881,10 @@ export def "post-v3-projects-id-services-mattermost-slash-commands-trigger" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/mattermost_slash_commands/trigger") $auth.query)
   let req_body = {"token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -10898,9 +10925,9 @@ export def "put-v3-projects-id-services-pipelines-email" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/pipelines-email") $auth.query)
   let req_body = {"recipients": $recipients, "notify_only_broken_builds": $notify_only_broken_builds, "pipeline_events": $pipeline_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10931,7 +10958,7 @@ export def "put-v3-projects-id-services-pivotaltracker" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The Pivotaltracker token
+  --body-token: string # The Pivotaltracker token (spec name: token)
   --restrict-to-branch: string # Comma-separated list of branches which will be automatically inspected. Leave blank to include all branches.
   --push-events: string # Event will be triggered by a push to the repository
 ]: any -> any {
@@ -10941,10 +10968,10 @@ export def "put-v3-projects-id-services-pivotaltracker" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/pivotaltracker") $auth.query)
   let req_body = {"token": $body_token, "restrict_to_branch": $restrict_to_branch, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -10988,9 +11015,9 @@ export def "put-v3-projects-id-services-pushover" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/pushover") $auth.query)
   let req_body = {"api_key": $api_key, "user_key": $user_key, "priority": $priority, "device": $device, "sound": $sound, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11033,9 +11060,9 @@ export def "put-v3-projects-id-services-redmine" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/redmine") $auth.query)
   let req_body = {"new_issue_url": $new_issue_url, "project_url": $project_url, "issues_url": $issues_url, "description": $description, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11085,9 +11112,9 @@ export def "put-v3-projects-id-services-slack" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/slack") $auth.query)
   let req_body = {"webhook": $webhook, "new_issue_url": $new_issue_url, "channel": $channel, "push_events": $push_events, "issue_events": $issue_events, "confidential_issue_events": $confidential_issue_events, "merge_request_events": $merge_request_events, "note_events": $note_events, "tag_push_events": $tag_push_events, "build_events": $build_events, "pipeline_events": $pipeline_events, "wiki_page_events": $wiki_page_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11118,7 +11145,7 @@ export def "put-v3-projects-id-services-slack-slash-commands" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The Slack token
+  --body-token: string # The Slack token (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -11126,10 +11153,10 @@ export def "put-v3-projects-id-services-slack-slash-commands" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/slack-slash-commands") $auth.query)
   let req_body = {"token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11160,7 +11187,7 @@ export def "post-v3-projects-id-services-slack-slash-commands-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-token: string # The Slack token
+  --body-token: string # The Slack token (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
@@ -11168,10 +11195,10 @@ export def "post-v3-projects-id-services-slack-slash-commands-trigger" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/slack_slash_commands/trigger") $auth.query)
   let req_body = {"token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -11214,9 +11241,9 @@ export def "put-v3-projects-id-services-teamcity" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/services/teamcity") $auth.query)
   let req_body = {"teamcity_url": $teamcity_url, "build_type": $build_type, "username": $username, "password": $password, "push_events": $push_events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11255,7 +11282,7 @@ export def "delete-v3-projects-id-services-service-slug" [
   if ($service_slug | is-empty) { error make --unspanned { msg: "path parameter 'service_slug' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), service_slug: (encode-path-segment $service_slug)} | format pattern "/v3/projects/{id}/services/{service_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11293,7 +11320,7 @@ export def "get-v3-projects-id-services-service-slug" [
   if ($service_slug | is-empty) { error make --unspanned { msg: "path parameter 'service_slug' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), service_slug: (encode-path-segment $service_slug)} | format pattern "/v3/projects/{id}/services/{service_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11333,9 +11360,9 @@ export def "post-v3-projects-id-share" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/share") $auth.query)
   let req_body = {"group_id": $group_id, "group_access": $group_access, "expires_at": $expires_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -11373,7 +11400,7 @@ export def "delete-v3-projects-id-share-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/v3/projects/{id}/share/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11412,7 +11439,7 @@ export def "get-v3-projects-id-snippets" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/snippets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11453,9 +11480,9 @@ export def "post-v3-projects-id-snippets" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/snippets") $auth.query)
   let req_body = {"title": $title, "file_name": $file_name, "code": $code, "visibility_level": $visibility_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -11497,7 +11524,7 @@ export def "get-v3-projects-id-snippets-noteable-id-notes" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/snippets/{noteable_id}/notes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11538,9 +11565,9 @@ export def "post-v3-projects-id-snippets-noteable-id-notes" [
   if ($noteable_id | is-empty) { error make --unspanned { msg: "path parameter 'noteable_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id)} | format pattern "/v3/projects/{id}/snippets/{noteable_id}/notes") $auth.query)
   let req_body = {"body": $body, "created_at": $created_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -11581,7 +11608,7 @@ export def "delete-v3-projects-id-snippets-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11621,7 +11648,7 @@ export def "get-v3-projects-id-snippets-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11663,9 +11690,9 @@ export def "put-v3-projects-id-snippets-noteable-id-notes-note-id" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), noteable_id: (encode-path-segment $noteable_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11704,7 +11731,7 @@ export def "delete-v3-projects-id-snippets-snippet-id" [
   if ($snippet_id | is-empty) { error make --unspanned { msg: "path parameter 'snippet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11742,7 +11769,7 @@ export def "get-v3-projects-id-snippets-snippet-id" [
   if ($snippet_id | is-empty) { error make --unspanned { msg: "path parameter 'snippet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11785,9 +11812,9 @@ export def "put-v3-projects-id-snippets-snippet-id" [
   if ($snippet_id | is-empty) { error make --unspanned { msg: "path parameter 'snippet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}") $auth.query)
   let req_body = {"title": $title, "file_name": $file_name, "code": $code, "visibility_level": $visibility_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -11829,7 +11856,7 @@ export def "get-v3-projects-id-snippets-snippet-id-award-emoji" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11869,9 +11896,9 @@ export def "post-v3-projects-id-snippets-snippet-id-award-emoji" [
   if ($snippet_id | is-empty) { error make --unspanned { msg: "path parameter 'snippet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -11912,7 +11939,7 @@ export def "delete-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11952,7 +11979,7 @@ export def "get-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11995,7 +12022,7 @@ export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12037,9 +12064,9 @@ export def "post-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'note_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), note_id: (encode-path-segment $note_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -12082,7 +12109,7 @@ export def "delete-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12124,7 +12151,7 @@ export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-awa
   if ($award_id | is-empty) { error make --unspanned { msg: "path parameter 'award_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji/{award_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12162,7 +12189,7 @@ export def "get-v3-projects-id-snippets-snippet-id-raw" [
   if ($snippet_id | is-empty) { error make --unspanned { msg: "path parameter 'snippet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), snippet_id: (encode-path-segment $snippet_id)} | format pattern "/v3/projects/{id}/snippets/{snippet_id}/raw") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12198,7 +12225,7 @@ export def "delete-v3-projects-id-star" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/star") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12234,7 +12261,7 @@ export def "post-v3-projects-id-star" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/star") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12279,9 +12306,9 @@ export def "post-v3-projects-id-statuses-sha" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sha: (encode-path-segment $sha)} | format pattern "/v3/projects/{id}/statuses/{sha}") $auth.query)
   let req_body = {"state": $state, "ref": $ref, "target_url": $target_url, "description": $description, "name": $name, "context": $context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -12321,7 +12348,7 @@ export def "get-v3-projects-id-triggers" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/triggers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12357,7 +12384,7 @@ export def "post-v3-projects-id-triggers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/triggers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12395,7 +12422,7 @@ export def "delete-v3-projects-id-triggers-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), token_arg: (encode-path-segment $token_arg)} | format pattern "/v3/projects/{id}/triggers/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12433,7 +12460,7 @@ export def "get-v3-projects-id-triggers-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), token_arg: (encode-path-segment $token_arg)} | format pattern "/v3/projects/{id}/triggers/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12469,7 +12496,7 @@ export def "post-v3-projects-id-unarchive" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/unarchive") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12507,10 +12534,10 @@ export def "post-v3-projects-id-uploads" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/uploads") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -12551,7 +12578,7 @@ export def "get-v3-projects-id-users" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12590,7 +12617,7 @@ export def "get-v3-projects-id-variables" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/variables") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12629,9 +12656,9 @@ export def "post-v3-projects-id-variables" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/variables") $auth.query)
   let req_body = {"key": $key, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -12670,7 +12697,7 @@ export def "delete-v3-projects-id-variables-key" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/v3/projects/{id}/variables/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12708,7 +12735,7 @@ export def "get-v3-projects-id-variables-key" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/v3/projects/{id}/variables/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12748,9 +12775,9 @@ export def "put-v3-projects-id-variables-key" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/v3/projects/{id}/variables/{key}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -12789,7 +12816,7 @@ export def "get-v3-runners" [
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/runners" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12827,7 +12854,7 @@ export def "get-v3-runners-all" [
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/runners/all" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12863,7 +12890,7 @@ export def "delete-v3-runners-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/runners/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12899,7 +12926,7 @@ export def "get-v3-runners-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/runners/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12941,9 +12968,9 @@ export def "put-v3-runners-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/runners/{id}") $auth.query)
   let req_body = {"description": $description, "active": $active, "tag_list": (if ($tag_list | describe | str starts-with "list") { $tag_list | compact | each { into string } | str join "," } else { $tag_list }), "run_untagged": $run_untagged, "locked": $locked} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -12982,9 +13009,9 @@ export def "post-v3-session" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/session" $auth.query)
   let req_body = {"login": $login, "email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -13019,7 +13046,7 @@ export def "get-v3-sidekiq-compound-metrics" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/sidekiq/compound_metrics" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13053,7 +13080,7 @@ export def "get-v3-sidekiq-job-stats" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/sidekiq/job_stats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13087,7 +13114,7 @@ export def "get-v3-sidekiq-process-metrics" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/sidekiq/process_metrics" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13121,7 +13148,7 @@ export def "get-v3-sidekiq-queue-metrics" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/sidekiq/queue_metrics" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13158,7 +13185,7 @@ export def "get-v3-snippets" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/snippets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13197,9 +13224,9 @@ export def "post-v3-snippets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/snippets" $auth.query)
   let req_body = {"title": $title, "file_name": $file_name, "content": $content, "visibility_level": $visibility_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -13237,7 +13264,7 @@ export def "get-v3-snippets-public" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/snippets/public" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13273,7 +13300,7 @@ export def "delete-v3-snippets-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/snippets/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13309,7 +13336,7 @@ export def "get-v3-snippets-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/snippets/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13350,9 +13377,9 @@ export def "put-v3-snippets-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/snippets/{id}") $auth.query)
   let req_body = {"title": $title, "file_name": $file_name, "content": $content, "visibility_level": $visibility_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -13389,7 +13416,7 @@ export def "get-v3-snippets-id-raw" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/snippets/{id}/raw") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13423,7 +13450,7 @@ export def "get-v3-templates-dockerfiles" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/dockerfiles" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13459,7 +13486,7 @@ export def "get-v3-templates-dockerfiles-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/templates/dockerfiles/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13493,7 +13520,7 @@ export def "get-v3-templates-gitignores" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/gitignores" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13529,7 +13556,7 @@ export def "get-v3-templates-gitignores-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/templates/gitignores/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13563,7 +13590,7 @@ export def "get-v3-templates-gitlab-ci-ymls" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/gitlab_ci_ymls" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13599,7 +13626,7 @@ export def "get-v3-templates-gitlab-ci-ymls-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/templates/gitlab_ci_ymls/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13635,7 +13662,7 @@ export def "get-v3-templates-licenses" [
   let qp = [(serialize-qp "popular" $popular "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/templates/licenses" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13671,7 +13698,7 @@ export def "get-v3-templates-licenses-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v3/templates/licenses/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13705,7 +13732,7 @@ export def "delete-v3-todos" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/todos" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13742,7 +13769,7 @@ export def "get-v3-todos" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/todos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13778,7 +13805,7 @@ export def "delete-v3-todos-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/todos/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13812,7 +13839,7 @@ export def "get-v3-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13846,7 +13873,7 @@ export def "get-v3-user-emails" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/emails" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13882,9 +13909,9 @@ export def "post-v3-user-emails" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/emails" $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -13921,7 +13948,7 @@ export def "delete-v3-user-emails-email-id" [
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
   let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/v3/user/emails/{email_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13957,7 +13984,7 @@ export def "get-v3-user-emails-email-id" [
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
   let full_url = (build-url $base ({email_id: (encode-path-segment $email_id)} | format pattern "/v3/user/emails/{email_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13991,7 +14018,7 @@ export def "get-v3-user-keys" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/keys" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14028,9 +14055,9 @@ export def "post-v3-user-keys" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/keys" $auth.query)
   let req_body = {"key": $key, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -14067,7 +14094,7 @@ export def "delete-v3-user-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/v3/user/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14103,7 +14130,7 @@ export def "get-v3-user-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/v3/user/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14145,7 +14172,7 @@ export def "get-v3-users" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "external" $external "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14198,9 +14225,9 @@ export def "post-v3-users" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/users" $auth.query)
   let req_body = {"email": $email, "password": $password, "name": $name, "username": $username, "skype": $skype, "linkedin": $linkedin, "twitter": $twitter, "website_url": $website_url, "organization": $organization, "projects_limit": $projects_limit, "extern_uid": $extern_uid, "provider": $provider, "bio": $bio, "location": $location, "admin": $admin, "can_create_group": $can_create_group, "confirm": $confirm, "external": $external} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -14237,7 +14264,7 @@ export def "delete-v3-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14273,7 +14300,7 @@ export def "get-v3-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14328,9 +14355,9 @@ export def "put-v3-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}") $auth.query)
   let req_body = {"email": $email, "password": $password, "name": $name, "username": $username, "skype": $skype, "linkedin": $linkedin, "twitter": $twitter, "website_url": $website_url, "organization": $organization, "projects_limit": $projects_limit, "extern_uid": $extern_uid, "provider": $provider, "bio": $bio, "location": $location, "admin": $admin, "can_create_group": $can_create_group, "confirm": $confirm, "external": $external} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -14367,7 +14394,7 @@ export def "put-v3-users-id-block" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/block") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14403,7 +14430,7 @@ export def "get-v3-users-id-emails" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/emails") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14441,9 +14468,9 @@ export def "post-v3-users-id-emails" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/emails") $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -14482,7 +14509,7 @@ export def "delete-v3-users-id-emails-email-id" [
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), email_id: (encode-path-segment $email_id)} | format pattern "/v3/users/{id}/emails/{email_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14521,7 +14548,7 @@ export def "get-v3-users-id-events" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14557,7 +14584,7 @@ export def "get-v3-users-id-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14596,9 +14623,9 @@ export def "post-v3-users-id-keys" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/keys") $auth.query)
   let req_body = {"key": $key, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -14637,7 +14664,7 @@ export def "delete-v3-users-id-keys-key-id" [
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), key_id: (encode-path-segment $key_id)} | format pattern "/v3/users/{id}/keys/{key_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14673,7 +14700,7 @@ export def "put-v3-users-id-unblock" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/users/{id}/unblock") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14707,7 +14734,7 @@ export def "get-v3-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/version" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

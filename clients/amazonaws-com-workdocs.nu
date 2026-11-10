@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -213,9 +240,9 @@ export def "abort-document-version-upload" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'VersionId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -264,9 +291,9 @@ export def "get-document-version" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "includeCustomMetadata" $include_custom_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -314,11 +341,11 @@ export def "update-document-version" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'VersionId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}") $auth.query)
   let req_body = {"VersionStatus": $version_status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -362,9 +389,9 @@ export def "activate-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/v1/users/{user_id}/activation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -408,9 +435,9 @@ export def "deactivate-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/v1/users/{user_id}/activation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -457,11 +484,11 @@ export def "add-resource-permissions" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/permissions") $auth.query)
   let req_body = {"Principals": $principals, "NotificationOptions": $notification_options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -494,8 +521,8 @@ export def "describe-resource-permissions" [
   --principal-id: string # The ID of the principal to filter permissions by.
   --limit: int # The maximum number of items to return with this call.
   --marker: string # The marker for the next set of results. (You received this marker from a previous call)
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -508,16 +535,16 @@ export def "describe-resource-permissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
-  let qp = [(serialize-qp "principalId" $principal_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "principalId" $principal_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/permissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"principalId": $principal_id, "limit": $limit, "marker": $marker, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"principalId": $principal_id, "limit": $limit, "marker": $marker, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -557,9 +584,9 @@ export def "remove-all-resource-permissions" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -611,11 +638,11 @@ export def "create-comment" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'VersionId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}/comment") $auth.query)
   let req_body = {"ParentId": $parent_id, "ThreadId": $thread_id, "Text": $text, "Visibility": $visibility, "NotifyCollaborators": $notify_collaborators} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -663,11 +690,11 @@ export def "create-custom-metadata" [
   let qp = [(serialize-qp "versionid" $versionid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/customMetadata") $qp $auth.query)
   let req_body = {"CustomMetadata": $custom_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -715,9 +742,9 @@ export def "delete-custom-metadata" [
   let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "keys" $keys "multi") (serialize-qp "deleteAll" $delete_all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/customMetadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -762,11 +789,11 @@ export def "create-folder" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/folders" $auth.query)
   let req_body = {"Name": $name, "ParentFolderId": $parent_folder_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -812,11 +839,11 @@ export def "create-labels" [
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/labels") $auth.query)
   let req_body = {"Labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -863,9 +890,9 @@ export def "delete-labels" [
   let qp = [(serialize-qp "labels" $labels "multi") (serialize-qp "deleteAll" $delete_all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/api/v1/resources/{resource_id}/labels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -912,11 +939,11 @@ export def "create-notification-subscription" [
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'OrganizationId' must be non-empty" } }
   let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/api/v1/organizations/{organization_id}/subscriptions") $auth.query)
   let req_body = {"Endpoint": $endpoint, "Protocol": $protocol, "SubscriptionType": $subscription_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -948,8 +975,8 @@ export def "describe-notification-subscriptions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --limit: int # The maximum number of items to return with this call.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -961,16 +988,16 @@ export def "describe-notification-subscriptions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'OrganizationId' must be non-empty" } }
-  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id)} | format pattern "/api/v1/organizations/{organization_id}/subscriptions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"marker": $marker, "limit": $limit, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"marker": $marker, "limit": $limit, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1017,11 +1044,11 @@ export def "create-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users" $auth.query)
   let req_body = {"OrganizationId": $organization_id, "Username": $username, "EmailAddress": $email_address, "GivenName": $given_name, "Surname": $surname, "Password": $password, "TimeZoneId": $time_zone_id, "StorageRule": $storage_rule} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1059,8 +1086,8 @@ export def "describe-users" [
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --limit: int # The maximum number of items to return.
   --fields: string # A comma-separated list of values. Specify "STORAGE_METADATA" to include the user storage quota and utilization information.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1072,16 +1099,16 @@ export def "describe-users" [
 ]: nothing -> oneof<record<Users: table<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record>, TotalNumberOfUsers: int, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "userIds" $user_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "userIds" $user_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"organizationId": $organization_id, "userIds": $user_ids, "query": $query, "include": $include, "order": $order, "sort": $sort, "marker": $marker, "limit": $limit, "fields": $fields, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"organizationId": $organization_id, "userIds": $user_ids, "query": $query, "include": $include, "order": $order, "sort": $sort, "marker": $marker, "limit": $limit, "fields": $fields, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1125,9 +1152,9 @@ export def "delete-comment" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'CommentId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}/comment/{comment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1171,9 +1198,9 @@ export def "delete-document" [
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documents/{document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1219,9 +1246,9 @@ export def "get-document" [
   let qp = [(serialize-qp "includeCustomMetadata" $include_custom_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documents/{document_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1269,11 +1296,11 @@ export def "update-document" [
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documents/{document_id}") $auth.query)
   let req_body = {"Name": $name, "ParentFolderId": $parent_folder_id, "ResourceState": $resource_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1322,9 +1349,9 @@ export def "delete-document-version" [
   let qp = [(serialize-qp "deletePriorVersions" $delete_prior_versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documentVersions/{document_id}/versions/{version_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1368,9 +1395,9 @@ export def "delete-folder" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1416,9 +1443,9 @@ export def "get-folder" [
   let qp = [(serialize-qp "includeCustomMetadata" $include_custom_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1466,11 +1493,11 @@ export def "update-folder" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}") $auth.query)
   let req_body = {"Name": $name, "ParentFolderId": $parent_folder_id, "ResourceState": $resource_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1514,9 +1541,9 @@ export def "delete-folder-contents" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}/contents") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1552,8 +1579,8 @@ export def "describe-folder-contents" [
   --marker: string # The marker for the next set of results. This marker was received from a previous call.
   --type: string@type-completer # The type of items.
   --include: string # The contents to include. Specify "INITIALIZED" to include initialized documents.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1566,16 +1593,16 @@ export def "describe-folder-contents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
-  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}/contents") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $sort, "order": $order, "limit": $limit, "marker": $marker, "type": $type, "include": $include, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"sort": $sort, "order": $order, "limit": $limit, "marker": $marker, "type": $type, "include": $include, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1616,9 +1643,9 @@ export def "delete-notification-subscription" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'SubscriptionId' must be non-empty" } }
   let full_url = (build-url $base ({organization_id: (encode-path-segment $organization_id), subscription_id: (encode-path-segment $subscription_id)} | format pattern "/api/v1/organizations/{organization_id}/subscriptions/{subscription_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1662,9 +1689,9 @@ export def "delete-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/v1/users/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1716,11 +1743,11 @@ export def "update-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/v1/users/{user_id}") $auth.query)
   let req_body = {"GivenName": $given_name, "Surname": $surname, "Type": $type, "StorageRule": $storage_rule, "TimeZoneId": $time_zone_id, "Locale": $locale, "GrantPoweruserPrivileges": $grant_poweruser_privileges} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1758,8 +1785,8 @@ export def "describe-activities" [
   --include-indirect-activities: oneof<nothing, bool> # Includes indirect activities. An indirect activity results from a direct activity performed on a parent resource. For example, sharing a parent folder (the direct activity) shares all of the subfolders and documents within the parent folder (the indirect activity).
   --limit: int # The maximum number of items to return.
   --marker: string # The marker for the next set of results.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1771,16 +1798,16 @@ export def "describe-activities" [
 ]: nothing -> oneof<record<UserActivities: table<Type: string, TimeStamp: string, IsIndirectActivity: bool, OrganizationId: string, Initiator: record, Participants: record, ResourceMetadata: record, OriginalParent: record, CommentMetadata: record>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "activityTypes" $activity_types "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "includeIndirectActivities" $include_indirect_activities "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "activityTypes" $activity_types "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "includeIndirectActivities" $include_indirect_activities "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/activities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"startTime": $start_time, "endTime": $end_time, "organizationId": $organization_id, "activityTypes": $activity_types, "resourceId": $resource_id, "userId": $user_id, "includeIndirectActivities": $include_indirect_activities, "limit": $limit, "marker": $marker, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"startTime": $start_time, "endTime": $end_time, "organizationId": $organization_id, "activityTypes": $activity_types, "resourceId": $resource_id, "userId": $user_id, "includeIndirectActivities": $include_indirect_activities, "limit": $limit, "marker": $marker, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1809,8 +1836,8 @@ export def "describe-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return.
   --marker: string # The marker for the next set of results. This marker was received from a previous call.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1824,16 +1851,16 @@ export def "describe-comments" [
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'VersionId' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), version_id: (encode-path-segment $version_id)} | format pattern "/api/v1/documents/{document_id}/versions/{version_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "marker": $marker, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"limit": $limit, "marker": $marker, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1863,8 +1890,8 @@ export def "describe-document-versions" [
   --limit: int # The maximum number of versions to return with this call.
   --include: string # A comma-separated list of values. Specify "INITIALIZED" to include incomplete versions.
   --fields: string # Specify "SOURCE" to include initialized versions and a URL for the source document.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1877,16 +1904,16 @@ export def "describe-document-versions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
-  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documents/{document_id}/versions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"marker": $marker, "limit": $limit, "include": $include, "fields": $fields, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"marker": $marker, "limit": $limit, "include": $include, "fields": $fields, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1915,8 +1942,8 @@ export def "describe-groups" [
   --organization-id: string # The ID of the organization.
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
   --limit: int # The maximum number of items to return with this call.
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1929,16 +1956,16 @@ export def "describe-groups" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_query == null) { error make --unspanned { msg: "required query parameter 'searchQuery' missing: pass --search-query" } }
-  let qp = [(serialize-qp "searchQuery" $search_query "scalar") (serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchQuery" $search_query "scalar") (serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"searchQuery": $search_query, "organizationId": $organization_id, "marker": $marker, "limit": $limit, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"searchQuery": $search_query, "organizationId": $organization_id, "marker": $marker, "limit": $limit, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1965,8 +1992,8 @@ export def "describe-root-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return.
   --marker: string # The marker for the next set of results. (You received this marker from a previous call.)
-  --limit-2: string # Pagination limit (disambiguated-2)
-  --marker-2: string # Pagination token (disambiguated-2)
+  --qp-limit: string # Pagination limit (spec name: Limit)
+  --qp-marker: string # Pagination token (spec name: Marker)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -1979,16 +2006,16 @@ export def "describe-root-folders" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authentication == null) { error make --unspanned { msg: "required header parameter 'Authentication' missing: pass --authentication" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $qp_limit "scalar") (serialize-qp "Marker" $qp_marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/me/root" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "marker": $marker, "Limit": $limit_2, "Marker": $marker_2} | compact)
+    query: ({"limit": $limit, "marker": $marker, "Limit": $qp_limit, "Marker": $qp_marker} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2027,9 +2054,9 @@ export def "get-current-user" [
   if ($authentication == null) { error make --unspanned { msg: "required header parameter 'Authentication' missing: pass --authentication" } }
   let full_url = (build-url $base "/api/v1/me" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2077,9 +2104,9 @@ export def "get-document-path" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documents/{document_id}/path") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2127,9 +2154,9 @@ export def "get-folder-path" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v1/folders/{folder_id}/path") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2176,9 +2203,9 @@ export def "get-resources" [
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "collectionType" $collection_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/resources" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2228,11 +2255,11 @@ export def "initiate-document-version-upload" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/documents" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "ContentCreatedTimestamp": $content_created_timestamp, "ContentModifiedTimestamp": $content_modified_timestamp, "ContentType": $content_type, "DocumentSizeInBytes": $document_size_in_bytes, "ParentFolderId": $parent_folder_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2280,9 +2307,9 @@ export def "remove-resource-permission" [
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id), principal_id: (encode-path-segment $principal_id)} | format pattern "/api/v1/resources/{resource_id}/permissions/{principal_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2326,9 +2353,9 @@ export def "restore-document-versions" [
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/api/v1/documentVersions/restore/{document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2373,20 +2400,20 @@ export def "search-resources" [
   --additional-response-fields: list<string> # A list of attributes to include in the response. Used to request fields that are not normally returned in a standard response.
   --filters: record # Filters results based on entity metadata. — shape: {TextLocales?: list<string>, ContentCategories?: list<string>, ResourceTypes?: list<string>, Labels?: list<string>, Principals?: list, AncestorIds?: list<string>, SearchCollectionTypes?: list<string>, SizeRange?: record, CreatedRange?: record, ModifiedRange?: record}
   --order-by: list # Order by results in one or more categories. — item shape: {Field?: "RELEVANCE"|"NAME"|"SIZE"|"CREATED_TIMESTAMP"|"MODIFIED_TIMESTAMP", Order?: "ASC"|"DESC"}
-  --limit-body: int # Max results count per page. (body field)
-  --marker-body: string # The marker for the next set of results. (body field)
+  --body-limit: int # Max results count per page. (spec name: Limit)
+  --body-marker: string # The marker for the next set of results. (spec name: Marker)
 ]: any -> oneof<record<Items: table<ResourceType: string, WebUrl: string, DocumentMetadata: record, FolderMetadata: record, CommentMetadata: record, DocumentVersionMetadata: record>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search" $qp $auth.query)
-  let req_body = {"QueryText": $query_text, "QueryScopes": $query_scopes, "OrganizationId": $organization_id, "AdditionalResponseFields": $additional_response_fields, "Filters": $filters, "OrderBy": $order_by, "Limit": $limit_body, "Marker": $marker_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"QueryText": $query_text, "QueryScopes": $query_scopes, "OrganizationId": $organization_id, "AdditionalResponseFields": $additional_response_fields, "Filters": $filters, "OrderBy": $order_by, "Limit": $body_limit, "Marker": $body_marker} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Authentication": $authentication} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

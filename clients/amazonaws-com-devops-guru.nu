@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,11 +221,11 @@ export def "add-notification-channel" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels" $auth.query)
   let req_body = {"Config": $config} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -235,19 +262,19 @@ export def "list-notification-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
 ]: any -> oneof<record<Channels: table<Id: string, Config: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -290,9 +317,9 @@ export def "delete-insight" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/insights/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -337,9 +364,9 @@ export def "describe-insight" [
   let qp = [(serialize-qp "AccountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/insights/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -380,9 +407,9 @@ export def "describe-account-health" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/health" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -426,11 +453,11 @@ export def "describe-account-overview" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/overview" $auth.query)
   let req_body = {"FromTime": $from_time, "ToTime": $to_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -475,9 +502,9 @@ export def "describe-anomaly" [
   let qp = [(serialize-qp "AccountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/anomalies/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -518,9 +545,9 @@ export def "describe-event-sources-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-sources" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -563,11 +590,11 @@ export def "update-event-sources-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event-sources" $auth.query)
   let req_body = {"EventSources": $event_sources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -610,11 +637,11 @@ export def "describe-feedback" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feedback" $auth.query)
   let req_body = {"InsightId": $insight_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -657,11 +684,11 @@ export def "put-feedback" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/feedback" $auth.query)
   let req_body = {"InsightFeedback": $insight_feedback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -705,11 +732,11 @@ export def "describe-organization-health" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/health" $auth.query)
   let req_body = {"AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -755,11 +782,11 @@ export def "describe-organization-overview" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organization/overview" $auth.query)
   let req_body = {"FromTime": $from_time, "ToTime": $to_time, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -799,7 +826,7 @@ export def "describe-organization-resource-collection-health" [
   organization_resource_collection_type: string@organization-resource-collection-type-completer # An Amazon Web Services resource collection type. This type specifies how analyzed Amazon Web Services resources are defined. The two types of Amazon Web Services resource collections supported are Amazon Web Services CloudFormation stacks and Amazon Web Services resources that contain the same Amazon Web Services tag. DevOps Guru can be configured to analyze the Amazon Web Services resources that are defined in the stacks or that are tagged using the same tag key. You can specify up to 500 Amazon Web Services CloudFormation stacks.
   --account-ids: list<string> # The ID of the Amazon Web Services account.
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.
 ]: any -> oneof<record<CloudFormation: table<StackName: string, Insight: record, AnalyzedResourceCount: int>, Service: table<ServiceName: string, Insight: record, AnalyzedResourceCount: int>, Account: table<AccountId: string, Insight: record>, NextToken: string, Tags: table<AppBoundaryKey: string, TagValue: string, Insight: record, AnalyzedResourceCount: int>>, string, nothing> {
   let input = $in
@@ -807,12 +834,12 @@ export def "describe-organization-resource-collection-health" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/health/resource-collection" $qp $auth.query)
-  let req_body = {"OrganizationResourceCollectionType": $organization_resource_collection_type, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $next_token_body, "MaxResults": $max_results} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationResourceCollectionType": $organization_resource_collection_type, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $body_next_token, "MaxResults": $max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -857,9 +884,9 @@ export def "describe-resource-collection-health" [
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_collection_type: (encode-path-segment $resource_collection_type)} | format pattern "/accounts/health/resource-collection/{resource_collection_type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -900,9 +927,9 @@ export def "describe-service-integration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-integrations" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -945,11 +972,11 @@ export def "update-service-integration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-integrations" $auth.query)
   let req_body = {"ServiceIntegration": $service_integration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -992,9 +1019,9 @@ export def "get-cost-estimation" [
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cost-estimation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1038,11 +1065,11 @@ export def "start-cost-estimation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cost-estimation" $auth.query)
   let req_body = {"ResourceCollection": $resource_collection, "ClientToken": $client_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1087,9 +1114,9 @@ export def "get-resource-collection" [
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_collection_type: (encode-path-segment $resource_collection_type)} | format pattern "/resource-collections/{resource_collection_type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1129,8 +1156,8 @@ export def "list-anomalies-for-insight" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --start-time-range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   --account-id: string # The ID of the Amazon Web Services account.
   --filters: record # Specifies one or more service names that are used to list anomalies. — shape: {ServiceCollection?: record}
 ]: any -> oneof<record<ProactiveAnomalies: table<Id: string, Severity: string, Status: string, UpdateTime: string, AnomalyTimeRange: record, AnomalyReportedTimeRange: record, PredictionTimeRange: record, SourceDetails: record, AssociatedInsightId: string, ResourceCollection: record, Limit: float, SourceMetadata: record, AnomalyResources: list, Description: string>, ReactiveAnomalies: table<Id: string, Severity: string, Status: string, AnomalyTimeRange: record, AnomalyReportedTimeRange: record, SourceDetails: record, AssociatedInsightId: string, ResourceCollection: record, Type: string, Name: string, Description: string, CausalAnomalyId: string, AnomalyResources: list>, NextToken: string>, string, nothing> {
@@ -1140,12 +1167,12 @@ export def "list-anomalies-for-insight" [
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'InsightId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/anomalies/insight/{insight_id}") $qp $auth.query)
-  let req_body = {"StartTimeRange": $start_time_range, "MaxResults": $max_results_body, "NextToken": $next_token_body, "AccountId": $account_id, "Filters": $filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"StartTimeRange": $start_time_range, "MaxResults": $body_max_results, "NextToken": $body_next_token, "AccountId": $account_id, "Filters": $filters} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1184,20 +1211,20 @@ export def "list-anomalous-log-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   insight_id: string # The ID of the insight containing the log groups.
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
 ]: any -> oneof<record<InsightId: string, AnomalousLogGroups: table<LogGroupName: string, ImpactStartTime: string, ImpactEndTime: string, NumberOfLogLinesScanned: int, LogAnomalyShowcases: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/list-log-anomalies" $qp $auth.query)
-  let req_body = {"InsightId": $insight_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"InsightId": $insight_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1236,8 +1263,8 @@ export def "list-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {InsightId?: string, EventTimeRange?: record, EventClass?: "INFRASTRUCTURE"|"DEPLOYMENT"|"SECURITY_CHANGE"|"CONFIG_CHANGE"|"SCHEMA_CHANGE", EventSource?: string, DataSource?: "AWS_CLOUD_TRAIL"|"AWS_CODE_DEPLOY", ResourceCollection?: record}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   --account-id: string # The ID of the Amazon Web Services account.
 ]: any -> oneof<record<Events: table<ResourceCollection: record, Id: string, Time: string, EventSource: string, Name: string, DataSource: string, EventClass: string, Resources: list>, NextToken: string>, string, nothing> {
   let input = $in
@@ -1245,12 +1272,12 @@ export def "list-events" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
-  let req_body = {"Filters": $filters, "MaxResults": $max_results_body, "NextToken": $next_token_body, "AccountId": $account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "MaxResults": $body_max_results, "NextToken": $body_next_token, "AccountId": $account_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1289,20 +1316,20 @@ export def "list-insights" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: record, Closed?: record, Any?: record}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
 ]: any -> oneof<record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insights" $qp $auth.query)
-  let req_body = {"StatusFilter": $status_filter, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"StatusFilter": $status_filter, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1341,20 +1368,20 @@ export def "list-monitored-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --filters: record # Filters to determine which monitored resources you want to retrieve. You can filter by resource type or resource permission status. — shape: {ResourcePermission?: "FULL_PERMISSION"|"MISSING_PERMISSION", ResourceTypeFilters?: list<string>}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
 ]: any -> oneof<record<MonitoredResourceIdentifiers: table<MonitoredResourceName: string, Type: string, ResourcePermission: string, LastUpdated: string, ResourceCollection: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/monitoredResources" $qp $auth.query)
-  let req_body = {"Filters": $filters, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1393,22 +1420,22 @@ export def "list-organization-insights" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   status_filter: record # A filter used by ListInsights to specify which insights to return. — shape: {Ongoing?: record, Closed?: record, Any?: record}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
   --account-ids: list<string> # The ID of the Amazon Web Services account.
   --organizational-unit-ids: list<string> # The ID of the organizational unit.
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
 ]: any -> oneof<record<ProactiveInsights: table<Id: string, AccountId: string, OrganizationalUnitId: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record>, ReactiveInsights: table<Id: string, AccountId: string, OrganizationalUnitId: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/insights" $qp $auth.query)
-  let req_body = {"StatusFilter": $status_filter, "MaxResults": $max_results_body, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"StatusFilter": $status_filter, "MaxResults": $body_max_results, "AccountIds": $account_ids, "OrganizationalUnitIds": $organizational_unit_ids, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1446,7 +1473,7 @@ export def "list-recommendations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   insight_id: string # The ID of the requested insight.
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   --locale: string@locale-completer # A locale that specifies the language to use for recommendations.
   --account-id: string # The ID of the Amazon Web Services account.
 ]: any -> oneof<record<Recommendations: table<Description: string, Link: string, Name: string, Reason: string, RelatedEvents: list, RelatedAnomalies: list, Category: string>, NextToken: string>, string, nothing> {
@@ -1455,12 +1482,12 @@ export def "list-recommendations" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recommendations" $qp $auth.query)
-  let req_body = {"InsightId": $insight_id, "NextToken": $next_token_body, "Locale": $locale, "AccountId": $account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"InsightId": $insight_id, "NextToken": $body_next_token, "Locale": $locale, "AccountId": $account_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1503,9 +1530,9 @@ export def "remove-notification-channel" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/channels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1545,8 +1572,8 @@ export def "search-insights" [
   --x-amz-signed-headers: string
   start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
   --filters: record # Specifies values used to filter responses when searching for insights. You can use a ResourceCollection, ServiceCollection, array of severities, and an array of status values. Each filter type contains one or more values to search for. If you specify multiple filter types, the filter types are joined with an AND, and the request returns only results that match all of the specified filters. — shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
 ]: any -> oneof<record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string>, string, nothing> {
   let input = $in
@@ -1554,12 +1581,12 @@ export def "search-insights" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insights/search" $qp $auth.query)
-  let req_body = {"StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $body_max_results, "NextToken": $body_next_token, "Type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1600,8 +1627,8 @@ export def "search-organization-insights" [
   account_ids: list<string> # The ID of the Amazon Web Services account.
   start_time_range: record # A time range used to specify when the behavior of an insight or anomaly started. — shape: {FromTime?: string, ToTime?: string}
   --filters: record # Filters you can use to specify which events are returned when ListEvents is called. — shape: {Severities?: list<string>, Statuses?: list<string>, ResourceCollection?: record, ServiceCollection?: record}
-  --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
-  --next-token-body: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (body field)
+  --body-max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (spec name: MaxResults)
+  --body-next-token: string # The pagination token to use to retrieve the next page of results for this operation. If this value is null, it retrieves the first page. (spec name: NextToken)
   type: string@type-completer # The type of insights you are searching for (REACTIVE or PROACTIVE).
 ]: any -> oneof<record<ProactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, PredictionTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, ReactiveInsights: table<Id: string, Name: string, Severity: string, Status: string, InsightTimeRange: record, ResourceCollection: record, ServiceCollection: record, AssociatedResourceArns: list>, NextToken: string>, string, nothing> {
   let input = $in
@@ -1609,12 +1636,12 @@ export def "search-organization-insights" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organization/insights/search" $qp $auth.query)
-  let req_body = {"AccountIds": $account_ids, "StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $max_results_body, "NextToken": $next_token_body, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountIds": $account_ids, "StartTimeRange": $start_time_range, "Filters": $filters, "MaxResults": $body_max_results, "NextToken": $body_next_token, "Type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1658,11 +1685,11 @@ export def "update-resource-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resource-collections" $auth.query)
   let req_body = {"Action": $action, "ResourceCollection": $resource_collection} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

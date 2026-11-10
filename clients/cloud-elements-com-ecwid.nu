@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -235,11 +262,11 @@ export def "create-bulk-download" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/bulk/download" $auth.query)
   let req_body = {"apiLimit": $api_limit, "continueFromJobId": $continue_from_job_id, "docsHubDetails": $docs_hub_details, "filterDateField": $filter_date_field, "filterNulls": $filter_nulls, "format": $format, "from": $from, "limit": $limit, "notificationUrl": $notification_url, "objectName": $object_name, "pageSize": $page_size, "query": $query, "selectFields": $select_fields, "to": $to, "where": $where} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -280,9 +307,9 @@ export def "get-bulk-jobs" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/jobs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -326,12 +353,12 @@ export def "create-bulk-query" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lastRunDate" $last_run_date "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bulk/query" $qp $auth.query)
   let req_body = {"metaData": $meta_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -370,9 +397,9 @@ export def "replace-bulk-cancel" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -414,9 +441,9 @@ export def "get-bulk-errors" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/errors") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -454,9 +481,9 @@ export def "get-bulk-status" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bulk/{id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -497,9 +524,9 @@ export def "get-bulk-by-object-name" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{id}/{object_name}") $auth.query)
   let accept_val = ($accept | default "text/csv")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -541,12 +568,12 @@ export def "create-bulk-by-object-name" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/bulk/{object_name}") $auth.query)
   let req_body = {"metaData": $meta_data, "file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Async-Callback-Url": $elements_async_callback_url} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -588,9 +615,9 @@ export def "get-customers" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -635,11 +662,11 @@ export def "create-customer" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/customers" $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -677,9 +704,9 @@ export def "delete-customer-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -717,9 +744,9 @@ export def "get-customer-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -766,11 +793,11 @@ export def "update-customer-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let req_body = {"billingPerson": $billing_person, "customerGroupId": $customer_group_id, "email": $email, "password": $password, "shippingAddresses": $shipping_addresses, "taxExempt": $tax_exempt, "taxId": $tax_id, "taxIdValid": $tax_id_valid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -812,9 +839,9 @@ export def "get-customers-orders" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/orders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -851,9 +878,9 @@ export def "get-objects" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/objects" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -896,9 +923,9 @@ export def "get-objects-object-name-docs" [
   let qp = [(serialize-qp "discovery" $discovery "scalar") (serialize-qp "resolveReferences" $resolve_references "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/docs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -937,9 +964,9 @@ export def "get-objects-object-name-metadata" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/objects/{object_name}/metadata") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Elements-Version": $elements_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -980,9 +1007,9 @@ export def "get-orders" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1048,11 +1075,11 @@ export def "create-order" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/orders" $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentMethod": $payment_method, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1090,9 +1117,9 @@ export def "delete-order-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1130,9 +1157,9 @@ export def "get-order-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1202,11 +1229,11 @@ export def "update-order-by-id" [
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}") $qp $auth.query)
   let req_body = {"billingPerson": $billing_person, "couponDiscount": $coupon_discount, "customerId": $customer_id, "customerTaxExempt": $customer_tax_exempt, "customerTaxId": $customer_tax_id, "customerTaxIdValid": $customer_tax_id_valid, "discount": $discount, "email": $email, "fulfillmentStatus": $fulfillment_status, "globalReferer": $global_referer, "hidden": $hidden, "items": $items, "membershipBasedDiscount": $membership_based_discount, "orderComments": $order_comments, "paymentModule": $payment_module, "paymentStatus": $payment_status, "privateAdminNotes": $private_admin_notes, "refererUrl": $referer_url, "reversedTaxApplied": $reversed_tax_applied, "sample": $sample, "shippingMethod": $shipping_method, "shippingOption": $shipping_option, "shippingPerson": $shipping_person, "subtotal": $subtotal, "tax": $tax, "taxesOnShipping": $taxes_on_shipping, "total": $total, "totalAndMembershipBasedDiscount": $total_and_membership_based_discount, "volumeDiscount": $volume_discount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1248,9 +1275,9 @@ export def "get-orders-payments" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/payments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1292,9 +1319,9 @@ export def "get-orders-refunds" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/orders/{order_id}/refunds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1330,9 +1357,9 @@ export def "get-ping" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/ping" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1373,9 +1400,9 @@ export def "get-products" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1443,11 +1470,11 @@ export def "create-product" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base "/products" $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "created": $created, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "favorites": $favorites, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1485,9 +1512,9 @@ export def "delete-product-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1525,9 +1552,9 @@ export def "get-product-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1595,11 +1622,11 @@ export def "update-product-by-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let req_body = {"attributes": $attributes, "categoryIds": $category_ids, "compareAtPrice": $compare_at_price, "compareToPrice": $compare_to_price, "defaultCategoryId": $default_category_id, "description": $description, "dimensions": $dimensions, "enabled": $enabled, "fixedShippingRate": $fixed_shipping_rate, "fixedShippingRateOnly": $fixed_shipping_rate_only, "galleryImages": $gallery_images, "googleItemCondition": $google_item_condition, "isShippingRequired": $is_shipping_required, "name": $name, "options": $options, "price": $price, "productClassId": $product_class_id, "quantity": $quantity, "relatedProducts": $related_products, "seoDescription": $seo_description, "seoTitle": $seo_title, "shipping": $shipping, "showOnFrontpage": $show_on_frontpage, "sku": $sku, "tax": $tax, "taxes": $taxes, "warningLimit": $warning_limit, "weight": $weight, "wholesalePrices": $wholesale_prices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1642,9 +1669,9 @@ export def "get-by-object-name" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1684,11 +1711,11 @@ export def "create-by-object-name" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name)} | format pattern "/{object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1728,9 +1755,9 @@ export def "delete-object-name-by-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1771,9 +1798,9 @@ export def "get-object-name-by-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1815,11 +1842,11 @@ export def "update-object-name-by-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1861,11 +1888,11 @@ export def "replace-object-name-by-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id)} | format pattern "/{object_name}/{object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1912,9 +1939,9 @@ export def "get-object-name-by-child-object-name" [
   let qp = [(serialize-qp "where" $where "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "nextPage" $next_page "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1958,11 +1985,11 @@ export def "create-object-name-by-child-object-name" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name)} | format pattern "/{object_name}/{object_id}/{child_object_name}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2006,9 +2033,9 @@ export def "delete-object-name-by-child-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2052,9 +2079,9 @@ export def "get-object-name-by-child-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2100,11 +2127,11 @@ export def "update-object-name-by-child-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -2150,11 +2177,11 @@ export def "replace-object-name-by-child-object-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({object_name: (encode-path-segment $object_name), object_id: (encode-path-segment $object_id), child_object_name: (encode-path-segment $child_object_name), child_object_id: (encode-path-segment $child_object_id)} | format pattern "/{object_name}/{object_id}/{child_object_name}/{child_object_id}") $auth.query)
   let req_body = {"objectField": $object_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -179,7 +206,7 @@ export def "find-admin-divisions-using-get" [
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/adminDivisions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -218,7 +245,7 @@ export def "get-admin-division-using-get" [
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -272,7 +299,7 @@ export def "find-cities-near-admin-division-using-get" [
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -325,7 +352,7 @@ export def "find-divisions-near-admin-division-using-get" [
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({division_id: (encode-path-segment $division_id)} | format pattern "/geo/adminDivisions/{division_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -378,7 +405,7 @@ export def "find-cities-using-get" [
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/cities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -417,7 +444,7 @@ export def "get-city-using-get" [
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -453,7 +480,7 @@ export def "get-city-date-time-using-get" [
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/dateTime") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -493,7 +520,7 @@ export def "get-city-distance-using-get" [
   let qp = [(serialize-qp "toCityId" $to_city_id "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/distance") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -532,7 +559,7 @@ export def "get-city-located-in-using-get" [
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/locatedIn") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -586,7 +613,7 @@ export def "find-cities-near-city-using-get" [
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -622,7 +649,7 @@ export def "get-city-time-using-get" [
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'cityId' must be non-empty" } }
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/geo/cities/{city_id}/time") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -666,7 +693,7 @@ export def "get-countries-using-get" [
   let qp = [(serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geo/countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -705,7 +732,7 @@ export def "get-country-using-get" [
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -750,7 +777,7 @@ export def "get-regions-using-get" [
   let qp = [(serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id)} | format pattern "/geo/countries/{country_id}/regions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -791,7 +818,7 @@ export def "get-region-using-get" [
   let qp = [(serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "languageCode" $language_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -842,7 +869,7 @@ export def "find-region-divisions-using-get" [
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/adminDivisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -894,7 +921,7 @@ export def "find-region-cities-using-get" [
   let qp = [(serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_id: (encode-path-segment $country_id), region_code: (encode-path-segment $region_code)} | format pattern "/geo/countries/{country_id}/regions/{region_code}/cities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -948,7 +975,7 @@ export def "find-cities-near-location-using-get" [
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyCities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1001,7 +1028,7 @@ export def "find-divisions-near-location-using-get" [
   let qp = [(serialize-qp "radius" $radius "scalar") (serialize-qp "distanceUnit" $distance_unit "scalar") (serialize-qp "countryIds" $country_ids "scalar") (serialize-qp "excludedCountryIds" $excluded_country_ids "scalar") (serialize-qp "minPopulation" $min_population "scalar") (serialize-qp "maxPopulation" $max_population "scalar") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "namePrefixDefaultLangResults" $name_prefix_default_lang_results "scalar") (serialize-qp "timeZoneIds" $time_zone_ids "scalar") (serialize-qp "asciiMode" $ascii_mode "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/geo/locations/{location_id}/nearbyDivisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1041,7 +1068,7 @@ export def "get-currencies-using-get" [
   let qp = [(serialize-qp "countryId" $country_id "scalar") (serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locale/currencies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1079,7 +1106,7 @@ export def "get-languages-using-get" [
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locale/languages" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1117,7 +1144,7 @@ export def "get-locales-using-get" [
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locale/locales" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,7 +1182,7 @@ export def "get-timezones-using-get" [
   let qp = [(serialize-qp "hateoasMode" $hateoas_mode "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locale/timezones" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1191,7 +1218,7 @@ export def "get-time-zone-using-get" [
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
   let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1227,7 +1254,7 @@ export def "get-time-zone-date-time-using-get" [
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
   let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/dateTime") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1263,7 +1290,7 @@ export def "get-time-zone-time-using-get" [
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
   let full_url = (build-url $base ({zone_id: (encode-path-segment $zone_id)} | format pattern "/locale/timezones/{zone_id}/time") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

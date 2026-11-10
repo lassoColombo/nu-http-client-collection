@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -213,7 +240,7 @@ export def "get-balance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/balance" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -255,7 +282,7 @@ export def "get-statistics" [
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "userEmailAddress" $user_email_address "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "includeRefundedAndOptout" $include_refunded_and_optout "scalar") (serialize-qp "calculateCreditValue" $calculate_credit_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/account/statistics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -294,9 +321,9 @@ export def "transfer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/transfer" $auth.query)
   let req_body = {"numberOfCreditsToTransfer": $number_of_credits_to_transfer, "transferFromEmailAddress": $transfer_from_email_address, "transferToEmailAddress": $transfer_to_email_address} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -334,7 +361,7 @@ export def "search" [
   let qp = [(serialize-qp "searchEmail" $search_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/account/user" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -377,9 +404,9 @@ export def "put-api-rest-v1-account-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/account/user" $auth.query)
   let req_body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -416,7 +443,7 @@ export def "get-user" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/rest/v1/account/user/{user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -453,7 +480,7 @@ export def "post-api-rest-v1-account-user-user-id" [
   --first-name: string
   --last-name: string
   --password: string
-  --body-user-id: int # format: int64
+  --body-user-id: int # format: int64 (spec name: userId)
 ]: any -> oneof<record<company: string, contactNumber: string, creditBalance: float, emailAddress: string, firstName: string, lastName: string, password: string, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
@@ -461,9 +488,9 @@ export def "post-api-rest-v1-account-user-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/rest/v1/account/user/{user_id}") $auth.query)
   let req_body = {"company": $company, "contactNumber": $contact_number, "creditBalance": $credit_balance, "emailAddress": $email_address, "firstName": $first_name, "lastName": $last_name, "password": $password, "userId": $body_user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -497,7 +524,7 @@ export def "get-api-rest-v1-contacts-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/contacts/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -538,9 +565,9 @@ export def "post-api-rest-v1-contacts-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/contacts/create" $auth.query)
   let req_body = {"contactId": $contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -576,7 +603,7 @@ export def "delete-api-rest-v1-contacts-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -612,7 +639,7 @@ export def "get-api-rest-v1-contacts-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -642,7 +669,7 @@ export def "post-api-rest-v1-contacts-contact-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body-contact-id: string
+  --body-contact-id: string # (spec name: contactId)
   --contact-number: string
   --first-name: string
   --last-name: string
@@ -655,9 +682,9 @@ export def "post-api-rest-v1-contacts-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/contacts/{contact_id}") $auth.query)
   let req_body = {"contactId": $body_contact_id, "contactNumber": $contact_number, "firstName": $first_name, "lastName": $last_name, "links": $links, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -695,7 +722,7 @@ export def "get-api-rest-v1-contacts-contact-id-add-from-group-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -733,7 +760,7 @@ export def "post-api-rest-v1-contacts-contact-id-add-from-group-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addFromGroup/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -771,7 +798,7 @@ export def "get-api-rest-v1-contacts-contact-id-add-to-group-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -809,7 +836,7 @@ export def "post-api-rest-v1-contacts-contact-id-add-to-group-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/contacts/{contact_id}/addToGroup/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -843,7 +870,7 @@ export def "get-api-rest-v1-groups-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/groups/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -881,9 +908,9 @@ export def "post-api-rest-v1-groups-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/groups/create" $auth.query)
   let req_body = {"groupId": $group_id, "links": $links, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -919,7 +946,7 @@ export def "delete-api-rest-v1-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -955,7 +982,7 @@ export def "get-api-rest-v1-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -985,7 +1012,7 @@ export def "post-api-rest-v1-groups-group-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body-group-id: string
+  --body-group-id: string # (spec name: groupId)
   --links: list # item shape: {href?: string, rel?: string, templated?: bool}
   --name: string
 ]: any -> oneof<record<groupId: string, links: table<href: string, rel: string, templated: bool>, name: string>, string, nothing> {
@@ -995,9 +1022,9 @@ export def "post-api-rest-v1-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/rest/v1/groups/{group_id}") $auth.query)
   let req_body = {"groupId": $body_group_id, "links": $links, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1035,7 +1062,7 @@ export def "get-api-rest-v1-groups-group-id-add-contact-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1073,7 +1100,7 @@ export def "post-api-rest-v1-groups-group-id-add-contact-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/addContact/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1111,7 +1138,7 @@ export def "get-api-rest-v1-groups-group-id-remove-contact-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1149,7 +1176,7 @@ export def "post-api-rest-v1-groups-group-id-remove-contact-contact-id" [
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/api/rest/v1/groups/{group_id}/removeContact/{contact_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1200,7 +1227,7 @@ export def "get-api-rest-v1-messages-all" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "fromDateTimeSent" $from_date_time_sent "scalar") (serialize-qp "toDateTimeSent" $to_date_time_sent "scalar") (serialize-qp "fromDateTimeReceived" $from_date_time_received "scalar") (serialize-qp "toDateTimeReceived" $to_date_time_received "scalar") (serialize-qp "fromNumber" $from_number "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "read" $read "scalar") (serialize-qp "repliesToMessageId" $replies_to_message_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/messages/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1238,9 +1265,9 @@ export def "analyse-full" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/full" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1278,9 +1305,9 @@ export def "analyse-message-credit-cost" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-credit-cost" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1318,9 +1345,9 @@ export def "analyse-message-encoding" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-encoding" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1358,9 +1385,9 @@ export def "analyse-message-length" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-length" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1398,9 +1425,9 @@ export def "analyse" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/message-length-within-max-allowed" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1438,9 +1465,9 @@ export def "analyse-number-of-messages" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/messages/analyse/number-of-messages" $auth.query)
   let req_body = {"message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1476,7 +1503,7 @@ export def "delete-api-rest-v1-messages-message-id" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1512,7 +1539,7 @@ export def "get-api-rest-v1-messages-message-id" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1548,7 +1575,7 @@ export def "post-api-rest-v1-messages-message-id-mark-read" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markRead") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1584,7 +1611,7 @@ export def "put-api-rest-v1-messages-message-id-mark-read" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markRead") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1620,7 +1647,7 @@ export def "post-api-rest-v1-messages-message-id-mark-unread" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markUnread") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1656,7 +1683,7 @@ export def "put-api-rest-v1-messages-message-id-mark-unread" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/messages/{message_id}/markUnread") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1690,7 +1717,7 @@ export def "get-api-rest-v1-sms-send" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1730,9 +1757,9 @@ export def "post-api-rest-v1-sms-send" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send" $auth.query)
   let req_body = {"campaign": $campaign, "dataField": $data_field, "dateToSend": $date_to_send, "message": $message, "recipientNumber": $recipient_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1766,7 +1793,7 @@ export def "get-api-rest-v1-sms-send-bulk" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send-bulk" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1804,9 +1831,9 @@ export def "post-api-rest-v1-sms-send-bulk" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/sms/send-bulk" $auth.query)
   let req_body = {"defaultDateToSend": $default_date_to_send, "messagesPerMinute": $messages_per_minute, "sendSmsRequests": $send_sms_requests} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1848,7 +1875,7 @@ export def "get-api-rest-v1-sms-send-url-parameters" [
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/sms/send-url-parameters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1890,7 +1917,7 @@ export def "post-api-rest-v1-sms-send-url-parameters" [
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/sms/send-url-parameters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1934,7 +1961,7 @@ export def "get-api-rest-v1-sms-send-url-token" [
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1978,7 +2005,7 @@ export def "post-api-rest-v1-sms-send-url-token" [
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/rest/v1/sms/send-url/{token_arg}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2012,7 +2039,7 @@ export def "get-api-rest-v1-templates-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/templates/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2048,7 +2075,7 @@ export def "delete-api-rest-v1-templates-template-id" [
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/rest/v1/templates/{template_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2084,7 +2111,7 @@ export def "get-api-rest-v1-templates-template-id" [
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({template_id: (encode-path-segment $template_id)} | format pattern "/api/rest/v1/templates/{template_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2129,7 +2156,7 @@ export def "get-api-rest-v1-voice-all" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "fromDateTimeSent" $from_date_time_sent "scalar") (serialize-qp "toDateTimeSent" $to_date_time_sent "scalar") (serialize-qp "toNumber" $to_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "deleted" $deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/voice/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2174,10 +2201,10 @@ export def "single-audio" [
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar") (serialize-qp "retryCount" $retry_count "scalar") (serialize-qp "retryMinimumInterval" $retry_minimum_interval "scalar") (serialize-qp "retryMaximumInterval" $retry_maximum_interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rest/v1/voice/single-audio" $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -2222,9 +2249,9 @@ export def "single-text" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/voice/single-text" $auth.query)
   let req_body = {"campaign": $campaign, "dataField": $data_field, "language": $language, "message": $message, "recipientNumber": $recipient_number, "retryCount": $retry_count, "retryMaximumInterval": $retry_maximum_interval, "retryMinimumInterval": $retry_minimum_interval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2260,7 +2287,7 @@ export def "delete-api-rest-v1-voice-message-id" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/voice/{message_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2296,7 +2323,7 @@ export def "get-api-rest-v1-voice-message-id" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/api/rest/v1/voice/{message_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -213,7 +240,7 @@ export def "get-customer-service-metric-tasks" [
   let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer_service_metric_task" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -253,11 +280,11 @@ export def "create-customer-service-metric-task" [
   if ($accept_language == null) { error make --unspanned { msg: "required header parameter 'accept-language' missing: pass --accept-language" } }
   let full_url = (build-url $base "/customer_service_metric_task" $auth.query)
   let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"accept-language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -293,7 +320,7 @@ export def "get-customer-service-metric-task" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/customer_service_metric_task/{task_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -334,7 +361,7 @@ export def "get-inventory-tasks" [
   let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "schedule_id" $schedule_id "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inventory_task" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -372,9 +399,9 @@ export def "create-inventory-task" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inventory_task" $auth.query)
   let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -410,7 +437,7 @@ export def "get-inventory-task" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/inventory_task/{task_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -451,7 +478,7 @@ export def "get-order-tasks" [
   let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order_task" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -489,9 +516,9 @@ export def "create-order-task" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order_task" $auth.query)
   let req_body = {"feedType": $feed_type, "filterCriteria": $filter_criteria, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -527,7 +554,7 @@ export def "get-order-task" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/order_task/{task_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -566,7 +593,7 @@ export def "get-schedules" [
   let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -610,9 +637,9 @@ export def "create-schedule" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/schedule" $auth.query)
   let req_body = {"feedType": $feed_type, "preferredTriggerDayOfMonth": $preferred_trigger_day_of_month, "preferredTriggerDayOfWeek": $preferred_trigger_day_of_week, "preferredTriggerHour": $preferred_trigger_hour, "scheduleEndDate": $schedule_end_date, "scheduleName": $schedule_name, "scheduleStartDate": $schedule_start_date, "scheduleTemplateId": $schedule_template_id, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -648,7 +675,7 @@ export def "delete-schedule" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
   let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -684,7 +711,7 @@ export def "get-schedule" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
   let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -728,9 +755,9 @@ export def "update-schedule" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
   let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}") $auth.query)
   let req_body = {"preferredTriggerDayOfMonth": $preferred_trigger_day_of_month, "preferredTriggerDayOfWeek": $preferred_trigger_day_of_week, "preferredTriggerHour": $preferred_trigger_hour, "scheduleEndDate": $schedule_end_date, "scheduleName": $schedule_name, "scheduleStartDate": $schedule_start_date, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -766,7 +793,7 @@ export def "get-latest-result-file" [
   if ($schedule_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_id' must be non-empty" } }
   let full_url = (build-url $base ({schedule_id: (encode-path-segment $schedule_id)} | format pattern "/schedule/{schedule_id}/download_result_file") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -805,7 +832,7 @@ export def "get-schedule-templates" [
   let qp = [(serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule_template" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -841,7 +868,7 @@ export def "get-schedule-template" [
   if ($schedule_template_id | is-empty) { error make --unspanned { msg: "path parameter 'schedule_template_id' must be non-empty" } }
   let full_url = (build-url $base ({schedule_template_id: (encode-path-segment $schedule_template_id)} | format pattern "/schedule_template/{schedule_template_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -882,7 +909,7 @@ export def "get-tasks" [
   let qp = [(serialize-qp "date_range" $date_range "scalar") (serialize-qp "feed_type" $feed_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "look_back_days" $look_back_days "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "schedule_id" $schedule_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/task" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -920,11 +947,11 @@ export def "create-task" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/task" $auth.query)
   let req_body = {"feedType": $feed_type, "schemaVersion": $schema_version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -960,7 +987,7 @@ export def "get-task" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -996,7 +1023,7 @@ export def "get-input-file" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/download_input_file") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1032,7 +1059,7 @@ export def "get-result-file" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/download_result_file") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1077,10 +1104,10 @@ export def "upload-file" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/task/{task_id}/upload_file") $auth.query)
   let req_body = {"creationDate": $creation_date, "fileName": $file_name, "modificationDate": $modification_date, "name": $name, "parameters": $parameters, "readDate": $read_date, "size": $size, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"

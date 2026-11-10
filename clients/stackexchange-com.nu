@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,7 +221,7 @@ export def "get-access-tokens-access-tokens" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/access-tokens/{access_tokens}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -234,7 +261,7 @@ export def "get-access-tokens-access-tokens-invalidate" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/access-tokens/{access_tokens}/invalidate") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -280,7 +307,7 @@ export def "get-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/answers" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -328,7 +355,7 @@ export def "get-answers-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/answers/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -376,7 +403,7 @@ export def "get-answers-ids-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/answers/{ids}/comments") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -416,7 +443,7 @@ export def "get-apps-access-tokens-de-authenticate" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_tokens: (encode-path-segment $access_tokens)} | format pattern "/apps/{access_tokens}/de-authenticate") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "get-badges" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badges" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -510,7 +537,7 @@ export def "get-badges-name" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badges/name" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -552,7 +579,7 @@ export def "get-badges-recipients" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badges/recipients" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -599,7 +626,7 @@ export def "get-badges-tags" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badges/tags" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -647,7 +674,7 @@ export def "get-badges-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/badges/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -691,7 +718,7 @@ export def "get-badges-ids-recipients" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/badges/{ids}/recipients") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -737,7 +764,7 @@ export def "get-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/comments" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -785,7 +812,7 @@ export def "get-comments-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/comments/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -826,7 +853,7 @@ export def "post-comments-id-delete" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/delete") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -858,7 +885,7 @@ export def "post-comments-id-edit" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --preview: oneof<nothing, bool>
 ]: nothing -> oneof<record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -868,7 +895,7 @@ export def "post-comments-id-edit" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/edit") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -906,7 +933,7 @@ export def "get-errors" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/errors" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -941,7 +968,7 @@ export def "get-errors-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/errors/{id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -982,7 +1009,7 @@ export def "get-events" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1010,7 +1037,7 @@ export def "get-filters-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-base: string
+  --qp-base: string # (spec name: base)
   --exclude: string # String list (semicolon delimited).
   --include: string # String list (semicolon delimited).
   --unsafe: oneof<nothing, bool>
@@ -1020,7 +1047,7 @@ export def "get-filters-create" [
   let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "unsafe" $unsafe "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/filters/create" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1055,7 +1082,7 @@ export def "get-filters-filters" [
   if ($filters | is-empty) { error make --unspanned { msg: "path parameter 'filters' must be non-empty" } }
   let full_url = (build-url $base ({filters: (encode-path-segment $filters)} | format pattern "/filters/{filters}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1093,7 +1120,7 @@ export def "get-inbox" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inbox" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1132,7 +1159,7 @@ export def "get-inbox-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/inbox/unread" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1168,7 +1195,7 @@ export def "get-info" [
   let qp = [(serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/info" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1214,7 +1241,7 @@ export def "get-me" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1260,7 +1287,7 @@ export def "get-me-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/answers" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1298,7 +1325,7 @@ export def "get-me-associated" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/associated" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1344,7 +1371,7 @@ export def "get-me-badges" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/badges" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1390,7 +1417,7 @@ export def "get-me-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/comments" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1438,7 +1465,7 @@ export def "get-me-comments-to-id" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({to_id: (encode-path-segment $to_id)} | format pattern "/me/comments/{to_id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1484,7 +1511,7 @@ export def "get-me-favorites" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/favorites" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1524,7 +1551,7 @@ export def "get-me-inbox" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/inbox" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1565,7 +1592,7 @@ export def "get-me-inbox-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/inbox/unread" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1611,7 +1638,7 @@ export def "get-me-mentioned" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/mentioned" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1649,7 +1676,7 @@ export def "get-me-merges" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/merges" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1689,7 +1716,7 @@ export def "get-me-notifications" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/notifications" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1729,7 +1756,7 @@ export def "get-me-notifications-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/notifications/unread" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1769,7 +1796,7 @@ export def "get-me-privileges" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/privileges" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1815,7 +1842,7 @@ export def "get-me-questions" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/questions" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1861,7 +1888,7 @@ export def "get-me-questions-featured" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/questions/featured" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1907,7 +1934,7 @@ export def "get-me-questions-no-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/questions/no-answers" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1953,7 +1980,7 @@ export def "get-me-questions-unaccepted" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/questions/unaccepted" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1999,7 +2026,7 @@ export def "get-me-questions-unanswered" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/questions/unanswered" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2037,7 +2064,7 @@ export def "get-me-reputation" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/reputation" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2077,7 +2104,7 @@ export def "get-me-reputation-history" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/reputation-history" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2117,7 +2144,7 @@ export def "get-me-reputation-history-full" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/reputation-history/full" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2163,7 +2190,7 @@ export def "get-me-suggested-edits" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/suggested-edits" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2209,7 +2236,7 @@ export def "get-me-tags" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/tags" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2257,7 +2284,7 @@ export def "get-me-tags-tags-top-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/me/tags/{tags}/top-answers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2305,7 +2332,7 @@ export def "get-me-tags-tags-top-questions" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/me/tags/{tags}/top-questions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2347,7 +2374,7 @@ export def "get-me-timeline" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/timeline" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2387,7 +2414,7 @@ export def "get-me-top-answer-tags" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/top-answer-tags" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2427,7 +2454,7 @@ export def "get-me-top-question-tags" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/top-question-tags" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2467,7 +2494,7 @@ export def "get-me-write-permissions" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/me/write-permissions" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2505,7 +2532,7 @@ export def "get-notifications" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2543,7 +2570,7 @@ export def "get-notifications-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications/unread" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2589,7 +2616,7 @@ export def "get-posts" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/posts" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2637,7 +2664,7 @@ export def "get-posts-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2685,7 +2712,7 @@ export def "get-posts-ids-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/comments") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2729,7 +2756,7 @@ export def "get-posts-ids-revisions" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/revisions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2777,7 +2804,7 @@ export def "get-posts-ids-suggested-edits" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/posts/{ids}/suggested-edits") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2809,7 +2836,7 @@ export def "post-posts-id-comments-add" [
   --filter: string # #Discussion The Stack Exchange API allows applications to exclude almost every field returned. For example, if an application did not care about a user's badge counts it could exclude user.badge_counts whenever it calls a method that returns users. An application excludes fields by creating a filter (via /filter/create) and passing it to a method in the filter parameter. Filters are immutable and non-expiring. An application can safely "bake in" any filters that are created, it is not necessary (or advisable) to create filters at runtime. The motivation for filters are several fold. Filters allow applications to reduce API responses to just the fields they are concerned with, saving bandwidth. With the list of fields an application is actually concerned with, the API can avoid unneccessary queries thereby decreasing response time (and reducing load on our infrastructure). Finally, filters allow us to be more conservative in what the API returns by default without a proliferation of parameters (as was seen with body, answers, and comments in the 1.x API family). #Safety Filters also carry a notion of safety, which is defined as follows. Any string returned as a result of an API call with a safe filter will be inline-able into HTML without script-injection concerns. That is to say, no additional sanitizing (encoding, HTML tag stripping, etc.) will be necessary on returned strings. Applications that wish to handle sanitizing themselves should create an unsafe filter. All filters are safe by default, under the assumption that double-encoding bugs are more desirable than script injections. Note that this does not mean that "safe" filter is mearly an "unsafe" one with all fields passed though UrlEncode(...). Many fields can and will contain HTML in all filter types (most notably, the *.body fields). When using unsafe filters, the API returns the highest fidelity data it can reasonably access for the given request. This means that in cases where the "safe" data is the only accessible data it will be returned even in "unsafe" filters. Notably the *.body fields are unchanged, as they are stored in that form. Fields that are unchanged between safe and unsafe filters are denoted in their types documentation. #Built In Filters The following filters are built in: default, each type documents which fields are returned under the default filter (for example, answers). withbody, which is default plus the *.body fields none, which is empty total, which includes just .total #Compatibility with V1.x For ease of transition from earlier API versions, the filters _b, _ba, _bc, _bca, _a, _ac, and _c are also built in. These are unsafe, and exclude a combination of question and answer body, comments, and answers so as to mimic the body, answers, and comments parameters that have been removed in V2.0. New applications should not use these filters.
   --callback: string # All API responses are JSON, we do support JSONP with the callback query parameter.
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --preview: oneof<nothing, bool>
 ]: nothing -> oneof<record<body: string, body_markdown: string, can_flag: bool, comment_id: int, creation_date: int, edited: bool, link: string, owner: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, post_id: int, post_type: string, reply_to_user: record<accept_rate: int, badge_counts: record<bronze: int, gold: int, silver: int>, display_name: string, link: string, profile_image: string, reputation: int, user_id: int, user_type: string>, score: int, upvoted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2819,7 +2846,7 @@ export def "post-posts-id-comments-add" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/posts/{id}/comments/add") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2859,7 +2886,7 @@ export def "get-privileges" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/privileges" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2906,7 +2933,7 @@ export def "get-questions" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/questions" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2953,7 +2980,7 @@ export def "get-questions-featured" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/questions/featured" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3000,7 +3027,7 @@ export def "get-questions-no-answers" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/questions/no-answers" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3047,7 +3074,7 @@ export def "get-questions-unanswered" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/questions/unanswered" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3095,7 +3122,7 @@ export def "get-questions-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3143,7 +3170,7 @@ export def "get-questions-ids-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/answers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3191,7 +3218,7 @@ export def "get-questions-ids-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/comments") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3239,7 +3266,7 @@ export def "get-questions-ids-linked" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/linked") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3287,7 +3314,7 @@ export def "get-questions-ids-related" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/related") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3331,7 +3358,7 @@ export def "get-questions-ids-timeline" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/questions/{ids}/timeline") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3375,7 +3402,7 @@ export def "get-revisions-ids" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/revisions/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3424,7 +3451,7 @@ export def "get-search" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "intitle" $intitle "scalar") (serialize-qp "nottagged" $nottagged "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3466,7 +3493,7 @@ export def "get-search-advanced" [
   --site: string # Each of these methods operates on a single site at a time, identified by the site parameter. This parameter can be the full domain name (ie. "stackoverflow.com"), or a short form identified by api_site_parameter on the site object. (required)
   --accepted: string@accepted-completer
   --answers: int
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --closed: string@closed-completer
   --migrated: string@migrated-completer
   --notice: string@notice-completer
@@ -3484,7 +3511,7 @@ export def "get-search-advanced" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "accepted" $accepted "scalar") (serialize-qp "answers" $answers "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "closed" $closed "scalar") (serialize-qp "migrated" $migrated "scalar") (serialize-qp "notice" $notice "scalar") (serialize-qp "nottagged" $nottagged "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "views" $views "scalar") (serialize-qp "wiki" $wiki "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/advanced" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3533,7 +3560,7 @@ export def "get-similar" [
   let qp = [(serialize-qp "tagged" $tagged "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "nottagged" $nottagged "scalar") (serialize-qp "title" $title "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similar" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3571,7 +3598,7 @@ export def "get-sites" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sites" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3617,7 +3644,7 @@ export def "get-suggested-edits" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggested-edits" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3665,7 +3692,7 @@ export def "get-suggested-edits-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/suggested-edits/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3712,7 +3739,7 @@ export def "get-tags" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3759,7 +3786,7 @@ export def "get-tags-moderator-only" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags/moderator-only" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3806,7 +3833,7 @@ export def "get-tags-required" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags/required" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3852,7 +3879,7 @@ export def "get-tags-synonyms" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags/synonyms" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3894,7 +3921,7 @@ export def "get-tags-tags-faq" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/faq") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3942,7 +3969,7 @@ export def "get-tags-tags-info" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/info") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3984,7 +4011,7 @@ export def "get-tags-tags-related" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/related") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4032,7 +4059,7 @@ export def "get-tags-tags-synonyms" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/synonyms") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4074,7 +4101,7 @@ export def "get-tags-tags-wikis" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tags: (encode-path-segment $tags)} | format pattern "/tags/{tags}/wikis") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4118,7 +4145,7 @@ export def "get-tags-tag-top-answerers-period" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), period: (encode-path-segment $period)} | format pattern "/tags/{tag}/top-answerers/{period}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4162,7 +4189,7 @@ export def "get-tags-tag-top-askers-period" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), period: (encode-path-segment $period)} | format pattern "/tags/{tag}/top-askers/{period}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4209,7 +4236,7 @@ export def "get-users" [
   let qp = [(serialize-qp "inname" $inname "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4255,7 +4282,7 @@ export def "get-users-moderators" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/moderators" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4301,7 +4328,7 @@ export def "get-users-moderators-elected" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/moderators/elected" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4349,7 +4376,7 @@ export def "get-users-ids" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4397,7 +4424,7 @@ export def "get-users-ids-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/answers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4437,7 +4464,7 @@ export def "get-users-ids-associated" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/associated") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4485,7 +4512,7 @@ export def "get-users-ids-badges" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/badges") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4533,7 +4560,7 @@ export def "get-users-ids-comments" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/comments") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4583,7 +4610,7 @@ export def "get-users-ids-comments-toid" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids), toid: (encode-path-segment $toid)} | format pattern "/users/{ids}/comments/{toid}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4631,7 +4658,7 @@ export def "get-users-ids-favorites" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/favorites") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4679,7 +4706,7 @@ export def "get-users-ids-mentioned" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/mentioned") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4719,7 +4746,7 @@ export def "get-users-ids-merges" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/merges") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4767,7 +4794,7 @@ export def "get-users-ids-questions" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4815,7 +4842,7 @@ export def "get-users-ids-questions-featured" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/featured") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4863,7 +4890,7 @@ export def "get-users-ids-questions-no-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/no-answers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4911,7 +4938,7 @@ export def "get-users-ids-questions-unaccepted" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/unaccepted") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4959,7 +4986,7 @@ export def "get-users-ids-questions-unanswered" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/questions/unanswered") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5003,7 +5030,7 @@ export def "get-users-ids-reputation" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/reputation") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5045,7 +5072,7 @@ export def "get-users-ids-reputation-history" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/reputation-history") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5093,7 +5120,7 @@ export def "get-users-ids-suggested-edits" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/suggested-edits") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5141,7 +5168,7 @@ export def "get-users-ids-tags" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/tags") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5185,7 +5212,7 @@ export def "get-users-ids-timeline" [
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/users/{ids}/timeline") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5227,7 +5254,7 @@ export def "get-users-id-inbox" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/inbox") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5270,7 +5297,7 @@ export def "get-users-id-inbox-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/inbox/unread") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5312,7 +5339,7 @@ export def "get-users-id-notifications" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/notifications") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5354,7 +5381,7 @@ export def "get-users-id-notifications-unread" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/notifications/unread") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5396,7 +5423,7 @@ export def "get-users-id-privileges" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/privileges") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5438,7 +5465,7 @@ export def "get-users-id-reputation-history-full" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/reputation-history/full") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5488,7 +5515,7 @@ export def "get-users-id-tags-tags-top-answers" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), tags: (encode-path-segment $tags)} | format pattern "/users/{id}/tags/{tags}/top-answers") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5538,7 +5565,7 @@ export def "get-users-id-tags-tags-top-questions" [
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), tags: (encode-path-segment $tags)} | format pattern "/users/{id}/tags/{tags}/top-questions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5580,7 +5607,7 @@ export def "get-users-id-top-answer-tags" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/top-answer-tags") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5622,7 +5649,7 @@ export def "get-users-id-top-question-tags" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/top-question-tags") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5664,7 +5691,7 @@ export def "get-users-id-write-permissions" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/write-permissions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

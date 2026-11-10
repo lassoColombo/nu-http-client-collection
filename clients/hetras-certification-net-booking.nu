@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -213,9 +240,9 @@ export def "addons-get" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/addons" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -265,9 +292,9 @@ export def "availability-get" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/availability" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -317,9 +344,9 @@ export def "blocks-get-blocks-async" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -366,9 +393,9 @@ export def "blocks-get-blocks-count-async" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks/$count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -409,9 +436,9 @@ export def "blocks-get-single-block-async" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({block_code: (encode-path-segment $block_code)} | format pattern "/api/booking/v0/blocks/{block_code}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -477,9 +504,9 @@ export def "bookings-get-bookings" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -540,11 +567,11 @@ export def "bookings-create-booking" [
   let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp $auth.query)
   let req_body = {"addons": $addons, "adults": $adults, "arrival_date": $arrival_date, "channel_code": $channel_code, "comment": $comment, "company": $company, "contact": $contact, "departure_date": $departure_date, "external_id": $external_id, "group_code": $group_code, "guarantee": $guarantee, "guests": $guests, "hotel_id": $hotel_id, "payment_method": $payment_method, "prepay_discount": $prepay_discount, "rate_plan": $rate_plan, "room_type": $room_type, "rooms": $rooms, "travel_agent": $travel_agent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -607,9 +634,9 @@ export def "bookings-get-bookings-count" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings/$count" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -653,9 +680,9 @@ export def "bookings-get-booking" [
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id)} | format pattern "/api/booking/v0/bookings/{confirmation_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -701,9 +728,9 @@ export def "bookings-get-reservation" [
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -748,11 +775,11 @@ export def "bookings-patch" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -803,11 +830,11 @@ export def "bookings-post-room-assignment" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/assign_room") $auth.query)
   let req_body = {"amenities": $amenities, "condition": $condition, "include_out_of_service": $include_out_of_service, "locations": $locations, "respect_guest_preferences": $respect_guest_preferences, "room_number": $room_number, "views": $views} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -852,9 +879,9 @@ export def "bookings-cancel-reservation" [
   let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/cancel") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -899,11 +926,11 @@ export def "bookings-check-in" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_in") $auth.query)
   let req_body = {"client_identity": $client_identity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -946,9 +973,9 @@ export def "bookings-check-out" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_out") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -995,11 +1022,11 @@ export def "bookings-payment-token" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/payment_token") $auth.query)
   let req_body = {"authorization": $authorization, "no_authorization_required": $no_authorization_required, "payment_token": $payment_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1045,11 +1072,11 @@ export def "bookings-terminal-authorization" [
   if ($app_key == null) { error make --unspanned { msg: "required header parameter 'App-Key' missing: pass --app-key" } }
   let full_url = (build-url $base ({confirmation_id: (encode-path-segment $confirmation_id), reservation_number: (encode-path-segment $reservation_number)} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/pre_authorize") $auth.query)
   let req_body = {"amount_to_authorize": $amount_to_authorize, "client_identity": $client_identity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1102,9 +1129,9 @@ export def "daily-rates-get-daily-rates" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "expand" $expand "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/daily_rates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1159,9 +1186,9 @@ export def "rates-get" [
   let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/rates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

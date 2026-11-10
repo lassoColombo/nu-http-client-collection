@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -207,7 +234,7 @@ export def "get-api-v2-broadcastservices" [
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/broadcastservices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -242,7 +269,7 @@ export def "get-api-v2-broadcastservices-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/broadcastservices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -280,12 +307,12 @@ export def "post-api-v2-cddrive-files-content" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/files/content" $auth.query)
   let req_body = {"file": $file, "name": $name, "parent-id": $parent_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-MD5": $content_md5} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -321,7 +348,7 @@ export def "delete-api-v2-cddrive-files-file-id" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file-id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -356,7 +383,7 @@ export def "get-api-v2-cddrive-files-file-id" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file-id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -392,9 +419,9 @@ export def "get-api-v2-cddrive-files-file-id-content" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file-id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/api/v2/cddrive/files/{file_id}/content") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -430,9 +457,9 @@ export def "post-api-v2-cddrive-folders" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/cddrive/folders" $auth.query)
   let req_body = {"name": $name, "parent-id": $parent_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -470,7 +497,7 @@ export def "delete-api-v2-cddrive-folders-folder-id" [
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -505,7 +532,7 @@ export def "get-api-v2-cddrive-folders-folder-id" [
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder-id' must be non-empty" } }
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -543,7 +570,7 @@ export def "get-api-v2-cddrive-folders-folder-id-items" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/api/v2/cddrive/folders/{folder_id}/items") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -585,7 +612,7 @@ export def "get-api-v2-episodes" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "beginAirDateAfter" $begin_air_date_after "scalar") (serialize-qp "endAirDateBefore" $end_air_date_before "scalar") (serialize-qp "programId" $program_id "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/episodes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -620,7 +647,7 @@ export def "get-api-v2-episodes-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/episodes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -661,9 +688,9 @@ export def "post-api-v2-metapub-program-information-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/metapub/program-information/batch" $auth.query)
   let req_body = {"format": $format, "name": $name, "program": $program, "uri": $uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -700,7 +727,7 @@ export def "get-api-v2-metapub-program-information-batch-batch-id" [
   if ($batch_id | is-empty) { error make --unspanned { msg: "path parameter 'batch-id' must be non-empty" } }
   let full_url = (build-url $base ({batch_id: (encode-path-segment $batch_id)} | format pattern "/api/v2/metapub/program-information/batch/{batch_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -736,7 +763,7 @@ export def "get-api-v2-pieces" [
   let qp = [(serialize-qp "episodeId" $episode_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/pieces" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -782,9 +809,9 @@ export def "post-api-v2-pieces" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/pieces" $auth.query)
   let req_body = {"contributor": $contributor, "description": $description, "episodeId": $episode_id, "fullDescription": $full_description, "imageCdDriveUri": $image_cd_drive_uri, "imageFileName": $image_file_name, "imageFileSize": $image_file_size, "imageOriginalFileName": $image_original_file_name, "relativeEndTime": $relative_end_time, "relativeStartTime": $relative_start_time, "segmentNumber": $segment_number, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -819,7 +846,7 @@ export def "delete-api-v2-pieces-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/pieces/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -854,7 +881,7 @@ export def "get-api-v2-pieces-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/pieces/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -891,7 +918,7 @@ export def "get-api-v2-programs-search" [
   let qp = [(serialize-qp "keywords" $keywords "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/programs/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -926,7 +953,7 @@ export def "get-api-v2-programs-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/programs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -966,7 +993,7 @@ export def "get-api-v2-segments" [
   let qp = [(serialize-qp "episodeId" $episode_id "scalar") (serialize-qp "segmentNumber" $segment_number "scalar") (serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/segments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1005,9 +1032,9 @@ export def "post-api-v2-segments" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/segments" $auth.query)
   let req_body = {"cdDriveUri": $cd_drive_uri, "episodeId": $episode_id, "inCue": $in_cue, "outCue": $out_cue, "segmentNumber": $segment_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1043,7 +1070,7 @@ export def "delete-api-v2-segments-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1078,7 +1105,7 @@ export def "get-api-v2-segments-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1113,7 +1140,7 @@ export def "get-api-v2-segments-id-content" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/segments/{id}/content") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1150,7 +1177,7 @@ export def "get-api-v2-spotinsertions" [
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/spotinsertions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1191,9 +1218,9 @@ export def "post-api-v2-spotinsertions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spotinsertions" $auth.query)
   let req_body = {"broadcastServiceId": $broadcast_service_id, "cue": $cue, "duration": $duration, "endDate": $end_date, "programId": $program_id, "spots": $spots, "startDate": $start_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1228,7 +1255,7 @@ export def "delete-api-v2-spotinsertions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spotinsertions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1263,7 +1290,7 @@ export def "get-api-v2-spotinsertions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spotinsertions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1300,7 +1327,7 @@ export def "get-api-v2-spots" [
   let qp = [(serialize-qp "pageStart" $page_start "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderById" $order_by_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/spots" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1337,9 +1364,9 @@ export def "post-api-v2-spots" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/spots" $auth.query)
   let req_body = {"cdDriveUri": $cd_drive_uri, "name": $name, "notes": $notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1375,7 +1402,7 @@ export def "delete-api-v2-spots-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spots/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1410,7 +1437,7 @@ export def "get-api-v2-spots-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v2/spots/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1443,7 +1470,7 @@ export def "get-radiodns-spi-3-1-gi-xml" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/radiodns/spi/3.1/GI.xml" $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1476,7 +1503,7 @@ export def "get-radiodns-spi-3-1-si-xml" [
   let base = ($base_url | default "http://localhost")
   let full_url = (build-url $base "/radiodns/spi/3.1/SI.xml" $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1516,9 +1543,9 @@ export def "get-radiodns-spi-3-1-id-fqdn-sid-date-pi-xml" [
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({fqdn: (encode-path-segment $fqdn), sid: (encode-path-segment $sid), date: (encode-path-segment $date)} | format pattern "/radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml") $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-radiodnsspi-api-key": $x_radiodnsspi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

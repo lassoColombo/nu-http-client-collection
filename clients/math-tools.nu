@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -166,7 +193,7 @@ export def "get-numbers-base" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -203,7 +230,7 @@ export def "get-numbers-base-binary" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/binary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -240,7 +267,7 @@ export def "get-numbers-base-hex" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/hex" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -277,7 +304,7 @@ export def "get-numbers-base-octal" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "from" $from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/base/octal" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -313,7 +340,7 @@ export def "get-numbers-cardinal" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/cardinal" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -349,7 +376,7 @@ export def "get-numbers-currency" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/currency" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -385,7 +412,7 @@ export def "get-numbers-fact" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/fact" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -420,7 +447,7 @@ export def "get-numbers-is-cube" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/is-cube" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -455,7 +482,7 @@ export def "get-numbers-is-palindrome" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/is-palindrome" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -490,7 +517,7 @@ export def "get-numbers-is-square" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/is-square" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -525,7 +552,7 @@ export def "get-numbers-is-triangle" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/is-triangle" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -558,7 +585,7 @@ export def "get-numbers-nod" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/numbers/nod" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -593,7 +620,7 @@ export def "get-numbers-numeral-chinese" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/numeral/chinese" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "get-numbers-numeral-egyptian" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/numeral/egyptian" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "get-numbers-numeral-roman" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/numeral/roman" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -698,7 +725,7 @@ export def "get-numbers-ordinal" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/ordinal" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -734,7 +761,7 @@ export def "get-numbers-pi" [
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/pi" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -769,7 +796,7 @@ export def "get-numbers-prime-factors" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/factors" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -804,7 +831,7 @@ export def "get-numbers-prime-is-fermat-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-fermat-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -839,7 +866,7 @@ export def "get-numbers-prime-is-fibonacci-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-fibonacci-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -874,7 +901,7 @@ export def "get-numbers-prime-is-mersenne-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-mersenne-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -909,7 +936,7 @@ export def "get-numbers-prime-is-partition-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-partition-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -944,7 +971,7 @@ export def "get-numbers-prime-is-pell-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-pell-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -979,7 +1006,7 @@ export def "get-numbers-prime-is-perfect" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-perfect" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1014,7 +1041,7 @@ export def "get-numbers-prime-is-prime" [
   let qp = [(serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/prime/is-prime" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1051,7 +1078,7 @@ export def "get-numbers-random" [
   let qp = [(serialize-qp "min" $min "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "total" $total "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/numbers/random" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -176,9 +203,9 @@ export def "get-competitions-for-class" [
   let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/competitions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -247,9 +274,9 @@ export def "get-events-for-class" [
   let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_id: (encode-path-segment $class_id)} | format pattern "/classes/{class_id}/events/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -292,9 +319,9 @@ export def "get-competition" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -364,9 +391,9 @@ export def "get-events-for-competition" [
   let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "isInPlay" $is_in_play "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar") (serialize-qp "eventSort" $event_sort "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/events/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -413,9 +440,9 @@ export def "get-market-groups-for-competition" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketgroups/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -461,9 +488,9 @@ export def "get-markets-by-group-id" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketGroupId" $market_group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({competition_id: (encode-path-segment $competition_id)} | format pattern "/competitions/{competition_id}/marketsByGroupid") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -525,9 +552,9 @@ export def "get-events" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "channel" $channel "scalar") (serialize-qp "settled" $settled "scalar") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -584,9 +611,9 @@ export def "get-event" [
   let qp = [(serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "headlineSummary" $headline_summary "scalar") (serialize-qp "marketCount" $market_count "scalar") (serialize-qp "marketIds" $market_ids "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -628,9 +655,9 @@ export def "get-event-competitors" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/competitors") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -685,9 +712,9 @@ export def "get-markets" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "includeAllDescendants" $include_all_descendants "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "includeEmpty" $include_empty "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "marketPublished" $market_published "scalar") (serialize-qp "marketStatus" $market_status "scalar") (serialize-qp "marketDisplayed" $market_displayed "scalar") (serialize-qp "marketChannel" $market_channel "scalar") (serialize-qp "marketSort" $market_sort "scalar") (serialize-qp "marketEW" $market_ew "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/markets/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -736,9 +763,9 @@ export def "get-selections" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar") (serialize-qp "selectionStatus" $selection_status "scalar") (serialize-qp "selectionChannel" $selection_channel "scalar") (serialize-qp "selectionPublished" $selection_published "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), market_id: (encode-path-segment $market_id)} | format pattern "/events/{event_id}/markets/{market_id}/selections/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -783,9 +810,9 @@ export def "get-sports" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "isPublished" $is_published "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -835,9 +862,9 @@ export def "get-classes-for-sport" [
   let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/classes/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -887,9 +914,9 @@ export def "get-competitions-for-sport" [
   let qp = [(serialize-qp "isPublished" $is_published "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "displayed" $displayed "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "culture" $culture "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sport_id: (encode-path-segment $sport_id)} | format pattern "/sports/{sport_id}/competitions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -936,9 +963,9 @@ export def "get-top-bets" [
   let qp = [(serialize-qp "sportIds" $sport_ids "csv") (serialize-qp "competitionIds" $competition_ids "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "include" $include "csv") (serialize-qp "exclude" $exclude "csv") (serialize-qp "param_topBetEventId" $param_top_bet_event_id "scalar") (serialize-qp "sortName" $sort_name "scalar") (serialize-qp "culture" $culture "scalar") (serialize-qp "Locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topbets/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

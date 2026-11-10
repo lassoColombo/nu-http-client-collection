@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -192,9 +219,9 @@ export def "post-automation-v4-actions-callbacks-complete-complete-batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/automation/v4/actions/callbacks/complete" $auth.query)
   let req_body = {"inputs": $inputs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -232,9 +259,9 @@ export def "post-automation-v4-actions-callbacks-complete-complete" [
   if ($callback_id | is-empty) { error make --unspanned { msg: "path parameter 'callbackId' must be non-empty" } }
   let full_url = (build-url $base ({callback_id: (encode-path-segment $callback_id)} | format pattern "/automation/v4/actions/callbacks/{callback_id}/complete") $auth.query)
   let req_body = {"outputFields": $output_fields} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -275,7 +302,7 @@ export def "get-automation-v4-actions-get-page" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -322,10 +349,10 @@ export def "post-automation-v4-actions-create" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/automation/v4/actions/{app_id}") $auth.query)
   let req_body = {"actionUrl": $action_url, "archivedAt": $archived_at, "functions": $functions, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "published") == null) { error make --unspanned { msg: "required body field 'published' missing: pass --published or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -363,7 +390,7 @@ export def "delete-automation-v4-actions-archive" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -404,7 +431,7 @@ export def "get-automation-v4-actions-get-by-id" [
   let qp = [(serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -451,9 +478,9 @@ export def "patch-automation-v4-actions-update" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}") $auth.query)
   let req_body = {"actionUrl": $action_url, "inputFieldDependencies": $input_field_dependencies, "inputFields": $input_fields, "labels": $labels, "objectRequestOptions": $object_request_options, "objectTypes": $object_types, "published": $published} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -492,7 +519,7 @@ export def "get-automation-v4-actions-functions-get-page" [
   if ($definition_id | is-empty) { error make --unspanned { msg: "path parameter 'definitionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -532,7 +559,7 @@ export def "delete-automation-v4-actions-functions-archive-by-function-type" [
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -573,7 +600,7 @@ export def "get-automation-v4-actions-functions-get-by-function-type" [
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -616,9 +643,9 @@ export def "put-automation-v4-actions-functions-create-or-replace-by-function-ty
   if ($function_type | is-empty) { error make --unspanned { msg: "path parameter 'functionType' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -660,7 +687,7 @@ export def "delete-automation-v4-actions-functions-archive" [
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -703,7 +730,7 @@ export def "get-automation-v4-actions-functions-get-by-id" [
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -748,9 +775,9 @@ export def "put-automation-v4-actions-functions-create-or-replace" [
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), function_type: (encode-path-segment $function_type), function_id: (encode-path-segment $function_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/functions/{function_type}/{function_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -792,7 +819,7 @@ export def "get-automation-v4-actions-revisions-get-page" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -833,7 +860,7 @@ export def "get-automation-v4-actions-revisions-get-by-id" [
   if ($revision_id | is-empty) { error make --unspanned { msg: "path parameter 'revisionId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), definition_id: (encode-path-segment $definition_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/automation/v4/actions/{app_id}/{definition_id}/revisions/{revision_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

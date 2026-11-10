@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,9 +208,9 @@ export def "upload-boundary" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries" $auth.query)
   let req_body = {"geometry": $geometry} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -219,9 +246,9 @@ export def "fetch-boundaries" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries/query" $auth.query)
   let req_body = {"ids": $ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -257,7 +284,7 @@ export def "fetch-boundary-by-id" [
   if ($boundary_id | is-empty) { error make --unspanned { msg: "path parameter 'boundaryId' must be non-empty" } }
   let full_url = (build-url $base ({boundary_id: (encode-path-segment $boundary_id)} | format pattern "/v4/boundaries/{boundary_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -294,9 +321,9 @@ export def "post-export" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/exports" $auth.query)
   let req_body = {"contentType": $content_type, "definition": $definition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -326,7 +353,7 @@ export def "fetch-export-contents-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
 ]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -335,9 +362,9 @@ export def "fetch-export-contents-by-id" [
   if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
   let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/contents") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -373,7 +400,7 @@ export def "fetch-export-status-by-id" [
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
   let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/v4/exports/{export_id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -411,7 +438,7 @@ export def "fetch-farm-organization-by-type-and-id" [
   if ($farm_organization_id | is-empty) { error make --unspanned { msg: "path parameter 'farmOrganizationId' must be non-empty" } }
   let full_url = (build-url $base ({farm_organization_type: (encode-path-segment $farm_organization_type), farm_organization_id: (encode-path-segment $farm_organization_id)} | format pattern "/v4/farmOrganizations/{farm_organization_type}/{farm_organization_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -449,9 +476,9 @@ export def "fetch-fields" [
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -489,9 +516,9 @@ export def "fetch-all-fields" [
   let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields/all" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -527,7 +554,7 @@ export def "fetch-field-by-id" [
   if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/v4/fields/{field_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -559,7 +586,7 @@ export def "get-v4-layers-as-applied" [
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
 ]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
@@ -568,9 +595,9 @@ export def "get-v4-layers-as-applied" [
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asApplied" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -599,7 +626,7 @@ export def "get-v4-layers-as-applied-activity-id-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
 ]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -608,9 +635,9 @@ export def "get-v4-layers-as-applied-activity-id-contents" [
   if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asApplied/{activity_id}/contents") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -642,7 +669,7 @@ export def "get-v4-layers-as-harvested" [
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
 ]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
@@ -651,9 +678,9 @@ export def "get-v4-layers-as-harvested" [
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asHarvested" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -682,7 +709,7 @@ export def "get-v4-layers-as-harvested-activity-id-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
 ]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -691,9 +718,9 @@ export def "get-v4-layers-as-harvested-activity-id-contents" [
   if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asHarvested/{activity_id}/contents") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -725,7 +752,7 @@ export def "get-v4-layers-as-planted" [
   --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
   --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --x-next-token: string # Opaque string which allows for fetching the next batch of results. Can be used to poll for changes.
   --x-limit: int # Max number of results to return per batch. Must be between 1 and 100 inclusive. Defaults to 100. (format: int32)
 ]: nothing -> oneof<record<results: table<createdAt: string, endTime: string, fieldIds: list, id: string, length: int, startTime: string, updatedAt: string>>, string, nothing> {
@@ -734,9 +761,9 @@ export def "get-v4-layers-as-planted" [
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asPlanted" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -765,7 +792,7 @@ export def "get-v4-layers-as-planted-activity-id-contents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
 ]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -774,9 +801,9 @@ export def "get-v4-layers-as-planted-activity-id-contents" [
   if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
   let full_url = (build-url $base ({activity_id: (encode-path-segment $activity_id)} | format pattern "/v4/layers/asPlanted/{activity_id}/contents") $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -814,9 +841,9 @@ export def "get-v4-layers-scouting-observations" [
   let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/scoutingObservations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -851,7 +878,7 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id" [
   if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
   let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -888,9 +915,9 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   if ($scouting_observation_id | is-empty) { error make --unspanned { msg: "path parameter 'scoutingObservationId' must be non-empty" } }
   let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -921,7 +948,7 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json (required) (spec name: Accept)
   --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB. (required)
 ]: nothing -> oneof<record<body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -931,9 +958,9 @@ export def "get-v4-layers-scouting-observations-scouting-observation-id-attachme
   if ($range == null) { error make --unspanned { msg: "required header parameter 'Range' missing: pass --range" } }
   let full_url = (build-url $base ({scouting_observation_id: (encode-path-segment $scouting_observation_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments/{attachment_id}/contents") $auth.query)
   let accept_val = ($accept | default "image/jpeg")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -969,7 +996,7 @@ export def "fetch-operations" [
   let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/operations/all" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1005,7 +1032,7 @@ export def "get-resource-owner" [
   if ($resource_owner_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceOwnerId' must be non-empty" } }
   let full_url = (build-url $base ({resource_owner_id: (encode-path-segment $resource_owner_id)} | format pattern "/v4/resourceOwners/{resource_owner_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1045,11 +1072,11 @@ export def "post-upload" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads" $auth.query)
   let req_body = {"contentType": $content_type, "length": $length, "md5": $md5, "metadata": $metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Recipient-Email": $x_recipient_email} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1085,9 +1112,9 @@ export def "fetch-upload-statuses" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads/status/query" $auth.query)
   let req_body = {"ids": $ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1126,9 +1153,9 @@ export def "chunked-upload" [
   if ($content_range == null) { error make --unspanned { msg: "required header parameter 'Content-Range' missing: pass --content-range" } }
   let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Range": $content_range, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1164,7 +1191,7 @@ export def "fetch-upload-status-by-id" [
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'uploadId' must be non-empty" } }
   let full_url = (build-url $base ({upload_id: (encode-path-segment $upload_id)} | format pattern "/v4/uploads/{upload_id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

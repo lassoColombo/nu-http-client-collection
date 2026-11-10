@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -200,7 +227,7 @@ export def "container-projects-zones-clusters-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -244,8 +271,8 @@ export def "container-projects-zones-clusters-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster: record # A Google Kubernetes Engine cluster. — shape: {addonsConfig?: record, authenticatorGroupsConfig?: record, autopilot?: record, autoscaling?: record, binaryAuthorization?: record, clusterIpv4Cidr?: string, clusterTelemetry?: record, conditions?: list, confidentialNodes?: record, costManagementConfig?: record, createTime?: string, currentMasterVersion?: string, currentNodeCount?: int, currentNodeVersion?: string, databaseEncryption?: record, defaultMaxPodsConstraint?: record, description?: string, enableKubernetesAlpha?: bool, enableTpu?: bool, ... (53 more fields)}
   --parent: string # The parent (project and location) where the cluster will be created. Specified in the format `projects/*/locations/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -255,9 +282,9 @@ export def "container-projects-zones-clusters-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters") $qp $auth.query)
   let req_body = {"cluster": $cluster, "parent": $parent, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -310,7 +337,7 @@ export def "container-projects-zones-clusters-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -363,7 +390,7 @@ export def "container-projects-zones-clusters-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -406,11 +433,11 @@ export def "container-projects-zones-clusters-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster) of the cluster to update. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --update: record # ClusterUpdate describes an update to the cluster. Exactly one update can be applied to a cluster with each request, so at most one field can be provided. — shape: {additionalPodRangesConfig?: record, desiredAddonsConfig?: record, desiredAuthenticatorGroupsConfig?: record, desiredBinaryAuthorization?: record, desiredClusterAutoscaling?: record, desiredClusterTelemetry?: record, desiredCostManagementConfig?: record, desiredDatabaseEncryption?: record, desiredDatapathProvider?: "DATAPATH_PROVIDER_UNSPECIFIED"|"LEGACY_DATAPATH"|"ADVANCED_DATAPATH", desiredDefaultSnatStatus?: record, desiredDnsConfig?: record, desiredEnablePrivateEndpoint?: bool, ... (37 more fields)}
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -421,9 +448,9 @@ export def "container-projects-zones-clusters-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "projectId": $body_project_id, "update": $update, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -467,10 +494,10 @@ export def "container-projects-zones-clusters-addons" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --addons-config: record # Configuration for the addons that can be automatically spun up in the cluster, enabling additional functionality. — shape: {cloudRunConfig?: record, configConnectorConfig?: record, dnsCacheConfig?: record, gcePersistentDiskCsiDriverConfig?: record, gcpFilestoreCsiDriverConfig?: record, gkeBackupAgentConfig?: record, horizontalPodAutoscaling?: record, httpLoadBalancing?: record, istioConfig?: record, kalmConfig?: record, kubernetesDashboard?: record, networkPolicyConfig?: record}
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster) of the cluster to set addons. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -481,9 +508,9 @@ export def "container-projects-zones-clusters-addons" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/addons") $qp $auth.query)
   let req_body = {"addonsConfig": $addons_config, "clusterId": $body_cluster_id, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -526,11 +553,11 @@ export def "container-projects-zones-clusters-legacy-abac" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --enabled: oneof<nothing, bool> # Required. Whether ABAC authorization will be enabled in the cluster.
   --name: string # The name (project, location, cluster name) of the cluster to set legacy abac. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -541,9 +568,9 @@ export def "container-projects-zones-clusters-legacy-abac" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/legacyAbac") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "enabled": $enabled, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -586,11 +613,11 @@ export def "container-projects-zones-clusters-locations" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --locations: list<string> # Required. The desired list of Google Compute Engine [zones](https://cloud.google.com/compute/docs/zones#available) in which the cluster's nodes should be located. Changing the locations a cluster is in will result in nodes being either created or removed from the cluster, depending on whether locations are being added or removed. This list must always include the cluster's primary zone.
   --name: string # The name (project, location, cluster) of the cluster to set locations. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -601,9 +628,9 @@ export def "container-projects-zones-clusters-locations" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/locations") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "locations": $locations, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -646,11 +673,11 @@ export def "container-projects-zones-clusters-logging" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --logging-service: string # Required. The logging service the cluster should use to write logs. Currently available options: * `logging.googleapis.com/kubernetes` - The Cloud Logging service with a Kubernetes-native resource model * `logging.googleapis.com` - The legacy Cloud Logging service (no longer available as of GKE 1.15). * `none` - no logs will be exported from the cluster. If left as an empty string,`logging.googleapis.com/kubernetes` will be used for GKE 1.14+ or `logging.googleapis.com` for earlier versions.
   --name: string # The name (project, location, cluster) of the cluster to set logging. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -661,9 +688,9 @@ export def "container-projects-zones-clusters-logging" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/logging") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "loggingService": $logging_service, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -706,11 +733,11 @@ export def "container-projects-zones-clusters-master" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --master-version: string # Required. The Kubernetes version to change the master to. Users may specify either explicit versions offered by Kubernetes Engine or version aliases, which have the following behavior: - "latest": picks the highest valid Kubernetes version - "1.X": picks the highest valid patch+gke.N patch in the 1.X version - "1.X.Y": picks the highest valid gke.N patch in the 1.X.Y version - "1.X.Y-gke.N": picks an explicit Kubernetes version - "-": picks the default Kubernetes version
   --name: string # The name (project, location, cluster) of the cluster to update. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -721,9 +748,9 @@ export def "container-projects-zones-clusters-master" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/master") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "masterVersion": $master_version, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -766,11 +793,11 @@ export def "container-projects-zones-clusters-monitoring" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --monitoring-service: string # Required. The monitoring service the cluster should use to write metrics. Currently available options: * "monitoring.googleapis.com/kubernetes" - The Cloud Monitoring service with a Kubernetes-native resource model * `monitoring.googleapis.com` - The legacy Cloud Monitoring service (no longer available as of GKE 1.15). * `none` - No metrics will be exported from the cluster. If left as an empty string,`monitoring.googleapis.com/kubernetes` will be used for GKE 1.14+ or `monitoring.googleapis.com` for earlier versions.
   --name: string # The name (project, location, cluster) of the cluster to set monitoring. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -781,9 +808,9 @@ export def "container-projects-zones-clusters-monitoring" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/monitoring") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "monitoringService": $monitoring_service, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -836,7 +863,7 @@ export def "container-projects-zones-clusters-node-pools-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -879,11 +906,11 @@ export def "container-projects-zones-clusters-node-pools-create" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the parent field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the parent field. (spec name: clusterId)
   --node-pool: record # NodePool contains the name and configuration for a cluster's node pool. Node pools are a set of nodes (i.e. VM's), with a common configuration and specification, under the control of the cluster master. They may have a set of Kubernetes labels applied to them, which may be used to reference them during pod scheduling. They may also be resized up or down, to accommodate the workload. These upgrade settings control the level of parallelism and the level of disruption caused by an upgrade. maxUnavailable controls the number of nodes that can be simultaneously unavailable. maxSurge controls the number of additional nodes that can be added to the node pool temporarily for the time of the upgrade to increase the number of available nodes. (maxUnavailable + maxSurge) determines the level of parallelism (how many nodes are being upgraded at the same time). Note: upgrades inevitably introduce some disruption since workloads need to be moved from old nodes to new, upgraded ones. Even if maxUnavailable=0, this holds true. (Disruption stays within the limits of PodDisruptionBudget, if it is configured.) Consider a hypothetical node pool with 5 nodes having maxSurge=2, maxUnavailable=1. This means the upgrade process upgrades 3 nodes simultaneously. It creates 2 additional (upgraded) nodes, then it brings down 3 old (not yet upgraded) nodes at the same time. This ensures that there are always at least 4 nodes available. — shape: {autoscaling?: record, conditions?: list, config?: record, etag?: string, initialNodeCount?: int, instanceGroupUrls?: list<string>, locations?: list<string>, management?: record, maxPodsConstraint?: record, name?: string, networkConfig?: record, placementPolicy?: record, podIpv4CidrSize?: int, selfLink?: string, status?: "STATUS_UNSPECIFIED"|"PROVISIONING"|"RUNNING"|"RUNNING_WITH_ERROR"|"RECONCILING"|"STOPPING"|"ERROR", statusMessage?: string, updateInfo?: record, upgradeSettings?: record, ... (1 more fields)}
   --parent: string # The parent (project, location, cluster name) where the node pool will be created. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -894,9 +921,9 @@ export def "container-projects-zones-clusters-node-pools-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "nodePool": $node_pool, "parent": $parent, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -951,7 +978,7 @@ export def "container-projects-zones-clusters-node-pools-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1006,7 +1033,7 @@ export def "container-projects-zones-clusters-node-pools-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1051,11 +1078,11 @@ export def "container-projects-zones-clusters-node-pools-autoscaling" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --autoscaling: record # NodePoolAutoscaling contains information required by cluster autoscaler to adjust the size of the node pool to the current cluster usage. — shape: {autoprovisioned?: bool, enabled?: bool, locationPolicy?: "LOCATION_POLICY_UNSPECIFIED"|"BALANCED"|"ANY", maxNodeCount?: int, minNodeCount?: int, totalMaxNodeCount?: int, totalMinNodeCount?: int}
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster, node pool) of the node pool to set autoscaler settings. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
-  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field. (spec name: nodePoolId)
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1067,9 +1094,9 @@ export def "container-projects-zones-clusters-node-pools-autoscaling" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}/autoscaling") $qp $auth.query)
   let req_body = {"autoscaling": $autoscaling, "clusterId": $body_cluster_id, "name": $name, "nodePoolId": $body_node_pool_id, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1113,12 +1140,12 @@ export def "container-projects-zones-clusters-node-pools-set-management" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --management: record # NodeManagement defines the set of node management services turned on for the node pool. — shape: {autoRepair?: bool, autoUpgrade?: bool, upgradeOptions?: record}
   --name: string # The name (project, location, cluster, node pool id) of the node pool to set management properties. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
-  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field. (spec name: nodePoolId)
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1130,9 +1157,9 @@ export def "container-projects-zones-clusters-node-pools-set-management" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}/setManagement") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "management": $management, "name": $name, "nodePoolId": $body_node_pool_id, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1176,12 +1203,12 @@ export def "container-projects-zones-clusters-node-pools-set-size" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster, node pool id) of the node pool to set size. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
   --node-count: int # Required. The desired node count for the pool. (format: int32)
-  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field. (spec name: nodePoolId)
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1193,9 +1220,9 @@ export def "container-projects-zones-clusters-node-pools-set-size" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}/setSize") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "nodeCount": $node_count, "nodePoolId": $body_node_pool_id, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1239,7 +1266,7 @@ export def "container-projects-zones-clusters-node-pools-update" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --confidential-nodes: record # ConfidentialNodes is configuration for the confidential nodes feature, which makes nodes run on confidential VMs. — shape: {enabled?: bool}
   --etag: string # The current etag of the node pool. If an etag is provided and does not match the current etag of the node pool, update will be blocked and an ABORTED error will be returned.
   --fast-socket: record # Configuration of Fast Socket feature. — shape: {enabled?: bool}
@@ -1253,16 +1280,16 @@ export def "container-projects-zones-clusters-node-pools-update" [
   --logging-config: record # NodePoolLoggingConfig specifies logging configuration for nodepools. — shape: {variantConfig?: record}
   --name: string # The name (project, location, cluster, node pool) of the node pool to update. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
   --node-network-config: record # Parameters for node pool-level network config. — shape: {createPodRange?: bool, enablePrivateNodes?: bool, networkPerformanceConfig?: record, podCidrOverprovisionConfig?: record, podIpv4CidrBlock?: string, podRange?: string}
-  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field.
+  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field. (spec name: nodePoolId)
   --node-version: string # Required. The Kubernetes version to change the nodes to (typically an upgrade). Users may specify either explicit versions offered by Kubernetes Engine or version aliases, which have the following behavior: - "latest": picks the highest valid Kubernetes version - "1.X": picks the highest valid patch+gke.N patch in the 1.X version - "1.X.Y": picks the highest valid gke.N patch in the 1.X.Y version - "1.X.Y-gke.N": picks an explicit Kubernetes version - "-": picks the Kubernetes master version
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --resource-labels: record # Collection of [GCP labels](https://cloud.google.com/resource-manager/docs/creating-managing-labels). — shape: {labels?: record}
   --tags: record # Collection of Compute Engine network tags that can be applied to a node's underlying VM instance. (See `tags` field in [`NodeConfig`](/kubernetes-engine/docs/reference/rest/v1/NodeConfig)). — shape: {tags?: list<string>}
   --taints: record # Collection of Kubernetes [node taints](https://kubernetes.io/docs/concepts/configuration/taint-and-toleration). — shape: {taints?: list}
   --upgrade-settings: record # These upgrade settings configure the upgrade strategy for the node pool. Use strategy to switch between the strategies applied to the node pool. If the strategy is SURGE, use max_surge and max_unavailable to control the level of parallelism and the level of disruption caused by upgrade. 1. maxSurge controls the number of additional nodes that can be added to the node pool temporarily for the time of the upgrade to increase the number of available nodes. 2. maxUnavailable controls the number of nodes that can be simultaneously unavailable. 3. (maxUnavailable + maxSurge) determines the level of parallelism (how many nodes are being upgraded at the same time). If the strategy is BLUE_GREEN, use blue_green_settings to configure the blue-green upgrade related settings. 1. standard_rollout_policy is the default policy. The policy is used to control the way blue pool gets drained. The draining is executed in the batch mode. The batch size could be specified as either percentage of the node pool size or the number of nodes. batch_soak_duration is the soak time after each batch gets drained. 2. node_pool_soak_duration is the soak time after all blue nodes are drained. After this period, the blue pool nodes will be deleted. — shape: {blueGreenSettings?: record, maxSurge?: int, maxUnavailable?: int, strategy?: "NODE_POOL_UPDATE_STRATEGY_UNSPECIFIED"|"BLUE_GREEN"|"SURGE"}
   --windows-node-config: record # Parameters that can be configured on Windows nodes. Windows Node Config that define the parameters that will be used to configure the Windows node pool settings — shape: {osVersion?: "OS_VERSION_UNSPECIFIED"|"OS_VERSION_LTSC2019"|"OS_VERSION_LTSC2022"}
   --workload-metadata-config: record # WorkloadMetadataConfig defines the metadata configuration to expose to workloads on the node pool. — shape: {mode?: "MODE_UNSPECIFIED"|"GCE_METADATA"|"GKE_METADATA", nodeMetadata?: "UNSPECIFIED"|"SECURE"|"EXPOSE"|"GKE_METADATA_SERVER"}
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1274,9 +1301,9 @@ export def "container-projects-zones-clusters-node-pools-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}/update") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "confidentialNodes": $confidential_nodes, "etag": $etag, "fastSocket": $fast_socket, "gcfsConfig": $gcfs_config, "gvnic": $gvnic, "imageType": $image_type, "kubeletConfig": $kubelet_config, "labels": $labels, "linuxNodeConfig": $linux_node_config, "locations": $locations, "loggingConfig": $logging_config, "name": $name, "nodeNetworkConfig": $node_network_config, "nodePoolId": $body_node_pool_id, "nodeVersion": $node_version, "projectId": $body_project_id, "resourceLabels": $resource_labels, "tags": $tags, "taints": $taints, "upgradeSettings": $upgrade_settings, "windowsNodeConfig": $windows_node_config, "workloadMetadataConfig": $workload_metadata_config, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1320,12 +1347,12 @@ export def "container-projects-zones-clusters-node-pools-rollback" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to rollback. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to rollback. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster, node pool id) of the node poll to rollback upgrade. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
-  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to rollback. This field has been deprecated and replaced by the name field.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-node-pool-id: string # Required. Deprecated. The name of the node pool to rollback. This field has been deprecated and replaced by the name field. (spec name: nodePoolId)
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --respect-pdb: oneof<nothing, bool> # Option for rollback to ignore the PodDisruptionBudget. Default value is false.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1337,9 +1364,9 @@ export def "container-projects-zones-clusters-node-pools-rollback" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id), node_pool_id: (encode-path-segment $node_pool_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/nodePools/{node_pool_id}:rollback") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "nodePoolId": $body_node_pool_id, "projectId": $body_project_id, "respectPdb": $respect_pdb, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1382,12 +1409,12 @@ export def "container-projects-zones-clusters-resource-labels" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --label-fingerprint: string # Required. The fingerprint of the previous set of labels for this resource, used to detect conflicts. The fingerprint is initially generated by Kubernetes Engine and changes after every request to modify or update labels. You must always provide an up-to-date fingerprint hash when updating or changing labels. Make a `get()` request to the resource to get the latest fingerprint.
   --name: string # The name (project, location, cluster name) of the cluster to set labels. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --resource-labels: record # Required. The labels to set for that cluster.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1398,9 +1425,9 @@ export def "container-projects-zones-clusters-resource-labels" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}/resourceLabels") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "labelFingerprint": $label_fingerprint, "name": $name, "projectId": $body_project_id, "resourceLabels": $resource_labels, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1443,10 +1470,10 @@ export def "container-projects-zones-clusters-complete-ip-rotation" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster name) of the cluster to complete IP rotation. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1457,9 +1484,9 @@ export def "container-projects-zones-clusters-complete-ip-rotation" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}:completeIpRotation") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1502,11 +1529,11 @@ export def "container-projects-zones-clusters-set-maintenance-policy" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. The name of the cluster to update.
+  --body-cluster-id: string # Required. The name of the cluster to update. (spec name: clusterId)
   --maintenance-policy: record # MaintenancePolicy defines the maintenance policy to be used for the cluster. — shape: {resourceVersion?: string, window?: record}
   --name: string # The name (project, location, cluster name) of the cluster to set maintenance policy. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects).
-  --body-zone: string # Required. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides.
+  --body-project-id: string # Required. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). (spec name: projectId)
+  --body-zone: string # Required. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1517,9 +1544,9 @@ export def "container-projects-zones-clusters-set-maintenance-policy" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}:setMaintenancePolicy") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "maintenancePolicy": $maintenance_policy, "name": $name, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1563,11 +1590,11 @@ export def "container-projects-zones-clusters-set-master-auth" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --action: string@action-completer # Required. The exact form of action to be taken on the master auth.
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster) of the cluster to set auth. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --update: record # The authentication information for accessing the master endpoint. Authentication can be done using HTTP basic auth or using client certificates. — shape: {clientCertificate?: string, clientCertificateConfig?: record, clientKey?: string, clusterCaCertificate?: string, password?: string, username?: string}
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1578,9 +1605,9 @@ export def "container-projects-zones-clusters-set-master-auth" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}:setMasterAuth") $qp $auth.query)
   let req_body = {"action": $action, "clusterId": $body_cluster_id, "name": $name, "projectId": $body_project_id, "update": $update, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1623,11 +1650,11 @@ export def "container-projects-zones-clusters-set-network-policy" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster name) of the cluster to set networking policy. Specified in the format `projects/*/locations/*/clusters/*`.
   --network-policy: record # Configuration options for the NetworkPolicy feature. https://kubernetes.io/docs/concepts/services-networking/networkpolicies/ — shape: {enabled?: bool, provider?: "PROVIDER_UNSPECIFIED"|"CALICO"}
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1638,9 +1665,9 @@ export def "container-projects-zones-clusters-set-network-policy" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}:setNetworkPolicy") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "networkPolicy": $network_policy, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1683,11 +1710,11 @@ export def "container-projects-zones-clusters-start-ip-rotation" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
+  --body-cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field. (spec name: clusterId)
   --name: string # The name (project, location, cluster name) of the cluster to start IP rotation. Specified in the format `projects/*/locations/*/clusters/*`.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
   --rotate-credentials: oneof<nothing, bool> # Whether to rotate credentials during IP rotation.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1698,9 +1725,9 @@ export def "container-projects-zones-clusters-start-ip-rotation" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/clusters/{cluster_id}:startIpRotation") $qp $auth.query)
   let req_body = {"clusterId": $body_cluster_id, "name": $name, "projectId": $body_project_id, "rotateCredentials": $rotate_credentials, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1751,7 +1778,7 @@ export def "container-projects-zones-operations-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/operations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1804,7 +1831,7 @@ export def "container-projects-zones-operations-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), operation_id: (encode-path-segment $operation_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/operations/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1848,9 +1875,9 @@ export def "container-projects-zones-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # The name (project, location, operation id) of the operation to cancel. Specified in the format `projects/*/locations/*/operations/*`.
-  --body-operation-id: string # Required. Deprecated. The server-assigned `name` of the operation. This field has been deprecated and replaced by the name field.
-  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
-  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the operation resides. This field has been deprecated and replaced by the name field.
+  --body-operation-id: string # Required. Deprecated. The server-assigned `name` of the operation. This field has been deprecated and replaced by the name field. (spec name: operationId)
+  --body-project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field. (spec name: projectId)
+  --body-zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the operation resides. This field has been deprecated and replaced by the name field. (spec name: zone)
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1861,9 +1888,9 @@ export def "container-projects-zones-operations-cancel" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone), operation_id: (encode-path-segment $operation_id)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/operations/{operation_id}:cancel") $qp $auth.query)
   let req_body = {"name": $name, "operationId": $body_operation_id, "projectId": $body_project_id, "zone": $body_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1914,7 +1941,7 @@ export def "container-projects-zones-get-serverconfig" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), zone: (encode-path-segment $zone)} | format pattern "/v1beta1/projects/{project_id}/zones/{zone}/serverconfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1966,7 +1993,7 @@ export def "container-projects-locations-clusters-node-pools-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clusterId" $cluster_id "scalar") (serialize-qp "nodePoolId" $node_pool_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2017,7 +2044,7 @@ export def "container-projects-locations-operations-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "operationId" $operation_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2070,7 +2097,7 @@ export def "container-projects-locations-clusters-node-pools-update" [
   --linux-node-config: record # Parameters that can be configured on Linux nodes. — shape: {cgroupMode?: "CGROUP_MODE_UNSPECIFIED"|"CGROUP_MODE_V1"|"CGROUP_MODE_V2", sysctls?: record}
   --locations: list<string> # The desired list of Google Compute Engine [zones](https://cloud.google.com/compute/docs/zones#available) in which the node pool's nodes should be located. Changing the locations for a node pool will result in nodes being either created or removed from the node pool, depending on whether locations are being added or removed.
   --logging-config: record # NodePoolLoggingConfig specifies logging configuration for nodepools. — shape: {variantConfig?: record}
-  --body-name: string # The name (project, location, cluster, node pool) of the node pool to update. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
+  --body-name: string # The name (project, location, cluster, node pool) of the node pool to update. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`. (spec name: name)
   --node-network-config: record # Parameters for node pool-level network config. — shape: {createPodRange?: bool, enablePrivateNodes?: bool, networkPerformanceConfig?: record, podCidrOverprovisionConfig?: record, podIpv4CidrBlock?: string, podRange?: string}
   --node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field.
   --node-version: string # Required. The Kubernetes version to change the nodes to (typically an upgrade). Users may specify either explicit versions offered by Kubernetes Engine or version aliases, which have the following behavior: - "latest": picks the highest valid Kubernetes version - "1.X": picks the highest valid patch+gke.N patch in the 1.X version - "1.X.Y": picks the highest valid gke.N patch in the 1.X.Y version - "1.X.Y-gke.N": picks an explicit Kubernetes version - "-": picks the Kubernetes master version
@@ -2090,9 +2117,9 @@ export def "container-projects-locations-clusters-node-pools-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "confidentialNodes": $confidential_nodes, "etag": $etag, "fastSocket": $fast_socket, "gcfsConfig": $gcfs_config, "gvnic": $gvnic, "imageType": $image_type, "kubeletConfig": $kubelet_config, "labels": $labels, "linuxNodeConfig": $linux_node_config, "locations": $locations, "loggingConfig": $logging_config, "name": $body_name, "nodeNetworkConfig": $node_network_config, "nodePoolId": $node_pool_id, "nodeVersion": $node_version, "projectId": $project_id, "resourceLabels": $resource_labels, "tags": $tags, "taints": $taints, "upgradeSettings": $upgrade_settings, "windowsNodeConfig": $windows_node_config, "workloadMetadataConfig": $workload_metadata_config, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2142,7 +2169,7 @@ export def "container-projects-locations-get-server-config" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}/serverConfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2183,7 +2210,7 @@ export def "container-projects-locations-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --body-name: string # The name (project, location, operation id) of the operation to cancel. Specified in the format `projects/*/locations/*/operations/*`.
+  --body-name: string # The name (project, location, operation id) of the operation to cancel. Specified in the format `projects/*/locations/*/operations/*`. (spec name: name)
   --operation-id: string # Required. Deprecated. The server-assigned `name` of the operation. This field has been deprecated and replaced by the name field.
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the operation resides. This field has been deprecated and replaced by the name field.
@@ -2195,9 +2222,9 @@ export def "container-projects-locations-operations-cancel" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:cancel") $qp $auth.query)
   let req_body = {"name": $body_name, "operationId": $operation_id, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2239,7 +2266,7 @@ export def "container-projects-locations-clusters-complete-ip-rotation" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster name) of the cluster to complete IP rotation. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to complete IP rotation. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2250,9 +2277,9 @@ export def "container-projects-locations-clusters-complete-ip-rotation" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:completeIpRotation") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2302,9 +2329,9 @@ export def "container-projects-locations-clusters-node-pools-complete-upgrade" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:completeUpgrade") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2346,7 +2373,7 @@ export def "container-projects-locations-clusters-node-pools-rollback" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to rollback. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster, node pool id) of the node poll to rollback upgrade. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
+  --body-name: string # The name (project, location, cluster, node pool id) of the node poll to rollback upgrade. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`. (spec name: name)
   --node-pool-id: string # Required. Deprecated. The name of the node pool to rollback. This field has been deprecated and replaced by the name field.
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --respect-pdb: oneof<nothing, bool> # Option for rollback to ignore the PodDisruptionBudget. Default value is false.
@@ -2359,9 +2386,9 @@ export def "container-projects-locations-clusters-node-pools-rollback" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:rollback") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "name": $body_name, "nodePoolId": $node_pool_id, "projectId": $project_id, "respectPdb": $respect_pdb, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2404,7 +2431,7 @@ export def "container-projects-locations-clusters-set-addons" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --addons-config: record # Configuration for the addons that can be automatically spun up in the cluster, enabling additional functionality. — shape: {cloudRunConfig?: record, configConnectorConfig?: record, dnsCacheConfig?: record, gcePersistentDiskCsiDriverConfig?: record, gcpFilestoreCsiDriverConfig?: record, gkeBackupAgentConfig?: record, horizontalPodAutoscaling?: record, httpLoadBalancing?: record, istioConfig?: record, kalmConfig?: record, kubernetesDashboard?: record, networkPolicyConfig?: record}
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster) of the cluster to set addons. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to set addons. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2415,9 +2442,9 @@ export def "container-projects-locations-clusters-set-addons" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setAddons") $qp $auth.query)
   let req_body = {"addonsConfig": $addons_config, "clusterId": $cluster_id, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2460,7 +2487,7 @@ export def "container-projects-locations-clusters-node-pools-set-autoscaling" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --autoscaling: record # NodePoolAutoscaling contains information required by cluster autoscaler to adjust the size of the node pool to the current cluster usage. — shape: {autoprovisioned?: bool, enabled?: bool, locationPolicy?: "LOCATION_POLICY_UNSPECIFIED"|"BALANCED"|"ANY", maxNodeCount?: int, minNodeCount?: int, totalMaxNodeCount?: int, totalMinNodeCount?: int}
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster, node pool) of the node pool to set autoscaler settings. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
+  --body-name: string # The name (project, location, cluster, node pool) of the node pool to set autoscaler settings. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`. (spec name: name)
   --node-pool-id: string # Required. Deprecated. The name of the node pool to upgrade. This field has been deprecated and replaced by the name field.
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -2472,9 +2499,9 @@ export def "container-projects-locations-clusters-node-pools-set-autoscaling" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setAutoscaling") $qp $auth.query)
   let req_body = {"autoscaling": $autoscaling, "clusterId": $cluster_id, "name": $body_name, "nodePoolId": $node_pool_id, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2517,7 +2544,7 @@ export def "container-projects-locations-clusters-set-legacy-abac" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
   --enabled: oneof<nothing, bool> # Required. Whether ABAC authorization will be enabled in the cluster.
-  --body-name: string # The name (project, location, cluster name) of the cluster to set legacy abac. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to set legacy abac. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2528,9 +2555,9 @@ export def "container-projects-locations-clusters-set-legacy-abac" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setLegacyAbac") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "enabled": $enabled, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2573,7 +2600,7 @@ export def "container-projects-locations-clusters-set-locations" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
   --locations: list<string> # Required. The desired list of Google Compute Engine [zones](https://cloud.google.com/compute/docs/zones#available) in which the cluster's nodes should be located. Changing the locations a cluster is in will result in nodes being either created or removed from the cluster, depending on whether locations are being added or removed. This list must always include the cluster's primary zone.
-  --body-name: string # The name (project, location, cluster) of the cluster to set locations. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to set locations. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2584,9 +2611,9 @@ export def "container-projects-locations-clusters-set-locations" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setLocations") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "locations": $locations, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2629,7 +2656,7 @@ export def "container-projects-locations-clusters-set-logging" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
   --logging-service: string # Required. The logging service the cluster should use to write logs. Currently available options: * `logging.googleapis.com/kubernetes` - The Cloud Logging service with a Kubernetes-native resource model * `logging.googleapis.com` - The legacy Cloud Logging service (no longer available as of GKE 1.15). * `none` - no logs will be exported from the cluster. If left as an empty string,`logging.googleapis.com/kubernetes` will be used for GKE 1.14+ or `logging.googleapis.com` for earlier versions.
-  --body-name: string # The name (project, location, cluster) of the cluster to set logging. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to set logging. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2640,9 +2667,9 @@ export def "container-projects-locations-clusters-set-logging" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setLogging") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "loggingService": $logging_service, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2685,7 +2712,7 @@ export def "container-projects-locations-clusters-set-maintenance-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. The name of the cluster to update.
   --maintenance-policy: record # MaintenancePolicy defines the maintenance policy to be used for the cluster. — shape: {resourceVersion?: string, window?: record}
-  --body-name: string # The name (project, location, cluster name) of the cluster to set maintenance policy. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to set maintenance policy. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects).
   --zone: string # Required. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2696,9 +2723,9 @@ export def "container-projects-locations-clusters-set-maintenance-policy" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setMaintenancePolicy") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "maintenancePolicy": $maintenance_policy, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2741,7 +2768,7 @@ export def "container-projects-locations-clusters-node-pools-set-management" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
   --management: record # NodeManagement defines the set of node management services turned on for the node pool. — shape: {autoRepair?: bool, autoUpgrade?: bool, upgradeOptions?: record}
-  --body-name: string # The name (project, location, cluster, node pool id) of the node pool to set management properties. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
+  --body-name: string # The name (project, location, cluster, node pool id) of the node pool to set management properties. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`. (spec name: name)
   --node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field.
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -2753,9 +2780,9 @@ export def "container-projects-locations-clusters-node-pools-set-management" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setManagement") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "management": $management, "name": $body_name, "nodePoolId": $node_pool_id, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2798,7 +2825,7 @@ export def "container-projects-locations-clusters-set-master-auth" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --action: string@action-completer # Required. The exact form of action to be taken on the master auth.
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster) of the cluster to set auth. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to set auth. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --update: record # The authentication information for accessing the master endpoint. Authentication can be done using HTTP basic auth or using client certificates. — shape: {clientCertificate?: string, clientCertificateConfig?: record, clientKey?: string, clusterCaCertificate?: string, password?: string, username?: string}
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -2810,9 +2837,9 @@ export def "container-projects-locations-clusters-set-master-auth" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setMasterAuth") $qp $auth.query)
   let req_body = {"action": $action, "clusterId": $cluster_id, "name": $body_name, "projectId": $project_id, "update": $update, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2855,7 +2882,7 @@ export def "container-projects-locations-clusters-set-monitoring" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
   --monitoring-service: string # Required. The monitoring service the cluster should use to write metrics. Currently available options: * "monitoring.googleapis.com/kubernetes" - The Cloud Monitoring service with a Kubernetes-native resource model * `monitoring.googleapis.com` - The legacy Cloud Monitoring service (no longer available as of GKE 1.15). * `none` - No metrics will be exported from the cluster. If left as an empty string,`monitoring.googleapis.com/kubernetes` will be used for GKE 1.14+ or `monitoring.googleapis.com` for earlier versions.
-  --body-name: string # The name (project, location, cluster) of the cluster to set monitoring. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to set monitoring. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -2866,9 +2893,9 @@ export def "container-projects-locations-clusters-set-monitoring" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setMonitoring") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "monitoringService": $monitoring_service, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2910,7 +2937,7 @@ export def "container-projects-locations-clusters-set-network-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster name) of the cluster to set networking policy. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to set networking policy. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --network-policy: record # Configuration options for the NetworkPolicy feature. https://kubernetes.io/docs/concepts/services-networking/networkpolicies/ — shape: {enabled?: bool, provider?: "PROVIDER_UNSPECIFIED"|"CALICO"}
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -2922,9 +2949,9 @@ export def "container-projects-locations-clusters-set-network-policy" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setNetworkPolicy") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "name": $body_name, "networkPolicy": $network_policy, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2967,7 +2994,7 @@ export def "container-projects-locations-clusters-set-resource-labels" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
   --label-fingerprint: string # Required. The fingerprint of the previous set of labels for this resource, used to detect conflicts. The fingerprint is initially generated by Kubernetes Engine and changes after every request to modify or update labels. You must always provide an up-to-date fingerprint hash when updating or changing labels. Make a `get()` request to the resource to get the latest fingerprint.
-  --body-name: string # The name (project, location, cluster name) of the cluster to set labels. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to set labels. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --resource-labels: record # Required. The labels to set for that cluster.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -2979,9 +3006,9 @@ export def "container-projects-locations-clusters-set-resource-labels" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setResourceLabels") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "labelFingerprint": $label_fingerprint, "name": $body_name, "projectId": $project_id, "resourceLabels": $resource_labels, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3023,7 +3050,7 @@ export def "container-projects-locations-clusters-node-pools-set-size" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to update. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster, node pool id) of the node pool to set size. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`.
+  --body-name: string # The name (project, location, cluster, node pool id) of the node pool to set size. Specified in the format `projects/*/locations/*/clusters/*/nodePools/*`. (spec name: name)
   --node-count: int # Required. The desired node count for the pool. (format: int32)
   --node-pool-id: string # Required. Deprecated. The name of the node pool to update. This field has been deprecated and replaced by the name field.
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
@@ -3036,9 +3063,9 @@ export def "container-projects-locations-clusters-node-pools-set-size" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:setSize") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "name": $body_name, "nodeCount": $node_count, "nodePoolId": $node_pool_id, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3080,7 +3107,7 @@ export def "container-projects-locations-clusters-start-ip-rotation" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the name field.
-  --body-name: string # The name (project, location, cluster name) of the cluster to start IP rotation. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster name) of the cluster to start IP rotation. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --rotate-credentials: oneof<nothing, bool> # Whether to rotate credentials during IP rotation.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
@@ -3092,9 +3119,9 @@ export def "container-projects-locations-clusters-start-ip-rotation" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:startIpRotation") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "name": $body_name, "projectId": $project_id, "rotateCredentials": $rotate_credentials, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3137,7 +3164,7 @@ export def "container-projects-locations-clusters-update-master" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster to upgrade. This field has been deprecated and replaced by the name field.
   --master-version: string # Required. The Kubernetes version to change the master to. Users may specify either explicit versions offered by Kubernetes Engine or version aliases, which have the following behavior: - "latest": picks the highest valid Kubernetes version - "1.X": picks the highest valid patch+gke.N patch in the 1.X version - "1.X.Y": picks the highest valid gke.N patch in the 1.X.Y version - "1.X.Y-gke.N": picks an explicit Kubernetes version - "-": picks the default Kubernetes version
-  --body-name: string # The name (project, location, cluster) of the cluster to update. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-name: string # The name (project, location, cluster) of the cluster to update. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: name)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the name field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the name field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -3148,9 +3175,9 @@ export def "container-projects-locations-clusters-update-master" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v1beta1/{name}:updateMaster") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "masterVersion": $master_version, "name": $body_name, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3198,7 +3225,7 @@ export def "container-projects-locations-clusters-well-known-get-openid-configur
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/.well-known/openid-configuration") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3249,7 +3276,7 @@ export def "container-projects-aggregated-usable-subnetworks-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/aggregated/usableSubnetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3299,7 +3326,7 @@ export def "container-projects-locations-clusters-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/clusters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3341,7 +3368,7 @@ export def "container-projects-locations-clusters-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster: record # A Google Kubernetes Engine cluster. — shape: {addonsConfig?: record, authenticatorGroupsConfig?: record, autopilot?: record, autoscaling?: record, binaryAuthorization?: record, clusterIpv4Cidr?: string, clusterTelemetry?: record, conditions?: list, confidentialNodes?: record, costManagementConfig?: record, createTime?: string, currentMasterVersion?: string, currentNodeCount?: int, currentNodeVersion?: string, databaseEncryption?: record, defaultMaxPodsConstraint?: record, description?: string, enableKubernetesAlpha?: bool, enableTpu?: bool, ... (53 more fields)}
-  --body-parent: string # The parent (project and location) where the cluster will be created. Specified in the format `projects/*/locations/*`.
+  --body-parent: string # The parent (project and location) where the cluster will be created. Specified in the format `projects/*/locations/*`. (spec name: parent)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -3352,9 +3379,9 @@ export def "container-projects-locations-clusters-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/clusters") $qp $auth.query)
   let req_body = {"cluster": $cluster, "parent": $body_parent, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3402,7 +3429,7 @@ export def "container-projects-locations-clusters-get-jwks" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/jwks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3450,7 +3477,7 @@ export def "container-projects-locations-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/locations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3501,7 +3528,7 @@ export def "container-projects-locations-clusters-node-pools-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clusterId" $cluster_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/nodePools") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3544,7 +3571,7 @@ export def "container-projects-locations-clusters-node-pools-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --cluster-id: string # Required. Deprecated. The name of the cluster. This field has been deprecated and replaced by the parent field.
   --node-pool: record # NodePool contains the name and configuration for a cluster's node pool. Node pools are a set of nodes (i.e. VM's), with a common configuration and specification, under the control of the cluster master. They may have a set of Kubernetes labels applied to them, which may be used to reference them during pod scheduling. They may also be resized up or down, to accommodate the workload. These upgrade settings control the level of parallelism and the level of disruption caused by an upgrade. maxUnavailable controls the number of nodes that can be simultaneously unavailable. maxSurge controls the number of additional nodes that can be added to the node pool temporarily for the time of the upgrade to increase the number of available nodes. (maxUnavailable + maxSurge) determines the level of parallelism (how many nodes are being upgraded at the same time). Note: upgrades inevitably introduce some disruption since workloads need to be moved from old nodes to new, upgraded ones. Even if maxUnavailable=0, this holds true. (Disruption stays within the limits of PodDisruptionBudget, if it is configured.) Consider a hypothetical node pool with 5 nodes having maxSurge=2, maxUnavailable=1. This means the upgrade process upgrades 3 nodes simultaneously. It creates 2 additional (upgraded) nodes, then it brings down 3 old (not yet upgraded) nodes at the same time. This ensures that there are always at least 4 nodes available. — shape: {autoscaling?: record, conditions?: list, config?: record, etag?: string, initialNodeCount?: int, instanceGroupUrls?: list<string>, locations?: list<string>, management?: record, maxPodsConstraint?: record, name?: string, networkConfig?: record, placementPolicy?: record, podIpv4CidrSize?: int, selfLink?: string, status?: "STATUS_UNSPECIFIED"|"PROVISIONING"|"RUNNING"|"RUNNING_WITH_ERROR"|"RECONCILING"|"STOPPING"|"ERROR", statusMessage?: string, updateInfo?: record, upgradeSettings?: record, ... (1 more fields)}
-  --body-parent: string # The parent (project, location, cluster name) where the node pool will be created. Specified in the format `projects/*/locations/*/clusters/*`.
+  --body-parent: string # The parent (project, location, cluster name) where the node pool will be created. Specified in the format `projects/*/locations/*/clusters/*`. (spec name: parent)
   --project-id: string # Required. Deprecated. The Google Developers Console [project ID or project number](https://cloud.google.com/resource-manager/docs/creating-managing-projects). This field has been deprecated and replaced by the parent field.
   --zone: string # Required. Deprecated. The name of the Google Compute Engine [zone](https://cloud.google.com/compute/docs/zones#available) in which the cluster resides. This field has been deprecated and replaced by the parent field.
 ]: any -> oneof<record<clusterConditions: table<canonicalCode: string, code: string, message: string>, detail: string, endTime: string, error: record<code: int, details: list<record>, message: string>, location: string, name: string, nodepoolConditions: table<canonicalCode: string, code: string, message: string>, operationType: string, progress: record<metrics: list<record>, name: string, stages: list<any>, status: string>, selfLink: string, startTime: string, status: string, statusMessage: string, targetLink: string, zone: string>, string, nothing> {
@@ -3555,9 +3582,9 @@ export def "container-projects-locations-clusters-node-pools-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/nodePools") $qp $auth.query)
   let req_body = {"clusterId": $cluster_id, "nodePool": $node_pool, "parent": $body_parent, "projectId": $project_id, "zone": $zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3607,7 +3634,7 @@ export def "container-projects-locations-operations-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "zone" $zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({parent: (encode-path-segment $parent)} | format pattern "/v1beta1/{parent}/operations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

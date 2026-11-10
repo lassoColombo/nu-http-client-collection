@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -178,7 +205,7 @@ export def "get-organism-attribute-search-query" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), query: (encode-path-segment $query)} | format pattern "/{organism}/attributeSearch/{query}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -213,7 +240,7 @@ export def "get-organism-attribute-set" [
   if ($organism | is-empty) { error make --unspanned { msg: "path parameter 'organism' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/attributeSet") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -254,7 +281,7 @@ export def "get-organism-attributes-system-code-identifier" [
   let qp = [(serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/attributes/{system_code}/{identifier}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -289,7 +316,7 @@ export def "get-organism-is-free-search-supported" [
   if ($organism | is-empty) { error make --unspanned { msg: "path parameter 'organism' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/isFreeSearchSupported") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -328,7 +355,7 @@ export def "get-organism-is-mapping-supported-source-system-code-target-system-c
   if ($target_system_code | is-empty) { error make --unspanned { msg: "path parameter 'targetSystemCode' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), source_system_code: (encode-path-segment $source_system_code), target_system_code: (encode-path-segment $target_system_code)} | format pattern "/{organism}/isMappingSupported/{source_system_code}/{target_system_code}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -363,7 +390,7 @@ export def "get-organism-properties" [
   if ($organism | is-empty) { error make --unspanned { msg: "path parameter 'organism' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/properties") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -402,7 +429,7 @@ export def "get-organism-search-query" [
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), query: (encode-path-segment $query)} | format pattern "/{organism}/search/{query}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -437,7 +464,7 @@ export def "get-organism-source-data-sources" [
   if ($organism | is-empty) { error make --unspanned { msg: "path parameter 'organism' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/sourceDataSources") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -472,7 +499,7 @@ export def "get-organism-target-data-sources" [
   if ($organism | is-empty) { error make --unspanned { msg: "path parameter 'organism' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/targetDataSources") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -511,7 +538,7 @@ export def "get-organism-xref-exists-system-code-identifier" [
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/xrefExists/{system_code}/{identifier}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -552,7 +579,7 @@ export def "get-organism-xrefs-system-code-identifier" [
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code), identifier: (encode-path-segment $identifier)} | format pattern "/{organism}/xrefs/{system_code}/{identifier}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -591,9 +618,9 @@ export def "post-organism-xrefs-batch" [
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism)} | format pattern "/{organism}/xrefsBatch") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -634,9 +661,9 @@ export def "post-organism-xrefs-batch-system-code" [
   let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({organism: (encode-path-segment $organism), system_code: (encode-path-segment $system_code)} | format pattern "/{organism}/xrefsBatch/{system_code}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -182,7 +209,7 @@ export def "article-delete" [
   let qp = [(serialize-qp "ArticleId" $article_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -247,9 +274,9 @@ export def "article-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article" $auth.query)
   let req_body = {"activeStatus": $active_status, "applyForAllGyms": $apply_for_all_gyms, "articleId": $article_id, "availableGyms": $available_gyms, "availableQty": $available_qty, "barcode": $barcode, "createdDate": $created_date, "createdUser": $created_user, "cronExpression": $cron_expression, "description": $description, "discount": $discount, "employeeDiscount": $employee_discount, "employeePrice": $employee_price, "gymArticles": $gym_articles, "isAddOn": $is_add_on, "isInventoryItem": $is_inventory_item, "isObsolete": $is_obsolete, "measureUnit": $measure_unit, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "name": $name, "number": $number, "price": $price, "reorderLevel": $reorder_level, "revenueAccountId": $revenue_account_id, "sellingPrice": $selling_price, "tags": $tags, "type": $type, "vat": $vat, "vatApplicable": $vat_applicable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -314,9 +341,9 @@ export def "article-put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article" $auth.query)
   let req_body = {"activeStatus": $active_status, "applyForAllGyms": $apply_for_all_gyms, "articleId": $article_id, "availableGyms": $available_gyms, "availableQty": $available_qty, "barcode": $barcode, "createdDate": $created_date, "createdUser": $created_user, "cronExpression": $cron_expression, "description": $description, "discount": $discount, "employeeDiscount": $employee_discount, "employeePrice": $employee_price, "gymArticles": $gym_articles, "isAddOn": $is_add_on, "isInventoryItem": $is_inventory_item, "isObsolete": $is_obsolete, "measureUnit": $measure_unit, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "name": $name, "number": $number, "price": $price, "reorderLevel": $reorder_level, "revenueAccountId": $revenue_account_id, "sellingPrice": $selling_price, "tags": $tags, "type": $type, "vat": $vat, "vatApplicable": $vat_applicable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -352,9 +379,9 @@ export def "article-update-article-gym-details" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article/ArticleGymDetails" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -393,7 +420,7 @@ export def "article-get-addons" [
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymIds" $gym_ids "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/GetAddons" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -431,7 +458,7 @@ export def "article-gym-article-details" [
   if ($gym_id | is-empty) { error make --unspanned { msg: "path parameter 'gymId' must be non-empty" } }
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id), gym_id: (encode-path-segment $gym_id)} | format pattern "/api/Article/GymArticle/{article_id}/{gym_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -467,9 +494,9 @@ export def "article-add-measure-unit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article/MeasureUnit" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -505,7 +532,7 @@ export def "article-get-measure-units" [
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/MeasureUnits" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -539,7 +566,7 @@ export def "article-get-revenue-accounts" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article/RevenueAccounts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -581,7 +608,7 @@ export def "article-search" [
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/Search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "article-update-status" [
   let qp = [(serialize-qp "ArticleId" $article_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Article/UpdateStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -655,7 +682,7 @@ export def "article-get" [
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleID' must be non-empty" } }
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/api/Article/{article_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -693,9 +720,9 @@ export def "auth-login" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Auth/login" $auth.query)
   let req_body = {"password": $password, "remember": $remember, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -731,7 +758,7 @@ export def "gym-get" [
   if ($gym_id | is-empty) { error make --unspanned { msg: "path parameter 'gymID' must be non-empty" } }
   let full_url = (build-url $base ({gym_id: (encode-path-segment $gym_id)} | format pattern "/api/Gym/{gym_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -765,7 +792,7 @@ export def "membership-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Membership" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -801,9 +828,9 @@ export def "membership-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Membership" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -839,7 +866,7 @@ export def "package-delete" [
   let qp = [(serialize-qp "PackageId" $package_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -875,7 +902,7 @@ export def "package-get" [
   let qp = [(serialize-qp "packageId" $package_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -953,9 +980,9 @@ export def "package-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Package" $auth.query)
   let req_body = {"addOns": $add_ons, "addonFee": $addon_fee, "applyForAllGyms": $apply_for_all_gyms, "availableGyms": $available_gyms, "bindingPeriod": $binding_period, "createdDate": $created_date, "createdUser": $created_user, "description": $description, "endDate": $end_date, "expireInMonths": $expire_in_months, "features": $features, "freeMonths": $free_months, "instructionsToGymUsers": $instructions_to_gym_users, "instructionsToWebUsers": $instructions_to_web_users, "isActive": $is_active, "isAtg": $is_atg, "isAutoRenew": $is_auto_renew, "isFirstMonthFree": $is_first_month_free, "isRegistrationFee": $is_registration_fee, "isRestAmount": $is_rest_amount, "isShownInMobile": $is_shown_in_mobile, "isSponsorPackage": $is_sponsor_package, "maximumGiveAwayRestAmount": $maximum_give_away_rest_amount, "memberCanAddAddOns": $member_can_add_add_ons, "memberCanLeaveWithinFreePeriod": $member_can_leave_within_free_period, "memberCanRemoveAddOns": $member_can_remove_add_ons, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "monthlyFee": $monthly_fee, "nextPackageNumber": $next_package_number, "numberOfInstallments": $number_of_installments, "numberOfVisits": $number_of_visits, "packageId": $package_id, "packageName": $package_name, "packageNumber": $package_number, "packageType": $package_type, "perVisitPrice": $per_visit_price, "registrationFee": $registration_fee, "serviceFee": $service_fee, "shownInWeb": $shown_in_web, "startDate": $start_date, "tags": $tags, "totalPrice": $total_price} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1033,9 +1060,9 @@ export def "package-put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Package" $auth.query)
   let req_body = {"addOns": $add_ons, "addonFee": $addon_fee, "applyForAllGyms": $apply_for_all_gyms, "availableGyms": $available_gyms, "bindingPeriod": $binding_period, "createdDate": $created_date, "createdUser": $created_user, "description": $description, "endDate": $end_date, "expireInMonths": $expire_in_months, "features": $features, "freeMonths": $free_months, "instructionsToGymUsers": $instructions_to_gym_users, "instructionsToWebUsers": $instructions_to_web_users, "isActive": $is_active, "isAtg": $is_atg, "isAutoRenew": $is_auto_renew, "isFirstMonthFree": $is_first_month_free, "isRegistrationFee": $is_registration_fee, "isRestAmount": $is_rest_amount, "isShownInMobile": $is_shown_in_mobile, "isSponsorPackage": $is_sponsor_package, "maximumGiveAwayRestAmount": $maximum_give_away_rest_amount, "memberCanAddAddOns": $member_can_add_add_ons, "memberCanLeaveWithinFreePeriod": $member_can_leave_within_free_period, "memberCanRemoveAddOns": $member_can_remove_add_ons, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "monthlyFee": $monthly_fee, "nextPackageNumber": $next_package_number, "numberOfInstallments": $number_of_installments, "numberOfVisits": $number_of_visits, "packageId": $package_id, "packageName": $package_name, "packageNumber": $package_number, "packageType": $package_type, "perVisitPrice": $per_visit_price, "registrationFee": $registration_fee, "serviceFee": $service_fee, "shownInWeb": $shown_in_web, "startDate": $start_date, "tags": $tags, "totalPrice": $total_price} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1081,7 +1108,7 @@ export def "package-search" [
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "startpPrice" $startp_price "scalar") (serialize-qp "endPrice" $end_price "scalar") (serialize-qp "requestSource" $request_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package/Search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1119,7 +1146,7 @@ export def "package-update-status" [
   let qp = [(serialize-qp "packageId" $package_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Package/UpdateStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1155,7 +1182,7 @@ export def "status-get" [
   let qp = [(serialize-qp "messageId" $message_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/Status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1189,7 +1216,7 @@ export def "test-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Test" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1223,7 +1250,7 @@ export def "user-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/User" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1267,7 +1294,7 @@ export def "user-register-user" [
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccountNumber" $account_number "scalar") (serialize-qp "GymNumber" $gym_number "scalar") (serialize-qp "ExternalEntityNumber" $external_entity_number "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "IntroduceBy" $introduce_by "scalar") (serialize-qp "Guardian" $guardian "scalar") (serialize-qp "TypeId" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/User/registerUser" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1311,7 +1338,7 @@ export def "user-update-user" [
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccountNumber" $account_number "scalar") (serialize-qp "GymNumber" $gym_number "scalar") (serialize-qp "ExternalEntityNumber" $external_entity_number "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "IntroduceBy" $introduce_by "scalar") (serialize-qp "Guardian" $guardian "scalar") (serialize-qp "TypeId" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/User/updateuser" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

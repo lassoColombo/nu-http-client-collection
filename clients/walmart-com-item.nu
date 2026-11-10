@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -215,9 +242,9 @@ export def "v2get-feed-item-status" [
   let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -267,12 +294,12 @@ export def "v2do-post-multi-part" [
   let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -325,9 +352,9 @@ export def "v2get-all-items-status" [
   let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed_id: (encode-path-segment $feed_id)} | format pattern "/v2/feeds/{feed_id}") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -378,9 +405,9 @@ export def "v3get-feed-item-status" [
   let qp = [(serialize-qp "feedId" $feed_id "scalar") (serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -430,12 +457,12 @@ export def "v3do-post-multi-part" [
   let qp = [(serialize-qp "feedType" $feed_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -488,9 +515,9 @@ export def "v3get-all-items-status" [
   let qp = [(serialize-qp "includeDetails" $include_details "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({feed_id: (encode-path-segment $feed_id)} | format pattern "/v3/feeds/{feed_id}") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

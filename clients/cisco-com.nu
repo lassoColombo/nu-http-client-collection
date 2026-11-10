@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -164,7 +191,7 @@ export def "get-security-advisories-cvrf-advisory-advisory-id" [
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/security/advisories/cvrf/advisory/{advisory_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -197,7 +224,7 @@ export def "get-security-advisories-cvrf-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/security/advisories/cvrf/all" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -232,7 +259,7 @@ export def "get-security-advisories-cvrf-cve-cve-id" [
   if ($cve_id | is-empty) { error make --unspanned { msg: "path parameter 'cve_id' must be non-empty" } }
   let full_url = (build-url $base ({cve_id: (encode-path-segment $cve_id)} | format pattern "/security/advisories/cvrf/cve/{cve_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -267,7 +294,7 @@ export def "get-security-advisories-cvrf-latest-number" [
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
   let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/security/advisories/cvrf/latest/{number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -303,7 +330,7 @@ export def "get-security-advisories-cvrf-product" [
   let qp = [(serialize-qp "product" $product "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/cvrf/product" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -338,7 +365,7 @@ export def "get-security-advisories-cvrf-severity-severity" [
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -378,7 +405,7 @@ export def "get-security-advisories-cvrf-severity-severity-firstpublished" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/firstpublished") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -418,7 +445,7 @@ export def "get-security-advisories-cvrf-severity-severity-lastpublished" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/cvrf/severity/{severity}/lastpublished") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -453,7 +480,7 @@ export def "get-security-advisories-cvrf-year-year" [
   if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/security/advisories/cvrf/year/{year}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -489,7 +516,7 @@ export def "get-security-advisories-ios" [
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/ios" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -525,7 +552,7 @@ export def "get-security-advisories-iosxe" [
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/iosxe" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -560,7 +587,7 @@ export def "get-security-advisories-oval-advisory-advisory-id" [
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/security/advisories/oval/advisory/{advisory_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -593,7 +620,7 @@ export def "get-security-advisories-oval-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/security/advisories/oval/all" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "get-security-advisories-oval-cve-cve-id" [
   if ($cve_id | is-empty) { error make --unspanned { msg: "path parameter 'cve_id' must be non-empty" } }
   let full_url = (build-url $base ({cve_id: (encode-path-segment $cve_id)} | format pattern "/security/advisories/oval/cve/{cve_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "get-security-advisories-oval-latest-number" [
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
   let full_url = (build-url $base ({number: (encode-path-segment $number)} | format pattern "/security/advisories/oval/latest/{number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -699,7 +726,7 @@ export def "get-security-advisories-oval-product" [
   let qp = [(serialize-qp "product" $product "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/security/advisories/oval/product" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -734,7 +761,7 @@ export def "get-security-advisories-oval-severity-severity" [
   if ($severity | is-empty) { error make --unspanned { msg: "path parameter 'severity' must be non-empty" } }
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -774,7 +801,7 @@ export def "get-security-advisories-oval-severity-severity-firstpublished" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/firstpublished") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -814,7 +841,7 @@ export def "get-security-advisories-oval-severity-severity-lastpublished" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({severity: (encode-path-segment $severity)} | format pattern "/security/advisories/oval/severity/{severity}/lastpublished") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

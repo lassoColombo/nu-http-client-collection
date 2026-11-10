@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -197,7 +224,7 @@ export def "get-v2-access-tokens" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/access-tokens" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -233,9 +260,9 @@ export def "post-v2-access-tokens" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/access-tokens" $auth.query)
   let req_body = {"scopes": $scopes, "token_label": $token_label} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -270,7 +297,7 @@ export def "delete-v2-access-tokens-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -305,7 +332,7 @@ export def "get-v2-access-tokens-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -343,9 +370,9 @@ export def "patch-v2-access-tokens-uuid" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/v2/access-tokens/{uuid}") $auth.query)
   let req_body = {"is_active": $is_active, "token_label": $token_label} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -389,7 +416,7 @@ export def "audit-logs-get-audit-logs" [
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "actor" $actor "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/v2/auditlogs/{account}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -425,7 +452,7 @@ export def "audit-logs-get-audit-actions" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/v2/auditlogs/{account}/actions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -456,7 +483,7 @@ export def "post-namespaces-delete-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active. Defaults to 1 month before the current time. (e.g. 2020-12-01T12:00:00Z)
-  --body-dry-run: oneof<nothing, bool> # If `true` then will check and return errors and unignored warnings for the deletion request but will not delete any images. (e.g. false)
+  --body-dry-run: oneof<nothing, bool> # If `true` then will check and return errors and unignored warnings for the deletion request but will not delete any images. (e.g. false) (spec name: dry_run)
   --ignore-warnings: list # Warnings to ignore. If a warning is not ignored then no deletions will happen and the warning is returned in the response. These warnings include: - is_active: warning when attempting to delete an image that is marked as active. - current_tag: warning when attempting to delete an image that has one or more current tags in the repository. Warnings can be copied from the response to the request. — item shape: {digest: string, repository: string, tags?: list<string>, warning: "is_active"|"current_tag"}
   --manifests: list # Image manifests to delete. — item shape: {digest: string, repository: string}
 ]: any -> oneof<record<dry_run: bool, metrics: record<manifest_deletes: int, manifest_errors: int, tag_deletes: int, tag_errors: int>>, string, nothing> {
@@ -466,9 +493,9 @@ export def "post-namespaces-delete-images" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/v2/namespaces/{namespace}/delete-images") $auth.query)
   let req_body = {"active_from": $active_from, "dry_run": $body_dry_run, "ignore_warnings": $ignore_warnings, "manifests": $manifests} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -513,7 +540,7 @@ export def "get-namespaces-repositories-images" [
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "currently_tagged" $currently_tagged "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "active_from" $active_from "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -553,7 +580,7 @@ export def "get-namespaces-repositories-images-summary" [
   let qp = [(serialize-qp "active_from" $active_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images-summary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -596,7 +623,7 @@ export def "get-namespaces-repositories-images-tags" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), digest: (encode-path-segment $digest)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -636,7 +663,7 @@ export def "get-v2-namespaces-namespace-repositories-repository-tags" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -673,7 +700,7 @@ export def "head-v2-namespaces-namespace-repositories-repository-tags" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "head"
     url: $full_url
@@ -712,7 +739,7 @@ export def "get-v2-namespaces-namespace-repositories-repository-tags-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), tag: (encode-path-segment $tag)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -751,7 +778,7 @@ export def "head-v2-namespaces-namespace-repositories-repository-tags-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), repository: (encode-path-segment $repository), tag: (encode-path-segment $tag)} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "head"
     url: $full_url
@@ -786,7 +813,7 @@ export def "get-v2-orgs-name-settings" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/orgs/{name}/settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -823,9 +850,9 @@ export def "put-v2-orgs-name-settings" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/orgs/{name}/settings") $auth.query)
   let req_body = {"restricted_images": $restricted_images} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -858,7 +885,7 @@ export def "get-v2-scim-2-0-resource-types" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ResourceTypes" $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -893,7 +920,7 @@ export def "get-v2-scim-2-0-resource-types-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/scim/2.0/ResourceTypes/{name}") $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -926,7 +953,7 @@ export def "get-v2-scim-2-0-schemas" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Schemas" $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -961,7 +988,7 @@ export def "get-v2-scim-2-0-schemas-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Schemas/{id}") $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -994,7 +1021,7 @@ export def "get-v2-scim-2-0-service-provider-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ServiceProviderConfig" $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1034,7 +1061,7 @@ export def "get-v2-scim-2-0-users" [
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/scim/2.0/Users" $qp $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1062,16 +1089,19 @@ export def "post-v2-scim-2-0-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --name: record # shape: {familyName?: string, givenName?: string}
+  schemas: list<string>
+  user_name: string # The user's email address. This must be reachable via email. (e.g. jon.snow@docker.com)
 ]: any -> oneof<record<active: bool, displayName: string, emails: table<display: string, primary: bool, value: string>, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, givenName: string>, schemas: list<string>, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Users" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"name": $name, "schemas": $schemas, "userName": $user_name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -1083,7 +1113,7 @@ export def "post-v2-scim-2-0-users" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get a user
@@ -1106,7 +1136,7 @@ export def "get-v2-scim-2-0-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}") $auth.query)
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1135,17 +1165,20 @@ export def "put-v2-scim-2-0-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --enabled: oneof<nothing, bool> # If this is omitted from the request, it will default to false resulting in a deactivated user. (default: false)
+  --name: record # If this is omitted from the request, the update will skip the update on it. We will only ever change the name, but not clear it. — shape: {familyName?: string, givenName?: string}
+  schemas: list<string>
 ]: any -> oneof<record<active: bool, displayName: string, emails: table<display: string, primary: bool, value: string>, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, givenName: string>, schemas: list<string>, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"enabled": $enabled, "name": $name, "schemas": $schemas} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/scim+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "put"
     url: $full_url
@@ -1157,7 +1190,7 @@ export def "put-v2-scim-2-0-users-id" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Second factor authentication.
@@ -1182,9 +1215,9 @@ export def "post-users2-fa-login" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/2fa-login" $auth.query)
   let req_body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1221,9 +1254,9 @@ export def "post-users-login" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/login" $auth.query)
   let req_body = {"password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

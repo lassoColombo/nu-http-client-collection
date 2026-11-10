@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -201,7 +228,7 @@ export def "diary-controller-get-allocations" [
   let qp = [(serialize-qp "preferredDate" $preferred_date "scalar") (serialize-qp "appointmentType" $appointment_type "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "propertyIdentifier" $property_identifier "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/allocations") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -241,7 +268,7 @@ export def "diary-controller-delete-appointment" [
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -281,7 +308,7 @@ export def "diary-controller-get-appointment" [
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -328,9 +355,9 @@ export def "diary-controller-post-appointment" [
   let qp = [(serialize-qp "propertyIdentifier" $property_identifier "multi") (serialize-qp "lettings" $lettings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -378,9 +405,9 @@ export def "diary-controller-put-appointment" [
   let qp = [(serialize-qp "appointmentID" $appointment_id "scalar") (serialize-qp "lettings" $lettings "scalar") (serialize-qp "AllowMarketingCorrespondence" $allow_marketing_correspondence "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment") $qp $auth.query)
   let req_body = {"AllocationDetails": $allocation_details, "AppointmentType": $appointment_type, "ExtraComments": $extra_comments, "Guests": $guests, "Subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -421,9 +448,9 @@ export def "diary-controller-add-feedback" [
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointment/feedback") $auth.query)
   let req_body = {"AppointmentID": $appointment_id, "Feedback": $feedback, "PropertyID": $property_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -462,7 +489,7 @@ export def "diary-controller-cancel-appointment" [
   if ($appointment_id | is-empty) { error make --unspanned { msg: "path parameter 'appointmentID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), appointment_id: (encode-path-segment $appointment_id)} | format pattern "/v3/diary/{short_name}/appointment/{appointment_id}/cancel") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -512,7 +539,7 @@ export def "diary-controller-get-appointments-between-dates" [
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmentsbetweendates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -554,7 +581,7 @@ export def "diary-controller-get-appointment-types" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/appointmenttypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -596,7 +623,7 @@ export def "company-controller-get-branches" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/company/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -634,7 +661,7 @@ export def "get-v3-diary-short-name-company-branches-branch-id" [
   if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/diary/{short_name}/company/branches/{branch_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -680,7 +707,7 @@ export def "diary-controller-get-recurring-appointments" [
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "appointmentTypesToSearch" $appointment_types_to_search "multi") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v3/diary/{short_name}/recurringappointment") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -730,7 +757,7 @@ export def "diary-controller-search-guest" [
   let qp = [(serialize-qp "forename" $forename "scalar") (serialize-qp "emailaddress" $emailaddress "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shortname: (encode-path-segment $shortname), branch_id: (encode-path-segment $branch_id)} | format pattern "/v3/diary/{shortname}/{branch_id}/guest/search") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -214,11 +241,11 @@ export def "create-dataset" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -272,11 +299,11 @@ export def "create-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name, "InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn, "ServerSideKmsKeyId": $server_side_kms_key_id, "ClientToken": $client_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -328,11 +355,11 @@ export def "create-label" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "StartTime": $start_time, "EndTime": $end_time, "Rating": $rating, "FaultCode": $fault_code, "Notes": $notes, "Equipment": $equipment, "ClientToken": $client_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -380,11 +407,11 @@ export def "create-label-group" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes, "ClientToken": $client_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -442,11 +469,11 @@ export def "create-model" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.CreateModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name, "DatasetName": $dataset_name, "DatasetSchema": $dataset_schema, "LabelsInputConfiguration": $labels_input_configuration, "ClientToken": $client_token, "TrainingDataStartTime": $training_data_start_time, "TrainingDataEndTime": $training_data_end_time, "EvaluationDataStartTime": $evaluation_data_start_time, "EvaluationDataEndTime": $evaluation_data_end_time, "RoleArn": $role_arn, "DataPreProcessingConfiguration": $data_pre_processing_configuration, "ServerSideKmsKeyId": $server_side_kms_key_id, "Tags": $tags, "OffCondition": $off_condition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -491,11 +518,11 @@ export def "delete-dataset" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -540,11 +567,11 @@ export def "delete-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -590,11 +617,11 @@ export def "delete-label" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -639,11 +666,11 @@ export def "delete-label-group" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -688,11 +715,11 @@ export def "delete-model" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DeleteModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -737,11 +764,11 @@ export def "describe-data-ingestion-job" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeDataIngestionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"JobId": $job_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -786,11 +813,11 @@ export def "describe-dataset" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeDataset")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -835,11 +862,11 @@ export def "describe-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -885,11 +912,11 @@ export def "describe-label" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeLabel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "LabelId": $label_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -934,11 +961,11 @@ export def "describe-label-group" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -983,11 +1010,11 @@ export def "describe-model" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.DescribeModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ModelName": $model_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1027,8 +1054,8 @@ export def "list-data-ingestion-jobs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   --dataset-name: string # The name of the dataset being used for the data ingestion job.
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of data ingestion jobs. (body field)
-  --max-results-body: int # Specifies the maximum number of data ingestion jobs to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of data ingestion jobs. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of data ingestion jobs to list. (spec name: MaxResults)
   --status: string@status-completer # Indicates the status of the data ingestion job.
 ]: any -> oneof<record<NextToken: string, DataIngestionJobSummaries: table<JobId: string, DatasetName: string, DatasetArn: string, IngestionInputConfiguration: record, Status: string>>, string, nothing> {
   let input = $in
@@ -1037,12 +1064,12 @@ export def "list-data-ingestion-jobs" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListDataIngestionJobs")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"DatasetName": $dataset_name, "NextToken": $next_token_body, "MaxResults": $max_results_body, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"DatasetName": $dataset_name, "NextToken": $body_next_token, "MaxResults": $body_max_results, "Status": $status} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1081,8 +1108,8 @@ export def "list-datasets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of datasets. (body field)
-  --max-results-body: int # Specifies the maximum number of datasets to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of datasets. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of datasets to list. (spec name: MaxResults)
   --dataset-name-begins-with: string # The beginning of the name of the datasets to be listed.
 ]: any -> oneof<record<NextToken: string, DatasetSummaries: table<DatasetName: string, DatasetArn: string, Status: string, CreatedAt: string>>, string, nothing> {
   let input = $in
@@ -1091,12 +1118,12 @@ export def "list-datasets" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListDatasets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1135,8 +1162,8 @@ export def "list-inference-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference events. (body field)
-  --max-results-body: int # Specifies the maximum number of inference events to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of inference events. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of inference events to list. (spec name: MaxResults)
   inference_scheduler_name: string # The name of the inference scheduler for the inference events listed.
   interval_start_time: string # Lookout for Equipment will return all the inference events with an end time equal to or greater than the start time given. (format: date-time)
   interval_end_time: string # Returns all the inference events with an end start time equal to or greater than less than the end time given (format: date-time)
@@ -1147,12 +1174,12 @@ export def "list-inference-events" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceEvents")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerName": $inference_scheduler_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "InferenceSchedulerName": $inference_scheduler_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1191,8 +1218,8 @@ export def "list-inference-executions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference executions. (body field)
-  --max-results-body: int # Specifies the maximum number of inference executions to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of inference executions. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of inference executions to list. (spec name: MaxResults)
   inference_scheduler_name: string # The name of the inference scheduler for the inference execution listed.
   --data-start-time-after: string # The time reference in the inferenced dataset after which Amazon Lookout for Equipment started the inference execution. (format: date-time)
   --data-end-time-before: string # The time reference in the inferenced dataset before which Amazon Lookout for Equipment stopped the inference execution. (format: date-time)
@@ -1204,12 +1231,12 @@ export def "list-inference-executions" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceExecutions")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerName": $inference_scheduler_name, "DataStartTimeAfter": $data_start_time_after, "DataEndTimeBefore": $data_end_time_before, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "InferenceSchedulerName": $inference_scheduler_name, "DataStartTimeAfter": $data_start_time_after, "DataEndTimeBefore": $data_end_time_before, "Status": $status} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1248,8 +1275,8 @@ export def "list-inference-schedulers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of inference schedulers. (body field)
-  --max-results-body: int # Specifies the maximum number of inference schedulers to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of inference schedulers. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of inference schedulers to list. (spec name: MaxResults)
   --inference-scheduler-name-begins-with: string # The beginning of the name of the inference schedulers to be listed.
   --model-name: string # The name of the ML model used by the inference scheduler to be listed.
   --status: string@status-completer-1 # Specifies the current status of the inference schedulers to list.
@@ -1260,12 +1287,12 @@ export def "list-inference-schedulers" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListInferenceSchedulers")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "InferenceSchedulerNameBeginsWith": $inference_scheduler_name_begins_with, "ModelName": $model_name, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "InferenceSchedulerNameBeginsWith": $inference_scheduler_name_begins_with, "ModelName": $model_name, "Status": $status} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1305,8 +1332,8 @@ export def "list-label-groups" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   --label-group-name-begins-with: string # The beginning of the name of the label groups to be listed.
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
-  --max-results-body: int # Specifies the maximum number of label groups to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of label groups. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of label groups to list. (spec name: MaxResults)
 ]: any -> oneof<record<NextToken: string, LabelGroupSummaries: table<LabelGroupName: string, LabelGroupArn: string, CreatedAt: string, UpdatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1314,12 +1341,12 @@ export def "list-label-groups" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListLabelGroups")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"LabelGroupNameBeginsWith": $label_group_name_begins_with, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"LabelGroupNameBeginsWith": $label_group_name_begins_with, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1363,8 +1390,8 @@ export def "list-labels" [
   --interval-end-time: string # Returns all labels with a start time earlier than the end time given. (format: date-time)
   --fault-code: string # Returns labels with a particular fault code.
   --equipment: string # Lists the labels that pertain to a particular piece of equipment.
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of label groups. (body field)
-  --max-results-body: int # Specifies the maximum number of labels to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of label groups. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of labels to list. (spec name: MaxResults)
 ]: any -> oneof<record<NextToken: string, LabelSummaries: table<LabelGroupName: string, LabelId: string, LabelGroupArn: string, StartTime: string, EndTime: string, Rating: string, FaultCode: string, Equipment: string, CreatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1372,12 +1399,12 @@ export def "list-labels" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListLabels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"LabelGroupName": $label_group_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time, "FaultCode": $fault_code, "Equipment": $equipment, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"LabelGroupName": $label_group_name, "IntervalStartTime": $interval_start_time, "IntervalEndTime": $interval_end_time, "FaultCode": $fault_code, "Equipment": $equipment, "NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1416,8 +1443,8 @@ export def "list-models" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of ML models. (body field)
-  --max-results-body: int # Specifies the maximum number of ML models to list. (body field)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of ML models. (spec name: NextToken)
+  --body-max-results: int # Specifies the maximum number of ML models to list. (spec name: MaxResults)
   --status: string@status-completer # The status of the ML model.
   --model-name-begins-with: string # The beginning of the name of the ML models being listed.
   --dataset-name-begins-with: string # The beginning of the name of the dataset of the ML models to be listed.
@@ -1428,12 +1455,12 @@ export def "list-models" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListModels")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "Status": $status, "ModelNameBeginsWith": $model_name_begins_with, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results, "Status": $status, "ModelNameBeginsWith": $model_name_begins_with, "DatasetNameBeginsWith": $dataset_name_begins_with} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1474,8 +1501,8 @@ export def "list-sensor-statistics" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   dataset_name: string # The name of the dataset associated with the list of Sensor Statistics.
   --ingestion-job-id: string # The ingestion job id associated with the list of Sensor Statistics. To get sensor statistics for a particular ingestion job id, both dataset name and ingestion job id must be submitted as inputs.
-  --max-results-body: int # Specifies the maximum number of sensors for which to retrieve statistics. (body field)
-  --next-token-body: string # An opaque pagination token indicating where to continue the listing of sensor statistics. (body field)
+  --body-max-results: int # Specifies the maximum number of sensors for which to retrieve statistics. (spec name: MaxResults)
+  --body-next-token: string # An opaque pagination token indicating where to continue the listing of sensor statistics. (spec name: NextToken)
 ]: any -> oneof<record<SensorStatisticsSummaries: table<ComponentName: string, SensorName: string, DataExists: bool, MissingValues: record, InvalidValues: record, InvalidDateEntries: record, DuplicateTimestamps: record, CategoricalValues: record, MultipleOperatingModes: record, LargeTimestampGaps: record, MonotonicValues: record, DataStartTime: string, DataEndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1483,12 +1510,12 @@ export def "list-sensor-statistics" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListSensorStatistics")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"DatasetName": $dataset_name, "IngestionJobId": $ingestion_job_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"DatasetName": $dataset_name, "IngestionJobId": $ingestion_job_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1533,11 +1560,11 @@ export def "list-tags-for-resource" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.ListTagsForResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1585,11 +1612,11 @@ export def "start-data-ingestion-job" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StartDataIngestionJob")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DatasetName": $dataset_name, "IngestionInputConfiguration": $ingestion_input_configuration, "RoleArn": $role_arn, "ClientToken": $client_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1634,11 +1661,11 @@ export def "start-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StartInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1683,11 +1710,11 @@ export def "stop-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.StopInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1733,11 +1760,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1783,11 +1810,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1837,11 +1864,11 @@ export def "update-inference-scheduler" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UpdateInferenceScheduler")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"InferenceSchedulerName": $inference_scheduler_name, "DataDelayOffsetInMinutes": $data_delay_offset_in_minutes, "DataUploadFrequency": $data_upload_frequency, "DataInputConfiguration": $data_input_configuration, "DataOutputConfiguration": $data_output_configuration, "RoleArn": $role_arn} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1887,11 +1914,11 @@ export def "update-label-group" [
   let x_amz_target = ($x_amz_target | default "AWSLookoutEquipmentFrontendService.UpdateLabelGroup")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"LabelGroupName": $label_group_name, "FaultCodes": $fault_codes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

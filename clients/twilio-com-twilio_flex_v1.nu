@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -183,7 +210,7 @@ export def "list-channel" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -227,9 +254,9 @@ export def "create-channel" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Channels" $auth.query)
   let req_body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "ChatUserFriendlyName": $chat_user_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "LongLived": $long_lived, "PreEngagementData": $pre_engagement_data, "Target": $target, "TaskAttributes": $task_attributes, "TaskSid": $task_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -265,7 +292,7 @@ export def "delete-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Channels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -300,7 +327,7 @@ export def "fetch-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Channels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -335,7 +362,7 @@ export def "fetch-configuration" [
   let qp = [(serialize-qp "UiVersion" $ui_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Configuration" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -373,7 +400,7 @@ export def "list-flex-flow" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/FlexFlows" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -424,9 +451,9 @@ export def "create-flex-flow" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/FlexFlows" $auth.query)
   let req_body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -462,7 +489,7 @@ export def "delete-flex-flow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -497,7 +524,7 @@ export def "fetch-flex-flow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -550,9 +577,9 @@ export def "update-flex-flow" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/FlexFlows/{sid}") $auth.query)
   let req_body = {"ChannelType": $channel_type, "ChatServiceSid": $chat_service_sid, "ContactIdentity": $contact_identity, "Enabled": $enabled, "FriendlyName": $friendly_name, "Integration.Channel": $integration_channel, "Integration.CreationOnMessage": $integration_creation_on_message, "Integration.FlowSid": $integration_flow_sid, "Integration.Priority": $integration_priority, "Integration.RetryCount": $integration_retry_count, "Integration.Timeout": $integration_timeout, "Integration.Url": $integration_url, "Integration.WorkflowSid": $integration_workflow_sid, "Integration.WorkspaceSid": $integration_workspace_sid, "IntegrationType": $integration_type, "JanitorEnabled": $janitor_enabled, "LongLived": $long_lived} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -586,16 +613,16 @@ export def "list-insights-conversations" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<conversations: table<account_id: string, conversation_id: string, segment_count: int, segments: list>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/Conversations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -628,16 +655,16 @@ export def "list-insights-assessments" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<assessments: table<account_sid: string, agent_id: string, answer_id: string, answer_text: string, assessment: any, assessment_id: string, offset: float, report: bool, segment_id: string, timestamp: float, url: string, user_email: string, user_name: string, weight: float>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Assessments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -666,7 +693,7 @@ export def "create-insights-assessments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   agent_id: string # The id of the Agent
   answer_id: string # The id of the answer selected by user
   answer_text: string # The answer text selected by user
@@ -685,11 +712,11 @@ export def "create-insights-assessments" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Assessments" $auth.query)
   let req_body = {"AgentId": $agent_id, "AnswerId": $answer_id, "AnswerText": $answer_text, "CategoryId": $category_id, "CategoryName": $category_name, "MetricId": $metric_id, "MetricName": $metric_name, "Offset": $offset, "QuestionnaireId": $questionnaire_id, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -724,16 +751,16 @@ export def "list-insights-assessments-comment" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<comments: table<account_sid: string, agent_id: string, assessment_id: string, comment: any, offset: float, report: bool, segment_id: string, timestamp: float, url: string, user_email: string, user_name: string, weight: float>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "SegmentId" $segment_id "scalar") (serialize-qp "AgentId" $agent_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Assessments/Comments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -762,7 +789,7 @@ export def "create-insights-assessments-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   agent_id: string # The id of the agent.
   category_id: string # The ID of the category
   category_name: string # The name of the category
@@ -777,11 +804,11 @@ export def "create-insights-assessments-comment" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Assessments/Comments" $auth.query)
   let req_body = {"AgentId": $agent_id, "CategoryId": $category_id, "CategoryName": $category_name, "Comment": $comment, "Offset": $offset, "SegmentId": $segment_id, "UserEmail": $user_email, "UserName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -812,7 +839,7 @@ export def "update-insights-assessments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   answer_id: string # The id of the answer selected by user
   answer_text: string # The answer text selected by user
   offset: float # The offset of the conversation
@@ -823,11 +850,11 @@ export def "update-insights-assessments" [
   if ($assessment_id | is-empty) { error make --unspanned { msg: "path parameter 'AssessmentId' must be non-empty" } }
   let full_url = (build-url $base ({assessment_id: (encode-path-segment $assessment_id)} | format pattern "/v1/Insights/QM/Assessments/{assessment_id}") $auth.query)
   let req_body = {"AnswerId": $answer_id, "AnswerText": $answer_text, "Offset": $offset} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -860,16 +887,16 @@ export def "list-insights-questionnaires-category" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<categories: table<account_sid: string, category_id: string, name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Categories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -898,7 +925,7 @@ export def "create-insights-questionnaires-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   name: string # The name of this category.
 ]: any -> oneof<record<account_sid: string, category_id: string, name: string, url: string>, string, nothing> {
   let input = $in
@@ -906,11 +933,11 @@ export def "create-insights-questionnaires-category" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Categories" $auth.query)
   let req_body = {"Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -940,16 +967,16 @@ export def "delete-insights-questionnaires-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'CategoryId' must be non-empty" } }
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/v1/Insights/QM/Categories/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -979,7 +1006,7 @@ export def "update-insights-questionnaires-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   name: string # The name of this category.
 ]: any -> oneof<record<account_sid: string, category_id: string, name: string, url: string>, string, nothing> {
   let input = $in
@@ -988,11 +1015,11 @@ export def "update-insights-questionnaires-category" [
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'CategoryId' must be non-empty" } }
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/v1/Insights/QM/Categories/{category_id}") $auth.query)
   let req_body = {"Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1026,16 +1053,16 @@ export def "list-insights-questionnaires" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, questionnaires: table<account_sid: string, active: bool, description: string, id: string, name: string, questions: list, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "IncludeInactive" $include_inactive "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Questionnaires" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1064,7 +1091,7 @@ export def "create-insights-questionnaires" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   --active: oneof<nothing, bool> # The flag to enable or disable questionnaire
   --description: string # The description of this questionnaire
   name: string # The name of this questionnaire
@@ -1075,11 +1102,11 @@ export def "create-insights-questionnaires" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Questionnaires" $auth.query)
   let req_body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1110,16 +1137,16 @@ export def "delete-insights-questionnaires" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1149,16 +1176,16 @@ export def "fetch-insights-questionnaires" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<account_sid: string, active: bool, description: string, id: string, name: string, questions: list<any>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1188,7 +1215,7 @@ export def "update-insights-questionnaires" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   --active: oneof<nothing, bool> # The flag to enable or disable questionnaire
   --description: string # The description of this questionnaire
   --name: string # The name of this questionnaire
@@ -1200,12 +1227,12 @@ export def "update-insights-questionnaires" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v1/Insights/QM/Questionnaires/{id}") $auth.query)
   let req_body = {"Active": $active, "Description": $description, "Name": $name, "QuestionIds": $question_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Active") == null) { error make --unspanned { msg: "required body field 'Active' missing: pass --active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1239,16 +1266,16 @@ export def "list-insights-questionnaires-question" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, questions: table<account_sid: string, allow_na: bool, answer_set: any, answer_set_id: string, category: any, description: string, question: string, question_id: string, url: string, usage: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "CategoryId" $category_id "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/QM/Questions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "create-insights-questionnaires-question" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   --allow-na: oneof<nothing, bool> # The flag to enable for disable NA for answer.
   answer_set_id: string # The answer_set for the question.
   category_id: string # The ID of the category
@@ -1289,12 +1316,12 @@ export def "create-insights-questionnaires-question" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Questions" $auth.query)
   let req_body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "AllowNa") == null) { error make --unspanned { msg: "required body field 'AllowNa' missing: pass --allow-na or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1324,16 +1351,16 @@ export def "delete-insights-questionnaires-question" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   if ($question_id | is-empty) { error make --unspanned { msg: "path parameter 'QuestionId' must be non-empty" } }
   let full_url = (build-url $base ({question_id: (encode-path-segment $question_id)} | format pattern "/v1/Insights/QM/Questions/{question_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1363,7 +1390,7 @@ export def "update-insights-questionnaires-question" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
   --allow-na: oneof<nothing, bool> # The flag to enable for disable NA for answer.
   --answer-set-id: string # The answer_set for the question.
   --category-id: string # The ID of the category
@@ -1376,12 +1403,12 @@ export def "update-insights-questionnaires-question" [
   if ($question_id | is-empty) { error make --unspanned { msg: "path parameter 'QuestionId' must be non-empty" } }
   let full_url = (build-url $base ({question_id: (encode-path-segment $question_id)} | format pattern "/v1/Insights/QM/Questions/{question_id}") $auth.query)
   let req_body = {"AllowNa": $allow_na, "AnswerSetId": $answer_set_id, "CategoryId": $category_id, "Description": $description, "Question": $question} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "AllowNa") == null) { error make --unspanned { msg: "required body field 'AllowNa' missing: pass --allow-na or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1411,15 +1438,15 @@ export def "fetch-insights-settings-answersets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<account_sid: string, answer_set_categories: any, answer_sets: any, not_applicable: any, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Settings/AnswerSets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1448,15 +1475,15 @@ export def "fetch-insights-settings-comment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<account_sid: string, comments: any, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/QM/Settings/CommentTags" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1489,16 +1516,16 @@ export def "list-insights-segments" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, segments: table<account_id: string, agent_id: string, agent_link: string, agent_name: string, agent_phone: string, agent_team_name: string, agent_team_name_in_hierarchy: string, assessment_percentage: any, assessment_type: any, customer_link: string, customer_name: string, customer_phone: string, date: string, external_contact: string, external_id: string, external_segment_link: string, external_segment_link_id: string, media: any, queue: string, segment_id: string, segment_recording_offset: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   let qp = [(serialize-qp "ReservationId" $reservation_id "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Insights/Segments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1528,16 +1555,16 @@ export def "fetch-insights-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-token: string # The Token HTTP request header
+  --hdr-token: string # The Token HTTP request header (spec name: Token)
 ]: nothing -> oneof<record<account_id: string, agent_id: string, agent_link: string, agent_name: string, agent_phone: string, agent_team_name: string, agent_team_name_in_hierarchy: string, assessment_percentage: any, assessment_type: any, customer_link: string, customer_name: string, customer_phone: string, date: string, external_contact: string, external_id: string, external_segment_link: string, external_segment_link_id: string, media: any, queue: string, segment_id: string, segment_recording_offset: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://flex-api.twilio.com")
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'SegmentId' must be non-empty" } }
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/Insights/Segments/{segment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Token": $hdr_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1572,9 +1599,9 @@ export def "create-insights-session" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/Session" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "fetch-insights-user-roles" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Insights/UserRoles" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1648,9 +1675,9 @@ export def "create-interaction" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/Interactions" $auth.query)
   let req_body = {"Channel": $channel, "Routing": $routing} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1691,7 +1718,7 @@ export def "list-interaction-channel" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1733,7 +1760,7 @@ export def "list-interaction-channel-invite" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1773,9 +1800,9 @@ export def "create-interaction-channel-invite" [
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Invites") $auth.query)
   let req_body = {"Routing": $routing} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1818,7 +1845,7 @@ export def "list-interaction-channel-participant" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1859,9 +1886,9 @@ export def "create-interaction-channel-participant" [
   if ($channel_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChannelSid' must be non-empty" } }
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants") $auth.query)
   let req_body = {"MediaProperties": $media_properties, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1904,9 +1931,9 @@ export def "update-interaction-channel-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), channel_sid: (encode-path-segment $channel_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{channel_sid}/Participants/{sid}") $auth.query)
   let req_body = {"Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1945,7 +1972,7 @@ export def "fetch-interaction-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1986,9 +2013,9 @@ export def "update-interaction-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({interaction_sid: (encode-path-segment $interaction_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{interaction_sid}/Channels/{sid}") $auth.query)
   let req_body = {"Routing": $routing, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2024,7 +2051,7 @@ export def "fetch-interaction" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Interactions/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2061,7 +2088,7 @@ export def "list-web-channel" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/WebChannels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2101,9 +2128,9 @@ export def "create-web-channel" [
   let base = ($base_url | default "https://flex-api.twilio.com")
   let full_url = (build-url $base "/v1/WebChannels" $auth.query)
   let req_body = {"ChatFriendlyName": $chat_friendly_name, "ChatUniqueName": $chat_unique_name, "CustomerFriendlyName": $customer_friendly_name, "FlexFlowSid": $flex_flow_sid, "Identity": $identity, "PreEngagementData": $pre_engagement_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2139,7 +2166,7 @@ export def "delete-web-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2174,7 +2201,7 @@ export def "fetch-web-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2212,9 +2239,9 @@ export def "update-web-channel" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/WebChannels/{sid}") $auth.query)
   let req_body = {"ChatStatus": $chat_status, "PostEngagementData": $post_engagement_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,11 +221,11 @@ export def "international-business-profile" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/business/international/profile" $auth.query)
   let req_body = {"company_code": $company_code, "country": $country} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -239,11 +266,11 @@ export def "international-business-search" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/business/international/search" $auth.query)
   let req_body = {"country": $country, "organisation_name": $organisation_name, "organisation_number": $organisation_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -290,11 +317,11 @@ export def "business-ownership-query" [
   let qp = [(serialize-qp "checkType" $check_type "csv") (serialize-qp "entityCategories" $entity_categories "csv") (serialize-qp "resultLevel" $result_level "scalar") (serialize-qp "validation" $validation "scalar") (serialize-qp "generateReport" $generate_report "scalar") (serialize-qp "includeHistorical" $include_historical "scalar") (serialize-qp "onlyProfile" $only_profile "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/business/ownership/query" $qp $auth.query)
   let req_body = {"organisation": $organisation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -346,11 +373,11 @@ export def "run-business-reports" [
   let qp = [(serialize-qp "reportTypes" $report_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/business/reports" $qp $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -394,9 +421,9 @@ export def "check-organisation" [
   let qp = [(serialize-qp "checkType" $check_type "csv") (serialize-qp "entityCategories" $entity_categories "csv") (serialize-qp "resultLevel" $result_level "scalar") (serialize-qp "generateReport" $generate_report "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/business/{entity_id}/verify") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -445,11 +472,11 @@ export def "create-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/document" $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -490,11 +517,11 @@ export def "compare-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/document/new/compare" $auth.query)
   let req_body = {"compareDocument": $compare_document, "toDocument": $to_document} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -544,11 +571,11 @@ export def "create-scan-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/document/new/scan" $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -600,11 +627,11 @@ export def "create-process-industry-utility-document" [
   let qp = [(serialize-qp "planLimit" $plan_limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/document/new/utility/process/compare" $qp $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -645,11 +672,11 @@ export def "verify-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/document/new/verify" $auth.query)
   let req_body = {"document": $document, "entityData": $entity_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -698,11 +725,11 @@ export def "search-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/document/search" $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -742,9 +769,9 @@ export def "delete-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -783,9 +810,9 @@ export def "query-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -821,7 +848,7 @@ export def "update-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   country: string # The ISO-3166-alpha3 country code of the issuing national. Once set, this cannot be changed. See https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes for more (e.g. AUS)
   --doc-scan: list # Collection of one or more objects that describe scan(s) that need to be put through OCR or facial recognition. These should all be from the one ID document, such as front/back, or page 1, 2, 3, etc. You can upload multiple scans in a single call, or in multiple calls. Note: if you do upload over multiple calls, make sure you include the documentId (see above), and indicate that this is happening with a "more_data" checkAction — item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
-  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051)
+  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051) (spec name: documentId)
   --document-status: string@document-status-completer # Current status of a document. - "INITIALISING": the state whilst you're uploading and updating - "SCAN_IN_PROGRESS": the state whilst it's being scanned. - "DOC_SCANNED": the document has been scanned and data extracted as best as possible. It's still possible to update the details and add more scans if you wish. - "DOC_CHECKED": the document has been used as part of a check that has been finalised in some way. You can no longer update this document and any attempt will generate an error. (e.g. DOC_SCANNED)
   --extra-data: list # Set of key-value pairs that provide ID type-specific data. If updating an existing document, then existing values with the same name will be overwritten. New values will be added. If this document is scanned through OCR or similar processes, then extracted data will be found here (Some may be used to populate other fields like idNumber and idExpiry as well) — item shape: {kvpKey?: string, ... (2 more fields)}
   --id-expiry: string # The expiry date of the document (if known) in YYYY-MM-DD format. (format: date, e.g. 2020-02-01)
@@ -839,11 +866,11 @@ export def "update-document" [
   let qp = [(serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}") $qp $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -883,9 +910,9 @@ export def "query-document-checks" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/checks") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -928,11 +955,11 @@ export def "update-compare-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/compare") $auth.query)
   let req_body = {"compareDocument": $compare_document, "toDocument": $to_document} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -971,9 +998,9 @@ export def "query-document-full" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/full") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1008,7 +1035,7 @@ export def "update-scan-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   country: string # The ISO-3166-alpha3 country code of the issuing national. Once set, this cannot be changed. See https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes for more (e.g. AUS)
   --doc-scan: list # Collection of one or more objects that describe scan(s) that need to be put through OCR or facial recognition. These should all be from the one ID document, such as front/back, or page 1, 2, 3, etc. You can upload multiple scans in a single call, or in multiple calls. Note: if you do upload over multiple calls, make sure you include the documentId (see above), and indicate that this is happening with a "more_data" checkAction — item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
-  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051)
+  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051) (spec name: documentId)
   --document-status: string@document-status-completer # Current status of a document. - "INITIALISING": the state whilst you're uploading and updating - "SCAN_IN_PROGRESS": the state whilst it's being scanned. - "DOC_SCANNED": the document has been scanned and data extracted as best as possible. It's still possible to update the details and add more scans if you wish. - "DOC_CHECKED": the document has been used as part of a check that has been finalised in some way. You can no longer update this document and any attempt will generate an error. (e.g. DOC_SCANNED)
   --extra-data: list # Set of key-value pairs that provide ID type-specific data. If updating an existing document, then existing values with the same name will be overwritten. New values will be added. If this document is scanned through OCR or similar processes, then extracted data will be found here (Some may be used to populate other fields like idNumber and idExpiry as well) — item shape: {kvpKey?: string, ... (2 more fields)}
   --id-expiry: string # The expiry date of the document (if known) in YYYY-MM-DD format. (format: date, e.g. 2020-02-01)
@@ -1025,11 +1052,11 @@ export def "update-scan-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/scan") $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1065,7 +1092,7 @@ export def "update-process-industry-utility-document" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   country: string # The ISO-3166-alpha3 country code of the issuing national. Once set, this cannot be changed. See https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes for more (e.g. AUS)
   --doc-scan: list # Collection of one or more objects that describe scan(s) that need to be put through OCR or facial recognition. These should all be from the one ID document, such as front/back, or page 1, 2, 3, etc. You can upload multiple scans in a single call, or in multiple calls. Note: if you do upload over multiple calls, make sure you include the documentId (see above), and indicate that this is happening with a "more_data" checkAction — item shape: {ScanDelete?: bool, scanCreated?: string, scanData?: string, scanDataRetrievalState?: "NORMAL"|"EXCLUDED"|"FAILED", scanDocId?: string, scanFilename?: string, ... (4 more fields)}
-  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051)
+  --body-document-id: string # When an ID document is created/uploaded, it is assigned a documentId. You'll see this in a successful response or successfully accepted response. This can then be referenced in subsequent calls if you're uploading more/updated data. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051) (spec name: documentId)
   --document-status: string@document-status-completer # Current status of a document. - "INITIALISING": the state whilst you're uploading and updating - "SCAN_IN_PROGRESS": the state whilst it's being scanned. - "DOC_SCANNED": the document has been scanned and data extracted as best as possible. It's still possible to update the details and add more scans if you wish. - "DOC_CHECKED": the document has been used as part of a check that has been finalised in some way. You can no longer update this document and any attempt will generate an error. (e.g. DOC_SCANNED)
   --extra-data: list # Set of key-value pairs that provide ID type-specific data. If updating an existing document, then existing values with the same name will be overwritten. New values will be added. If this document is scanned through OCR or similar processes, then extracted data will be found here (Some may be used to populate other fields like idNumber and idExpiry as well) — item shape: {kvpKey?: string, ... (2 more fields)}
   --id-expiry: string # The expiry date of the document (if known) in YYYY-MM-DD format. (format: date, e.g. 2020-02-01)
@@ -1083,11 +1110,11 @@ export def "update-process-industry-utility-document" [
   let qp = [(serialize-qp "planLimit" $plan_limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/compare") $qp $auth.query)
   let req_body = {"country": $country, "docScan": $doc_scan, "documentId": $body_document_id, "documentStatus": $document_status, "extraData": $extra_data, "idExpiry": $id_expiry, "idIssued": $id_issued, "idNumber": $id_number, "idSubType": $id_sub_type, "idType": $id_type, "region": $region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1131,11 +1158,11 @@ export def "update-process-industry-utility-document-consent" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/consent") $auth.query)
   let req_body = {"correlationId": $correlation_id, "details": $details, "planId": $plan_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1179,11 +1206,11 @@ export def "update-process-industry-utility-document-switch" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/utility/process/switch") $auth.query)
   let req_body = {"confirmation": $confirmation, "correlationId": $correlation_id, "details": $details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1226,11 +1253,11 @@ export def "update-verify-document" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id)} | format pattern "/document/{document_id}/verify") $auth.query)
   let req_body = {"document": $document, "entityData": $entity_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1279,11 +1306,11 @@ export def "create-entity" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/entity" $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1325,11 +1352,11 @@ export def "create-entity-get-idv-token" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/entity/new/idvalidate/getToken" $auth.query)
   let req_body = {"applicantId": $applicant_id, "applicationId": $application_id, "entity": $entity, "referrer": $referrer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1372,11 +1399,11 @@ export def "create-check-entity-push-to-mobile" [
   let qp = [(serialize-qp "nopush" $nopush "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/entity/new/verify/pushToMobile" $qp $auth.query)
   let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1421,11 +1448,11 @@ export def "create-check-entity" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({check_type: (encode-path-segment $check_type), result_level: (encode-path-segment $result_level)} | format pattern "/entity/new/verify/{check_type}/{result_level}") $auth.query)
   let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1474,11 +1501,11 @@ export def "search-entity" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base "/entity/search" $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1518,9 +1545,9 @@ export def "delete-entity" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1559,9 +1586,9 @@ export def "query-entity" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1597,7 +1624,7 @@ export def "update-entity" [
   --x-frankie-background: int # If this header parameter is supplied and set to 1, then the request will not wait for the process to finish, and will return a 202 if there are no obvious errors in the input. The request will then run in the background and send a notification back to the customer. See out callback API for details on this. See more details here: https://apidocs.frankiefinancial.com/docs/asynchronous-calls-backgrounding-processes
   --addresses: list # Collection of address objects. — item shape: {addressId?: string, addressType?: "OTHER"|"RESIDENTIAL"|"RESIDENTIAL1"|"RESIDENTIAL2"|"RESIDENTIAL3"|"RESIDENTIAL4"|"BUSINESS"|"POSTAL"|"REGISTERED_OFFICE"|"PLACE_OF_BUSINESS"|"OFFICIAL_CORRESPONDANCE", buildingName?: string, careOf?: string, country: string, endDate?: string, longForm?: string, postalCode?: string, region?: string, startDate?: string, state?: string, streetName?: string, streetNumber?: string, streetType?: string, suburb?: string, town?: string, unitNumber?: string}
   --date-of-birth: record # shape: {country?: string, dateOfBirth?: string, locality?: string, yearOfBirth?: string}
-  --body-entity-id: string # When an entity is first created, it is assigned an ID. When updating an entity, make sure you set the entityId One exception to this is when an entity is created from a document object. It is expected that this object would be passed into a /check or /entity call to set it. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051)
+  --body-entity-id: string # When an entity is first created, it is assigned an ID. When updating an entity, make sure you set the entityId One exception to this is when an entity is created from a document object. It is expected that this object would be passed into a /check or /entity call to set it. (format: uuid, e.g. 84a9a860-68ae-4d7d-9a53-54a1116d5051) (spec name: entityId)
   --entity-profile: string # If the entity is using the new profiles feature, then their profile name will be found here. Note: If setting a profile, you must ensure that the profile matches a known configuration. Please contact Frankie developer support if you're unsure as to what valid values are.
   --entity-type: string@entity-type-completer # Indicates the type of an entity. - "INDIVIDUAL": An individual. - "TRUST": A trust. - "ORGANISATION": An organisation.
   --extra-data: list # Set of key-value pairs that provide arbitrary additional type-specific data. You can use these fields to store external IDs, or other non-identity related items if you need to. If updating an existing entity, then existing values with the same name will be overwritten. New values will be added. See here for more information about possible values you can use: https://apidocs.frankiefinancial.com/docs/entity-extradata-key-value-pairs — item shape: {kvpKey?: string, ... (2 more fields)}
@@ -1615,11 +1642,11 @@ export def "update-entity" [
   let qp = [(serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}") $qp $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "entityId": $body_entity_id, "entityProfile": $entity_profile, "entityType": $entity_type, "extraData": $extra_data, "flags": $flags, "gender": $gender, "identityDocs": $identity_docs, "name": $name, "organisationData": $organisation_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1666,11 +1693,11 @@ export def "update-check-class-results" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_id: (encode-path-segment $check_id), check_class: (encode-path-segment $check_class)} | format pattern "/entity/{entity_id}/check/{check_id}/{check_class}") $auth.query)
   let req_body = {"checkClassIds": $check_class_ids, "comment": $comment, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1719,9 +1746,9 @@ export def "update-check-class-result" [
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "undo" $undo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_id: (encode-path-segment $check_id), check_class: (encode-path-segment $check_class), check_class_id: (encode-path-segment $check_class_id)} | format pattern "/entity/{entity_id}/check/{check_id}/{check_class}/{check_class_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1762,9 +1789,9 @@ export def "query-entity-checks" [
   let qp = [(serialize-qp "alldata" $alldata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/checks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1810,9 +1837,9 @@ export def "blacklist-entity" [
   let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "blockedBy" $blocked_by "scalar") (serialize-qp "attribute" $attribute "scalar") (serialize-qp "originalId" $original_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/blacklist") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1856,9 +1883,9 @@ export def "flag-duplicate-entity" [
   let qp = [(serialize-qp "set" $set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), other_id: (encode-path-segment $other_id)} | format pattern "/entity/{entity_id}/flag/duplicate/{other_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1900,9 +1927,9 @@ export def "entity-monitoring" [
   let qp = [(serialize-qp "set" $set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/monitor") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1946,9 +1973,9 @@ export def "watchlist-entity" [
   let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "reason" $reason "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/flag/watchlist") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1987,9 +2014,9 @@ export def "query-entity-full" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/full") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2033,11 +2060,11 @@ export def "update-entity-get-idv-token" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/idvalidate/getToken") $auth.query)
   let req_body = {"applicantId": $applicant_id, "applicationId": $application_id, "entity": $entity, "referrer": $referrer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2079,11 +2106,11 @@ export def "update-entity-init-idv-process" [
   if ($x_frankie_customer_id == null) { error make --unspanned { msg: "required header parameter 'X-Frankie-CustomerID' missing: pass --x-frankie-customer-id" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/idvalidate/initProcess") $auth.query)
   let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2126,9 +2153,9 @@ export def "update-entity-state" [
   let qp = [(serialize-qp "set" $set "scalar") (serialize-qp "risk" $risk "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/status") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2174,11 +2201,11 @@ export def "update-check-entity-push-to-mobile" [
   let qp = [(serialize-qp "nopush" $nopush "scalar") (serialize-qp "phase" $phase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/entity/{entity_id}/verify/pushToMobile") $qp $auth.query)
   let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2228,11 +2255,11 @@ export def "update-check-entity" [
   let qp = [(serialize-qp "force" $force "scalar") (serialize-qp "noInvalidate" $no_invalidate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id), check_type: (encode-path-segment $check_type), result_level: (encode-path-segment $result_level)} | format pattern "/entity/{entity_id}/verify/{check_type}/{result_level}") $qp $auth.query)
   let req_body = {"deviceCheckDetails": $device_check_details, "entity": $entity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id, "X-Frankie-Background": $x_frankie_background} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2273,9 +2300,9 @@ export def "retrieve-result" [
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/retrieve/response/{request_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Frankie-CustomerID": $x_frankie_customer_id, "X-Frankie-CustomerChildID": $x_frankie_customer_child_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2311,7 +2338,7 @@ export def "status-check" [
   let qp = [(serialize-qp "askingNicely" $asking_nicely "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ruok" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2350,7 +2377,7 @@ export def "notify-result" [
   --link-reference: string # URI for resource containing more details about the reason for the notification. (format: uri, e.g. https://portal.frankiefinancial.io/entity/3fa85f64-5717-4562-b3fc-2c963f66afa6)
   --message: string # A brief, human readable message describing the reason for the notification. (e.g. Entity successfully created)
   --notification-type: string@notification-type-completer # Indicates the type of notification being pushed. - "FUNCTION": A request that you previously backgrounded has completed and this is the notification that is it complete (success is another matter) - "RESULT": Like the FUNCTION notification, this tells you that a previously backgrounded request has completed, and that there is a set of results in the payload pointer. - "EVENT": There has been a stateful change in a document, entity or some other piece of data that we are holding/monitoring for you. This is an indication that you may wish to take some action. - "ALERT": Like the EVENT, except that the severity of the notification indicates that action is almost certainly required.
-  --body-request-id: string # Unique identifier for every request. Can be used for tracking down answers with technical support. Uses the ULID format (a time-based, sortable UUID) Note: this will be different for every request. (format: ulid, e.g. 01BFJA617JMJXEW6G7TDDXNSHX)
+  --body-request-id: string # Unique identifier for every request. Can be used for tracking down answers with technical support. Uses the ULID format (a time-based, sortable UUID) Note: this will be different for every request. (format: ulid, e.g. 01BFJA617JMJXEW6G7TDDXNSHX) (spec name: requestId)
   --username: string # The portal username that initiated the operation that led to this notification. If applicable and available.
 ]: any -> any {
   let input = $in
@@ -2359,9 +2386,9 @@ export def "notify-result" [
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/your/configured/path/{request_id}") $auth.query)
   let req_body = {"checkId": $check_id, "documentId": $document_id, "entityCustomerReference": $entity_customer_reference, "entityId": $entity_id, "function": $function, "functionResult": $function_result, "linkReference": $link_reference, "message": $message, "notificationType": $notification_type, "requestId": $body_request_id, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

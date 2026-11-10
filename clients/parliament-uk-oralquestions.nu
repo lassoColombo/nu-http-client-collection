@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -168,7 +195,7 @@ export def "published-early-day-motion-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/EarlyDayMotion/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -217,7 +244,7 @@ export def "get-early-day-motions-list" [
   let qp = [(serialize-qp "parameters.edmIds" $parameters_edm_ids "multi") (serialize-qp "parameters.uINWithAmendmentSuffix" $parameters_u_in_with_amendment_suffix "scalar") (serialize-qp "parameters.searchTerm" $parameters_search_term "scalar") (serialize-qp "parameters.currentStatusDateStart" $parameters_current_status_date_start "scalar") (serialize-qp "parameters.currentStatusDateEnd" $parameters_current_status_date_end "scalar") (serialize-qp "parameters.isPrayer" $parameters_is_prayer "scalar") (serialize-qp "parameters.memberId" $parameters_member_id "scalar") (serialize-qp "parameters.includeSponsoredByMember" $parameters_include_sponsored_by_member "scalar") (serialize-qp "parameters.tabledStartDate" $parameters_tabled_start_date "scalar") (serialize-qp "parameters.tabledEndDate" $parameters_tabled_end_date "scalar") (serialize-qp "parameters.statuses" $parameters_statuses "multi") (serialize-qp "parameters.orderBy" $parameters_order_by "scalar") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/EarlyDayMotions/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -262,7 +289,7 @@ export def "published-oral-question-get" [
   let qp = [(serialize-qp "parameters.answeringDateStart" $parameters_answering_date_start "scalar") (serialize-qp "parameters.answeringDateEnd" $parameters_answering_date_end "scalar") (serialize-qp "parameters.questionType" $parameters_question_type "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parameters_oral_question_time_id "scalar") (serialize-qp "parameters.askingMemberIds" $parameters_asking_member_ids "multi") (serialize-qp "parameters.uINs" $parameters_u_i_ns "multi") (serialize-qp "parameters.answeringBodyIds" $parameters_answering_body_ids "multi") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oralquestions/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -306,7 +333,7 @@ export def "published-oral-question-time-get" [
   let qp = [(serialize-qp "parameters.answeringDateStart" $parameters_answering_date_start "scalar") (serialize-qp "parameters.answeringDateEnd" $parameters_answering_date_end "scalar") (serialize-qp "parameters.deadlineDateStart" $parameters_deadline_date_start "scalar") (serialize-qp "parameters.deadlineDateEnd" $parameters_deadline_date_end "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parameters_oral_question_time_id "scalar") (serialize-qp "parameters.answeringBodyIds" $parameters_answering_body_ids "multi") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oralquestiontimes/list" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

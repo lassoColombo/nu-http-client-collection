@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -164,7 +191,7 @@ export def "get-calendar" [
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendar" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -205,7 +232,7 @@ export def "get-coaches" [
   let qp = [(serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "minYear" $min_year "scalar") (serialize-qp "maxYear" $max_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/coaches" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -239,7 +266,7 @@ export def "get-conferences" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/conferences" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -279,7 +306,7 @@ export def "get-draft-picks" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "nflTeam" $nfl_team "scalar") (serialize-qp "college" $college "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/draft/picks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -313,7 +340,7 @@ export def "get-nfl-positions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/draft/positions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -347,7 +374,7 @@ export def "get-nfl-teams" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/draft/teams" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -393,7 +420,7 @@ export def "get-drives" [
   let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -430,7 +457,7 @@ export def "get-advanced-box-score" [
   let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/game/box/advanced" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -475,7 +502,7 @@ export def "get-games" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "division" $division "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -518,7 +545,7 @@ export def "get-game-media" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "mediaType" $media_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/media" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -561,7 +588,7 @@ export def "get-player-game-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/players" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -604,7 +631,7 @@ export def "get-team-game-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "gameId" $game_id "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/teams" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -646,7 +673,7 @@ export def "get-game-weather" [
   let qp = [(serialize-qp "gameId" $game_id "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/weather" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -689,7 +716,7 @@ export def "get-lines" [
   let qp = [(serialize-qp "gameId" $game_id "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "home" $home "scalar") (serialize-qp "away" $away "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lines" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -726,7 +753,7 @@ export def "get-live-plays" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/live/plays" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -763,7 +790,7 @@ export def "get-win-probability-data" [
   let qp = [(serialize-qp "gameId" $game_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/wp" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -802,7 +829,7 @@ export def "get-pregame-win-probabilities" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metrics/wp/pregame" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -836,7 +863,7 @@ export def "get-play-stat-types" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/play/stat/types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -879,7 +906,7 @@ export def "get-play-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "gameId" $game_id "scalar") (serialize-qp "athleteId" $athlete_id "scalar") (serialize-qp "statTypeId" $stat_type_id "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/play/stats" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -913,7 +940,7 @@ export def "get-play-types" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/play/types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -950,7 +977,7 @@ export def "get-transfer-portal" [
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/portal" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -988,7 +1015,7 @@ export def "get-returning-production" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/returning" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1028,7 +1055,7 @@ export def "player-search" [
   let qp = [(serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1070,7 +1097,7 @@ export def "get-player-usage" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/player/usage" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1118,7 +1145,7 @@ export def "get-plays" [
   let qp = [(serialize-qp "seasonType" $season_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "offense" $offense "scalar") (serialize-qp "defense" $defense "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "offenseConference" $offense_conference "scalar") (serialize-qp "defenseConference" $defense_conference "scalar") (serialize-qp "playType" $play_type "scalar") (serialize-qp "classification" $classification "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plays" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1160,7 +1187,7 @@ export def "get-game-ppa" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/games" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1203,7 +1230,7 @@ export def "get-player-game-ppa" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/players/games" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1245,7 +1272,7 @@ export def "get-player-season-ppa" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "playerId" $player_id "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/players/season" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1284,7 +1311,7 @@ export def "get-predicted-points" [
   let qp = [(serialize-qp "down" $down "scalar") (serialize-qp "distance" $distance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/predicted" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1323,7 +1350,7 @@ export def "get-team-ppa" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ppa/teams" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1362,7 +1389,7 @@ export def "get-rankings" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rankings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1401,7 +1428,7 @@ export def "get-elo-ratings" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ratings/elo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1438,7 +1465,7 @@ export def "get-sp-ratings" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ratings/sp" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1475,7 +1502,7 @@ export def "get-conference-sp-ratings" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ratings/sp/conferences" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1513,7 +1540,7 @@ export def "get-srs-ratings" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ratings/srs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1551,7 +1578,7 @@ export def "get-team-records" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/records" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1590,7 +1617,7 @@ export def "get-recruiting-groups" [
   let qp = [(serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recruiting/groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1630,7 +1657,7 @@ export def "get-recruiting-players" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "classification" $classification "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "team" $team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recruiting/players" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1667,7 +1694,7 @@ export def "get-recruiting-teams" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recruiting/teams" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1704,7 +1731,7 @@ export def "get-roster" [
   let qp = [(serialize-qp "team" $team "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/roster" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1741,7 +1768,7 @@ export def "get-scoreboard" [
   let qp = [(serialize-qp "classification" $classification "scalar") (serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/scoreboard" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1775,7 +1802,7 @@ export def "get-stat-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stats/categories" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1816,7 +1843,7 @@ export def "get-advanced-team-game-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "week" $week "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "opponent" $opponent "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "seasonType" $season_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/game/advanced" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1859,7 +1886,7 @@ export def "get-player-season-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar") (serialize-qp "seasonType" $season_type "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/player/season" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1899,7 +1926,7 @@ export def "get-team-season-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "conference" $conference "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/season" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1939,7 +1966,7 @@ export def "get-advanced-team-season-stats" [
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "excludeGarbageTime" $exclude_garbage_time "scalar") (serialize-qp "startWeek" $start_week "scalar") (serialize-qp "endWeek" $end_week "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/season/advanced" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1975,7 +2002,7 @@ export def "get-talent" [
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/talent" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2011,7 +2038,7 @@ export def "get-teams" [
   let qp = [(serialize-qp "conference" $conference "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2047,7 +2074,7 @@ export def "get-fbs-teams" [
   let qp = [(serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams/fbs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2088,7 +2115,7 @@ export def "get-team-matchup" [
   let qp = [(serialize-qp "team1" $team1 "scalar") (serialize-qp "team2" $team2 "scalar") (serialize-qp "minYear" $min_year "scalar") (serialize-qp "maxYear" $max_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams/matchup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2122,7 +2149,7 @@ export def "get-venues" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/venues" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

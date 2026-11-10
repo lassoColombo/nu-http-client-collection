@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,9 +207,9 @@ export def "client-api-all" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -224,9 +251,9 @@ export def "client-api-can-delete" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/candelete" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -267,11 +294,11 @@ export def "client-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -313,9 +340,9 @@ export def "client-api-details" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/client/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -366,11 +393,11 @@ export def "client-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/new" $auth.query)
   let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -421,11 +448,11 @@ export def "client-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/client/update" $auth.query)
   let req_body = {"AdditionalEmails": $additional_emails, "Address": $address, "ClientCountryId": $client_country_id, "ClientCurrencyId": $client_currency_id, "CompanyRegistrationNumber": $company_registration_number, "DefaultDueDateInDays": $default_due_date_in_days, "Email": $email, "Id": $id, "Name": $name, "PhoneNumber": $phone_number, "UiLanguageId": $ui_language_id, "Vat": $vat} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -467,9 +494,9 @@ export def "estimation-api-all" [
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -511,11 +538,11 @@ export def "estimation-api-change-status" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/changestatus" $auth.query)
   let req_body = {"Id": $id, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -556,11 +583,11 @@ export def "estimation-api-convert" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/convert" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -601,11 +628,11 @@ export def "estimation-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -647,9 +674,9 @@ export def "estimation-api-details" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -702,11 +729,11 @@ export def "estimation-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/new" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -752,11 +779,11 @@ export def "estimation-api-send-to-client" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/sendtoclient" $auth.query)
   let req_body = {"AttachPdf": $attach_pdf, "EstimationId": $estimation_id, "Id": $id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -798,9 +825,9 @@ export def "estimation-api-status" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/status" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -854,11 +881,11 @@ export def "estimation-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/estimation/update" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "ExpiresOn": $expires_on, "Id": $id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "Status": $status, "Terms": $terms} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -900,9 +927,9 @@ export def "estimation-api-uri" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/estimation/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -941,9 +968,9 @@ export def "general-api-countries" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/countries" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -982,9 +1009,9 @@ export def "general-api-currencies" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/currencies" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,9 +1050,9 @@ export def "general-api-date-formats" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/dateformats" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1064,9 +1091,9 @@ export def "general-api-ui-languages" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/general/uilanguages" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1108,9 +1135,9 @@ export def "invoice-api-all" [
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1150,9 +1177,9 @@ export def "get-api-invoice-allcategories" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/allcategories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1194,11 +1221,11 @@ export def "invoice-api-change-status" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/changestatus" $auth.query)
   let req_body = {"Id": $id, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1239,11 +1266,11 @@ export def "invoice-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1283,11 +1310,11 @@ export def "post-api-invoice-deletecategory" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/deletecategory" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1329,9 +1356,9 @@ export def "invoice-api-details" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1388,11 +1415,11 @@ export def "invoice-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/new" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1432,11 +1459,11 @@ export def "post-api-invoice-newcategory" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/newcategory" $auth.query)
   let req_body = {"Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1479,9 +1506,9 @@ export def "invoice-api-pdf" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "signedVersion" $signed_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/pdf" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1522,11 +1549,11 @@ export def "invoice-api-send-to-accountant" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/sendtoaccountant" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1572,11 +1599,11 @@ export def "invoice-api-send-to-client" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/sendtoclient" $auth.query)
   let req_body = {"AttachPdf": $attach_pdf, "Id": $id, "InvoiceId": $invoice_id, "Message": $message, "SendToSelf": $send_to_self, "Subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1618,9 +1645,9 @@ export def "invoice-api-status" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/status" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1678,11 +1705,11 @@ export def "invoice-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/update" $auth.query)
   let req_body = {"Attachments": $attachments, "ClientId": $client_id, "ClonedFromId": $cloned_from_id, "CurrencyId": $currency_id, "Duedate": $duedate, "Id": $id, "InvoiceCategoryId": $invoice_category_id, "IssuedOn": $issued_on, "Items": $items, "Notes": $notes, "Number": $number, "PaymentGateways": $payment_gateways, "PoNumber": $po_number, "RecurringProfile": $recurring_profile, "RecurringProfileId": $recurring_profile_id, "ShouldSendReminders": $should_send_reminders, "Status": $status, "Terms": $terms} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1723,11 +1750,11 @@ export def "post-api-invoice-updatecategory" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/invoice/updatecategory" $auth.query)
   let req_body = {"Id": $id, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1769,9 +1796,9 @@ export def "invoice-api-uri" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/invoice/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1813,9 +1840,9 @@ export def "order-api-all" [
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1862,11 +1889,11 @@ export def "order-api-change-shipping-details" [
   let qp = [(serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/changeshippingdetails" $qp $auth.query)
   let req_body = {"Address": $address, "CountryId": $country_id, "Email": $email, "Name": $name, "PhoneNumber": $phone_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1908,11 +1935,11 @@ export def "order-api-change-status" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/changestatus" $auth.query)
   let req_body = {"Id": $id, "Reason": $reason, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1953,11 +1980,11 @@ export def "order-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1999,9 +2026,9 @@ export def "order-api-details" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/order/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2061,11 +2088,11 @@ export def "order-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/order/new" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "CouponCode": $coupon_code, "CurrencyId": $currency_id, "Description": $description, "DiscountAmount": $discount_amount, "Items": $items, "Name": $name, "Note": $note, "OrderBillingDetails": $order_billing_details, "OrderShippingDetails": $order_shipping_details, "ProductId": $product_id, "Referral": $referral, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2104,9 +2131,9 @@ export def "payment-api-supported" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/payment/supported" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2148,9 +2175,9 @@ export def "payment-link-api-all" [
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2205,11 +2232,11 @@ export def "payment-link-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/paymentlink/delete" $auth.query)
   let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2264,11 +2291,11 @@ export def "payment-link-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/paymentlink/new" $auth.query)
   let req_body = {"AccessToken": $access_token, "Client": $client, "ClientId": $client_id, "Currency": $currency, "CurrencyId": $currency_id, "DiscountAmount": $discount_amount, "Id": $id, "Invoice": $invoice, "Items": $items, "Number": $number, "SubTotalAmount": $sub_total_amount, "TaxAmount": $tax_amount, "TotalAmount": $total_amount, "User": $user, "UserId": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2310,9 +2337,9 @@ export def "payment-link-api-uri" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/paymentlink/uri" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2354,9 +2381,9 @@ export def "product-api-all" [
   let qp = [(serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2397,11 +2424,11 @@ export def "product-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2443,9 +2470,9 @@ export def "product-api-details" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/product/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2500,11 +2527,11 @@ export def "product-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/new" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2559,11 +2586,11 @@ export def "product-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/product/update" $auth.query)
   let req_body = {"AfterPaymentDescription": $after_payment_description, "Attachments": $attachments, "ButtonCallToAction": $button_call_to_action, "Coupons": $coupons, "CurrencyId": $currency_id, "Description": $description, "Discounts": $discounts, "Id": $id, "IsFeatured": $is_featured, "Items": $items, "Name": $name, "PaymentGateways": $payment_gateways, "ShippingAmount": $shipping_amount, "ShippingDescription": $shipping_description, "Status": $status, "WhatHappensNextDescription": $what_happens_next_description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2602,9 +2629,9 @@ export def "tax-api-all" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2645,11 +2672,11 @@ export def "tax-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2691,11 +2718,11 @@ export def "tax-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/new" $auth.query)
   let req_body = {"Name": $name, "Percentage": $percentage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2737,11 +2764,11 @@ export def "tax-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/tax/update" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "Percentage": $percentage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2780,9 +2807,9 @@ export def "work-type-api-all" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/all" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2823,11 +2850,11 @@ export def "work-type-api-delete" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/delete" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2869,9 +2896,9 @@ export def "work-type-api-details" [
   let qp = [(serialize-qp "workTypeId" $work_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2912,11 +2939,11 @@ export def "work-type-api-new" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/new" $auth.query)
   let req_body = {"Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2961,9 +2988,9 @@ export def "work-type-api-search" [
   let qp = [(serialize-qp "queryOptions.query" $query_options_query "scalar") (serialize-qp "queryOptions.orderBy" $query_options_order_by "scalar") (serialize-qp "queryOptions.order" $query_options_order "scalar") (serialize-qp "queryOptions.page" $query_options_page "scalar") (serialize-qp "queryOptions.pageSize" $query_options_page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/worktype/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3004,11 +3031,11 @@ export def "work-type-api-update" [
   let x_auth_secret = ($x_auth_secret | default "[authentication secret]")
   let full_url = (build-url $base "/api/worktype/update" $auth.query)
   let req_body = {"Id": $id, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-auth-key": $x_auth_key, "x-auth-secret": $x_auth_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

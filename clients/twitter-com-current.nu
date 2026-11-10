@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -196,7 +223,7 @@ export def "list-batch-compliance-jobs" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/compliance/jobs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -236,9 +263,9 @@ export def "create-batch-compliance-job" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/compliance/jobs" $auth.query)
   let req_body = {"name": $name, "resumable": $resumable, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -278,7 +305,7 @@ export def "get-batch-compliance-job" [
   let qp = [(serialize-qp "compliance_job.fields" $compliance_job_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/compliance/jobs/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -317,9 +344,9 @@ export def "dm-conversation-id-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/dm_conversations" $auth.query)
   let req_body = {"conversation_type": $conversation_type, "message": $message, "participant_ids": $participant_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -365,7 +392,7 @@ export def "get-dm-conversations-with-participant-id-dm-events" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/dm_events") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -405,9 +432,9 @@ export def "dm-conversation-with-user-event-id-create" [
   if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participant_id' must be non-empty" } }
   let full_url = (build-url $base ({participant_id: (encode-path-segment $participant_id)} | format pattern "/2/dm_conversations/with/{participant_id}/messages") $auth.query)
   let req_body = {"attachments": $attachments, "text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -447,9 +474,9 @@ export def "dm-conversation-by-id-event-id-create" [
   if ($dm_conversation_id | is-empty) { error make --unspanned { msg: "path parameter 'dm_conversation_id' must be non-empty" } }
   let full_url = (build-url $base ({dm_conversation_id: (encode-path-segment $dm_conversation_id)} | format pattern "/2/dm_conversations/{dm_conversation_id}/messages") $auth.query)
   let req_body = {"attachments": $attachments, "text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -495,7 +522,7 @@ export def "get-dm-conversations-id-dm-events" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/dm_conversations/{id}/dm_events") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -539,7 +566,7 @@ export def "get-dm-events" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/dm_events" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -579,9 +606,9 @@ export def "list-id-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/lists" $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -619,7 +646,7 @@ export def "list-id-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -661,7 +688,7 @@ export def "list-id-get" [
   let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -703,9 +730,9 @@ export def "list-id-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}") $auth.query)
   let req_body = {"description": $description, "name": $name, "private": $private} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -749,7 +776,7 @@ export def "list-get-followers" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/followers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -793,7 +820,7 @@ export def "list-get-members" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -833,9 +860,9 @@ export def "list-add-member" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/members") $auth.query)
   let req_body = {"user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -875,7 +902,7 @@ export def "list-remove-member" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/2/lists/{id}/members/{user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -922,7 +949,7 @@ export def "lists-id-tweets" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/lists/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -956,7 +983,7 @@ export def "get-open-api-spec" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/openapi.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -999,7 +1026,7 @@ export def "find-spaces-by-ids" [
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1042,7 +1069,7 @@ export def "find-spaces-by-creator-ids" [
   let qp = [(serialize-qp "user_ids" $user_ids "multi") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/by/creator_ids" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1087,7 +1114,7 @@ export def "search-spaces" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/spaces/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1130,7 +1157,7 @@ export def "find-space-by-id" [
   let qp = [(serialize-qp "space.fields" $space_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "topic.fields" $topic_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1174,7 +1201,7 @@ export def "space-buyers" [
   let qp = [(serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/buyers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1220,7 +1247,7 @@ export def "space-tweets" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/spaces/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1265,7 +1292,7 @@ export def "find-tweets-by-id" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1313,9 +1340,9 @@ export def "create-tweet" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/tweets" $auth.query)
   let req_body = {"card_uri": $card_uri, "direct_message_deep_link": $direct_message_deep_link, "for_super_followers_only": $for_super_followers_only, "geo": $geo, "media": $media, "nullcast": $nullcast, "poll": $poll, "quote_tweet_id": $quote_tweet_id, "reply": $reply, "reply_settings": $reply_settings, "text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1356,7 +1383,7 @@ export def "get-tweets-compliance-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1403,7 +1430,7 @@ export def "tweet-counts-full-archive-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1450,7 +1477,7 @@ export def "tweet-counts-recent-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "granularity" $granularity "scalar") (serialize-qp "search_count.fields" $search_count_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/counts/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1497,7 +1524,7 @@ export def "get-tweets-firehose-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/firehose/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1536,7 +1563,7 @@ export def "get-tweets-label-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/label/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1580,7 +1607,7 @@ export def "sample-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/sample/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1627,7 +1654,7 @@ export def "get-tweets-sample10-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/sample10/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1680,7 +1707,7 @@ export def "tweets-fullarchive-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1733,7 +1760,7 @@ export def "tweets-recent-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/recent" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1779,7 +1806,7 @@ export def "search-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1819,7 +1846,7 @@ export def "get-rules" [
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1850,7 +1877,7 @@ export def "add-or-delete-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-dry-run: oneof<nothing, bool> # Dry Run can be used with both the add and delete action, with the expected result given, but without actually taking any action in the system (meaning the end state will always be as it was when the request was submitted). This is particularly useful to validate rule changes.
+  --qp-dry-run: oneof<nothing, bool> # Dry Run can be used with both the add and delete action, with the expected result given, but without actually taking any action in the system (meaning the end state will always be as it was when the request was submitted). This is particularly useful to validate rule changes. (spec name: dry_run)
   --add: list # item shape: {tag?: string, value: string}
   --delete: record # IDs and values of all deleted user-specified stream filtering rules. — shape: {ids?: list<string>, values?: list<string>}
 ]: any -> oneof<record<data: table<id: string, tag: string, value: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<next_token: string, result_count: int, sent: string, summary: any>>, string, nothing> {
@@ -1860,9 +1887,9 @@ export def "add-or-delete-rules" [
   let qp = [(serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/tweets/search/stream/rules" $qp $auth.query)
   let req_body = {"add": $add, "delete": $delete} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1900,7 +1927,7 @@ export def "delete-tweet-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1945,7 +1972,7 @@ export def "find-tweet-by-id" [
   let qp = [(serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1989,7 +2016,7 @@ export def "tweets-id-liking-users" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/liking_users") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2037,7 +2064,7 @@ export def "find-tweets-that-quote-a-tweet" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/quote_tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2081,7 +2108,7 @@ export def "tweets-id-retweeting-users" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/tweets/{id}/retweeted_by") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2121,10 +2148,10 @@ export def "hide-reply-by-id" [
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
   let full_url = (build-url $base ({tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/tweets/{tweet_id}/hidden") $auth.query)
   let req_body = {"hidden": $hidden} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "hidden") == null) { error make --unspanned { msg: "required body field 'hidden' missing: pass --hidden or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2166,7 +2193,7 @@ export def "find-users-by-id" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2208,7 +2235,7 @@ export def "find-users-by-username" [
   let qp = [(serialize-qp "usernames" $usernames "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/by" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2250,7 +2277,7 @@ export def "find-user-by-username" [
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/2/users/by/username/{username}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2291,7 +2318,7 @@ export def "get-users-compliance-stream" [
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "partition" $partition "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/compliance/stream" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2331,7 +2358,7 @@ export def "find-my-user" [
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/2/users/me" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2373,7 +2400,7 @@ export def "find-user-by-id" [
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2417,7 +2444,7 @@ export def "users-id-blocking" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2457,9 +2484,9 @@ export def "users-id-block" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/blocking") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2506,7 +2533,7 @@ export def "get-users-id-bookmarks" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2546,9 +2573,9 @@ export def "post-users-id-bookmarks" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/bookmarks") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2588,7 +2615,7 @@ export def "users-id-bookmarks-delete" [
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/bookmarks/{tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2632,7 +2659,7 @@ export def "user-followed-lists" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2672,9 +2699,9 @@ export def "list-user-follow" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followed_lists") $auth.query)
   let req_body = {"list_id": $list_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2714,7 +2741,7 @@ export def "list-user-unfollow" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/followed_lists/{list_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2758,7 +2785,7 @@ export def "users-id-followers" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/followers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2802,7 +2829,7 @@ export def "users-id-following" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2842,9 +2869,9 @@ export def "users-id-follow" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/following") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2891,7 +2918,7 @@ export def "users-id-liked-tweets" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/liked_tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2931,9 +2958,9 @@ export def "users-id-like" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/likes") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2973,7 +3000,7 @@ export def "users-id-unlike" [
   if ($tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'tweet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), tweet_id: (encode-path-segment $tweet_id)} | format pattern "/2/users/{id}/likes/{tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3017,7 +3044,7 @@ export def "get-user-list-memberships" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/list_memberships") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3068,7 +3095,7 @@ export def "users-id-mentions" [
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/mentions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3112,7 +3139,7 @@ export def "users-id-muting" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3152,9 +3179,9 @@ export def "users-id-mute" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/muting") $auth.query)
   let req_body = {"target_user_id": $target_user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3198,7 +3225,7 @@ export def "list-user-owned-lists" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/owned_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3240,7 +3267,7 @@ export def "list-user-pinned-lists" [
   let qp = [(serialize-qp "list.fields" $list_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "user.fields" $user_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3280,9 +3307,9 @@ export def "list-user-pin" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/pinned_lists") $auth.query)
   let req_body = {"list_id": $list_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3322,7 +3349,7 @@ export def "list-user-unpin" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/2/users/{id}/pinned_lists/{list_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3362,9 +3389,9 @@ export def "users-id-retweets" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/retweets") $auth.query)
   let req_body = {"tweet_id": $tweet_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3404,7 +3431,7 @@ export def "users-id-unretweets" [
   if ($source_tweet_id | is-empty) { error make --unspanned { msg: "path parameter 'source_tweet_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), source_tweet_id: (encode-path-segment $source_tweet_id)} | format pattern "/2/users/{id}/retweets/{source_tweet_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3456,7 +3483,7 @@ export def "users-id-timeline" [
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/timelines/reverse_chronological") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3508,7 +3535,7 @@ export def "users-id-tweets" [
   let qp = [(serialize-qp "since_id" $since_id "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "exclude" $exclude "csv") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/2/users/{id}/tweets") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3548,7 +3575,7 @@ export def "users-id-unblock" [
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
   let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/blocking/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3588,7 +3615,7 @@ export def "users-id-unfollow" [
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
   let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/following/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3628,7 +3655,7 @@ export def "users-id-unmute" [
   if ($target_user_id | is-empty) { error make --unspanned { msg: "path parameter 'target_user_id' must be non-empty" } }
   let full_url = (build-url $base ({source_user_id: (encode-path-segment $source_user_id), target_user_id: (encode-path-segment $target_user_id)} | format pattern "/2/users/{source_user_id}/muting/{target_user_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url

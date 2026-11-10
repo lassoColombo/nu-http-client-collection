@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -192,7 +219,7 @@ export def "branch-controller-get-branches" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/branch/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -230,7 +257,7 @@ export def "get-v2-customer-short-name-branch-branches-branch-id" [
   if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/customer/{short_name}/branch/branches/{branch_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -261,7 +288,7 @@ export def "landlord-controller-get-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<AccountBalance: float, LastPayment: string, PaymentHistory: table<Amount: float, Date: string, Description: string, TransactionNumber: int>, Statements: table<Date: string, InvoiceID: string, IsMaintenanceInvoice: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +297,7 @@ export def "landlord-controller-get-accounts" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/accounting") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -301,7 +328,7 @@ export def "landlord-controller-get-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --id: string # The Document ID (required)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -312,7 +339,7 @@ export def "landlord-controller-get-document" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "ID" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/document") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -343,7 +370,7 @@ export def "landlord-controller-get-invetory-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -354,7 +381,7 @@ export def "landlord-controller-get-invetory-report" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/inventory") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -385,7 +412,7 @@ export def "landlord-controller-get-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --invoice-id: string # The invoice ID to load. (required)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -396,7 +423,7 @@ export def "landlord-controller-get-invoice" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "invoiceID" $invoice_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/invoice") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -427,7 +454,7 @@ export def "landlord-controller-get-landlord-crm-entries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<table<BranchID: string, GlobalReference: string, Name: string, OID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +463,7 @@ export def "landlord-controller-get-landlord-crm-entries" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/landlordcrmentries") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -467,7 +494,7 @@ export def "landlord-controller-get-maintenance-jobs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<Jobs: table<AssignedTo: string, ClosedDate: string, Description: string, MaintenanceNotes: list, Property: string, Reported: string, Status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +503,7 @@ export def "landlord-controller-get-maintenance-jobs" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/maintenance") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -507,7 +534,7 @@ export def "landlord-controller-get-profit-loss-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<DirectCosts: record<Rows: list<record>>, GrossProfitLoss: record<Rows: list<record>>, Income: record<Rows: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -516,7 +543,7 @@ export def "landlord-controller-get-profit-loss-report" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/profitloss") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -547,7 +574,7 @@ export def "landlord-controller-get-rent-arrears" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<ChaseNotes: table<Date: string, Note: string, NoteType: string, TenantID: string>, RentCollected: float, RentOutstanding: table<DebtDays: int, OutstandingRent: float, Property: string, Tenant: string, TenantID: string>, TotalRentArrears: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -556,7 +583,7 @@ export def "landlord-controller-get-rent-arrears" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/rentarrears") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -587,7 +614,7 @@ export def "landlord-controller-get-sas-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --year-end: int # The Tax Year End. (required, format: int32)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -598,7 +625,7 @@ export def "landlord-controller-get-sas-report" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "yearEnd" $year_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/sas") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -629,7 +656,7 @@ export def "landlord-controller-get-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<LinkedAccounts: table<Address: string, Email: string, GlobalReference: string, ID: string, Mobile: string, Name: string, Phone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +665,7 @@ export def "landlord-controller-get-settings" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/settings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -669,7 +696,7 @@ export def "landlord-controller-get-summary-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<record<AccountBalance: float, LastPayment: string, Tenancies: table<Bond: float, BranchID: string, Description: string, GlobalReference: string, ID: string, MaintenanceJobs: int, ManagedRent: bool, PropertyAddress: string, Rent: string, RentArrears: float, RentCollected: float, TenancyProperty: string, TenancyState: string>, TotalRentArrears: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -678,7 +705,7 @@ export def "landlord-controller-get-summary-details" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/summary") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -709,7 +736,7 @@ export def "landlord-controller-get-tenancy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> oneof<record<ActualEndDate: string, Beds: int, Bond: float, BranchID: string, Certificates: table<Due: string, Files: list, Status: string, Type: string>, Documents: table<FileName: string, FileSize: int, ID: string, MIMEType: string, Note: string>, FixedDate: string, GlobalReference: string, ID: string, Inspections: table<InspectionDate: string, Notes: string>, ManagedRent: bool, Preferences: table<Name: string, Notes: string, Type: string>, PreviousRentAmount: float, PropertyAddress: string, Rent: string, RentAmount: float, StartDate: string, TenancyProperty: string, TenancyState: string, Tenants: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -720,7 +747,7 @@ export def "landlord-controller-get-tenancy" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -751,7 +778,7 @@ export def "landlord-controller-create-maintenance-preference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --tenancy-id: string # The Tenancy ID (required)
   --name: string # Name of the maintenance preference to add (required)
   --notes: string # Notes of the maintenance preference to add (required)
@@ -766,7 +793,7 @@ export def "landlord-controller-create-maintenance-preference" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancy/maintenance/preference") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -797,7 +824,7 @@ export def "landlord-controller-get-tenancy-agreement-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --tenancy-id: string # The Tenancy ID (required)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -808,7 +835,7 @@ export def "landlord-controller-get-tenancy-agreement-report" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "tenancyID" $tenancy_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/landlord/tenancyagreement") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -839,7 +866,7 @@ export def "photo-controller-get-photo-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --photo-id: string # The unique ID of the photo on the property (required)
   --width: int # An optional parameter specifying the image width (format: int32)
   --height: int # An optional parameter specifying the image height (format: int32)
@@ -852,7 +879,7 @@ export def "photo-controller-get-photo-download" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "photoID" $photo_id "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/photo/download") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -884,7 +911,7 @@ export def "property-controller-get-properties-photos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --offset: int # The index of the first item to return (required, format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (required, format: int32)
 ]: nothing -> oneof<record<Count: int, Data: table<ETag: string, FileName: string, OID: string, PhotoType: string>>, string, nothing> {
@@ -898,7 +925,7 @@ export def "property-controller-get-properties-photos" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/customer/{short_name}/property/{property_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -928,7 +955,7 @@ export def "session-controller-logout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -937,7 +964,7 @@ export def "session-controller-logout" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -968,7 +995,7 @@ export def "session-controller-get-session-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +1004,7 @@ export def "session-controller-get-session-info" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1019,7 +1046,7 @@ export def "session-controller-login" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1069,7 +1096,7 @@ export def "session-controller-create-landlord-login" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "propertyAddress" $property_address "scalar") (serialize-qp "contactDetails" $contact_details "scalar") (serialize-qp "branchID" $branch_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/createlandlordlogin") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1099,7 +1126,7 @@ export def "session-controller-change-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # The login token returned from the /session POST call (required)
+  --qp-token: string # The login token returned from the /session POST call (required) (spec name: token)
   --old-password: string # The customer's existing password. (required)
   --new-password: string # The customer's new password. (required)
 ]: nothing -> any {
@@ -1112,7 +1139,7 @@ export def "session-controller-change-password" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "oldPassword" $old_password "scalar") (serialize-qp "newPassword" $new_password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/password") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1151,7 +1178,7 @@ export def "session-controller-reset-password" [
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/customer/{short_name}/session/resetpassword") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -171,7 +198,7 @@ export def "easee-sessions" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alternative/easee/lastSessions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -205,7 +232,7 @@ export def "ocpp-sessions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alternative/ocpp/lastSessions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -239,7 +266,7 @@ export def "om-activities" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alternative/openmeter/activities" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -273,7 +300,7 @@ export def "om-meters" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alternative/openmeter/meters" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -307,7 +334,7 @@ export def "om-readings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alternative/openmeter/readings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -346,7 +373,7 @@ export def "gsi-besthour" [
   let qp = [(serialize-qp "zip" $zip "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gsi/bestHour" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -383,7 +410,7 @@ export def "gsi-dispatch" [
   let qp = [(serialize-qp "zip" $zip "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gsi/dispatch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -419,7 +446,7 @@ export def "gsi-marketdata" [
   let qp = [(serialize-qp "zip" $zip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gsi/marketdata" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -456,7 +483,7 @@ export def "gsi-prediction" [
   let qp = [(serialize-qp "zip" $zip "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gsi/prediction" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -492,7 +519,7 @@ export def "metering-get" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metering/reading" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -533,9 +560,9 @@ export def "metering-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metering/reading" $auth.query)
   let req_body = {"1.8.0": $1_8_0, "account": $account, "energy": $energy, "secret": $secret, "value": $value, "zip": $zip} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -571,9 +598,9 @@ export def "quittung-comit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/commit" $auth.query)
   let req_body = {"account": $account} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -609,9 +636,9 @@ export def "quittung-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/create" $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -647,9 +674,9 @@ export def "quittung-prepare" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/prepare" $auth.query)
   let req_body = {"account": $account} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -685,7 +712,7 @@ export def "quittung-tse" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quittung/tse" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -721,7 +748,7 @@ export def "quittung-tse-data" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quittung/tsedata" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -757,7 +784,7 @@ export def "quittung-ts-esignature" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quittung/tsesignature" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -793,7 +820,7 @@ export def "quittung-zugferd" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/quittung/zugferd" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -829,7 +856,7 @@ export def "stromkonto-balances" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stromkonto/balances" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -865,7 +892,7 @@ export def "stromkonto-choices" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stromkonto/choices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -901,9 +928,9 @@ export def "stromkonto-login" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/login" $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -943,9 +970,9 @@ export def "prepare-transaction" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/prepareTransaction" $auth.query)
   let req_body = {"account": $account, "signature": $signature, "to": $to, "value": $value, "variation": $variation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -984,9 +1011,9 @@ export def "stromkonto-register" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/register" $auth.query)
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "zipcode": $zipcode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1026,7 +1053,7 @@ export def "tariffcomponents" [
   let qp = [(serialize-qp "zipcode" $zipcode "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "kwha" $kwha "scalar") (serialize-qp "milliseconds" $milliseconds "scalar") (serialize-qp "wh" $wh "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tariff/components" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1062,7 +1089,7 @@ export def "tariff-slph0" [
   let qp = [(serialize-qp "zipcode" $zipcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tariff/slph0" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1098,7 +1125,7 @@ export def "wimstatus" [
   let qp = [(serialize-qp "vid" $vid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wim/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

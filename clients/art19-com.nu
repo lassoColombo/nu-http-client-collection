@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -175,7 +202,7 @@ export def "get-classification-inclusions" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "classification_id" $classification_id "scalar") (serialize-qp "classification_type" $classification_type "scalar") (serialize-qp "classified_id" $classified_id "scalar") (serialize-qp "classified_type" $classified_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/classification_inclusions" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -210,7 +237,7 @@ export def "get-classification-inclusions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/classification_inclusions/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -251,7 +278,7 @@ export def "get-classifications" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "is_country" $is_country "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/classifications" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -286,7 +313,7 @@ export def "get-classifications-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/classifications/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -326,7 +353,7 @@ export def "get-credits" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "creditable_id" $creditable_id "scalar") (serialize-qp "creditable_type" $creditable_type "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/credits" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -361,7 +388,7 @@ export def "get-credits-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credits/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -411,7 +438,7 @@ export def "get-episodes" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "included_in_inventory_calendar" $included_in_inventory_calendar "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "released_after" $released_after "scalar") (serialize-qp "released_before" $released_before "scalar") (serialize-qp "rss" $rss "scalar") (serialize-qp "season_id" $season_id "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/episodes" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -446,7 +473,7 @@ export def "get-episodes-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -483,7 +510,7 @@ export def "get-episodes-id-next-sibling" [
   let qp = [(serialize-qp "rss" $rss "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}/next_sibling") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -520,7 +547,7 @@ export def "get-episodes-id-previous-sibling" [
   let qp = [(serialize-qp "rss" $rss "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}/previous_sibling") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -556,7 +583,7 @@ export def "get-images" [
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/images" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -591,7 +618,7 @@ export def "get-images-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -627,7 +654,7 @@ export def "get-media-assets" [
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/media_assets" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -662,7 +689,7 @@ export def "get-media-assets-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/media_assets/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -703,7 +730,7 @@ export def "get-networks" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "ad_deal_status" $ad_deal_status "csv") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/networks" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -738,7 +765,7 @@ export def "get-networks-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/networks/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -777,7 +804,7 @@ export def "get-people" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/people" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -812,7 +839,7 @@ export def "get-people-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -852,7 +879,7 @@ export def "get-seasons" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/seasons" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -887,7 +914,7 @@ export def "get-seasons-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/seasons/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -928,7 +955,7 @@ export def "get-series" [
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "network_id" $network_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -963,7 +990,7 @@ export def "get-series-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/series/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

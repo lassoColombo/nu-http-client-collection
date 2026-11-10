@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -177,7 +204,7 @@ export def "delete-actions-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -187,7 +214,7 @@ export def "delete-actions-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -225,7 +252,7 @@ export def "get-actions-by-id-action" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -235,7 +262,7 @@ export def "get-actions-by-id-action" [
   let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -266,7 +293,7 @@ export def "update-actions-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -278,9 +305,9 @@ export def "update-actions-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}") $qp $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -312,7 +339,7 @@ export def "get-actions-board-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +349,7 @@ export def "get-actions-board-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -354,7 +381,7 @@ export def "get-actions-board-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -365,7 +392,7 @@ export def "get-actions-board-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -397,7 +424,7 @@ export def "get-actions-card-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +434,7 @@ export def "get-actions-card-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/card") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -439,7 +466,7 @@ export def "get-actions-card-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +477,7 @@ export def "get-actions-card-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/card/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -481,7 +508,7 @@ export def "get-actions-display-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +518,7 @@ export def "get-actions-display-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/display") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -522,7 +549,7 @@ export def "get-actions-entities-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +559,7 @@ export def "get-actions-entities-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/entities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -564,7 +591,7 @@ export def "get-actions-list-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, idBoard, name, pos or subscribed (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -574,7 +601,7 @@ export def "get-actions-list-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -606,7 +633,7 @@ export def "get-actions-list-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +644,7 @@ export def "get-actions-list-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/list/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -649,7 +676,7 @@ export def "get-actions-member-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +686,7 @@ export def "get-actions-member-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/member") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -691,7 +718,7 @@ export def "get-actions-member-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -702,7 +729,7 @@ export def "get-actions-member-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/member/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -734,7 +761,7 @@ export def "get-actions-member-creator-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -744,7 +771,7 @@ export def "get-actions-member-creator-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/memberCreator") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -776,7 +803,7 @@ export def "get-actions-member-creator-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -787,7 +814,7 @@ export def "get-actions-member-creator-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/memberCreator/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -819,7 +846,7 @@ export def "get-actions-organization-by-id-action" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -829,7 +856,7 @@ export def "get-actions-organization-by-id-action" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/organization") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -861,7 +888,7 @@ export def "get-actions-organization-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -872,7 +899,7 @@ export def "get-actions-organization-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/organization/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -903,7 +930,7 @@ export def "update-actions-text-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -915,9 +942,9 @@ export def "update-actions-text-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action)} | format pattern "/actions/{id_action}/text") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -949,7 +976,7 @@ export def "get-actions-by-id-action-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -960,7 +987,7 @@ export def "get-actions-by-id-action-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_action: (encode-path-segment $id_action), field: (encode-path-segment $field)} | format pattern "/actions/{id_action}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -991,7 +1018,7 @@ export def "get-batch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --urls: string # list of API v1 GET routes, not including the version prefix (required)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1028,7 @@ export def "get-batch" [
   let qp = [(serialize-qp "urls" $urls "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/batch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1031,7 +1058,7 @@ export def "add-boards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --desc: string # a string with a length from 0 to 16384
   --id-board-source: string # The id of the board to copy into the new board
@@ -1054,14 +1081,14 @@ export def "add-boards" [
   --prefs-permission-level: string # One of: org, private or public
   --prefs-self-join: string # true or false
   --prefs-voting: string # One of: disabled, members, observers, org or public
-  --prefs-background-body: string # a string with a length from 0 to 16384 (body field)
-  --prefs-card-aging-body: string # One of: pirate or regular (body field)
-  --prefs-card-covers-body: string # true or false (body field)
-  --prefs-comments-body: string # One of: disabled, members, observers, org or public (body field)
-  --prefs-invitations-body: string # One of: admins or members (body field)
-  --prefs-permission-level-body: string # One of: org, private or public (body field)
-  --prefs-self-join-body: string # true or false (body field)
-  --prefs-voting-body: string # One of: disabled, members, observers, org or public (body field)
+  --body-prefs-background: string # a string with a length from 0 to 16384 (spec name: prefs_background)
+  --body-prefs-card-aging: string # One of: pirate or regular (spec name: prefs_cardAging)
+  --body-prefs-card-covers: string # true or false (spec name: prefs_cardCovers)
+  --body-prefs-comments: string # One of: disabled, members, observers, org or public (spec name: prefs_comments)
+  --body-prefs-invitations: string # One of: admins or members (spec name: prefs_invitations)
+  --body-prefs-permission-level: string # One of: org, private or public (spec name: prefs_permissionLevel)
+  --body-prefs-self-join: string # true or false (spec name: prefs_selfJoin)
+  --body-prefs-voting: string # One of: disabled, members, observers, org or public (spec name: prefs_voting)
   --subscribed: string # true or false
 ]: any -> any {
   let input = $in
@@ -1071,10 +1098,10 @@ export def "add-boards" [
   if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/boards" $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $prefs_background_body, "prefs_cardAging": $prefs_card_aging_body, "prefs_cardCovers": $prefs_card_covers_body, "prefs_comments": $prefs_comments_body, "prefs_invitations": $prefs_invitations_body, "prefs_permissionLevel": $prefs_permission_level_body, "prefs_selfJoin": $prefs_self_join_body, "prefs_voting": $prefs_voting_body, "subscribed": $subscribed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $body_prefs_background, "prefs_cardAging": $body_prefs_card_aging, "prefs_cardCovers": $body_prefs_card_covers, "prefs_comments": $body_prefs_comments, "prefs_invitations": $body_prefs_invitations, "prefs_permissionLevel": $body_prefs_permission_level, "prefs_selfJoin": $body_prefs_self_join, "prefs_voting": $body_prefs_voting, "subscribed": $subscribed} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1142,7 +1169,7 @@ export def "get-boards-by-id-board" [
   --my-prefs: string # true or false
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, desc, descData, closed, idOrganization, pinned, url, shortUrl, prefs and labelNames)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1152,7 +1179,7 @@ export def "get-boards-by-id-board" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_member" $action_member "scalar") (serialize-qp "action_member_fields" $action_member_fields "scalar") (serialize-qp "action_memberCreator" $action_member_creator "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_checklists" $card_checklists "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "label_fields" $label_fields "scalar") (serialize-qp "labels_limit" $labels_limit "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_memberships" $organization_memberships "scalar") (serialize-qp "myPrefs" $my_prefs "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1183,7 +1210,7 @@ export def "update-boards-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --desc: string # a string with a length from 0 to 16384
   --id-board-source: string # The id of the board to copy into the new board
@@ -1206,14 +1233,14 @@ export def "update-boards-by-id-board" [
   --prefs-permission-level: string # One of: org, private or public
   --prefs-self-join: string # true or false
   --prefs-voting: string # One of: disabled, members, observers, org or public
-  --prefs-background-body: string # a string with a length from 0 to 16384 (body field)
-  --prefs-card-aging-body: string # One of: pirate or regular (body field)
-  --prefs-card-covers-body: string # true or false (body field)
-  --prefs-comments-body: string # One of: disabled, members, observers, org or public (body field)
-  --prefs-invitations-body: string # One of: admins or members (body field)
-  --prefs-permission-level-body: string # One of: org, private or public (body field)
-  --prefs-self-join-body: string # true or false (body field)
-  --prefs-voting-body: string # One of: disabled, members, observers, org or public (body field)
+  --body-prefs-background: string # a string with a length from 0 to 16384 (spec name: prefs_background)
+  --body-prefs-card-aging: string # One of: pirate or regular (spec name: prefs_cardAging)
+  --body-prefs-card-covers: string # true or false (spec name: prefs_cardCovers)
+  --body-prefs-comments: string # One of: disabled, members, observers, org or public (spec name: prefs_comments)
+  --body-prefs-invitations: string # One of: admins or members (spec name: prefs_invitations)
+  --body-prefs-permission-level: string # One of: org, private or public (spec name: prefs_permissionLevel)
+  --body-prefs-self-join: string # true or false (spec name: prefs_selfJoin)
+  --body-prefs-voting: string # One of: disabled, members, observers, org or public (spec name: prefs_voting)
   --subscribed: string # true or false
 ]: any -> any {
   let input = $in
@@ -1224,10 +1251,10 @@ export def "update-boards-by-id-board" [
   if ($qp_token == null) { error make --unspanned { msg: "required query parameter 'token' missing: pass --qp-token" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}") $qp $auth.query)
-  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $prefs_background_body, "prefs_cardAging": $prefs_card_aging_body, "prefs_cardCovers": $prefs_card_covers_body, "prefs_comments": $prefs_comments_body, "prefs_invitations": $prefs_invitations_body, "prefs_permissionLevel": $prefs_permission_level_body, "prefs_selfJoin": $prefs_self_join_body, "prefs_voting": $prefs_voting_body, "subscribed": $subscribed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"closed": $closed, "desc": $desc, "idBoardSource": $id_board_source, "idOrganization": $id_organization, "keepFromSource": $keep_from_source, "labelNames/blue": $label_names_blue, "labelNames/green": $label_names_green, "labelNames/orange": $label_names_orange, "labelNames/purple": $label_names_purple, "labelNames/red": $label_names_red, "labelNames/yellow": $label_names_yellow, "name": $name, "powerUps": $power_ups, "prefs/background": $prefs_background, "prefs/calendarFeedEnabled": $prefs_calendar_feed_enabled, "prefs/cardAging": $prefs_card_aging, "prefs/cardCovers": $prefs_card_covers, "prefs/comments": $prefs_comments, "prefs/invitations": $prefs_invitations, "prefs/permissionLevel": $prefs_permission_level, "prefs/selfJoin": $prefs_self_join, "prefs/voting": $prefs_voting, "prefs_background": $body_prefs_background, "prefs_cardAging": $body_prefs_card_aging, "prefs_cardCovers": $body_prefs_card_covers, "prefs_comments": $body_prefs_comments, "prefs_invitations": $body_prefs_invitations, "prefs_permissionLevel": $body_prefs_permission_level, "prefs_selfJoin": $body_prefs_self_join, "prefs_voting": $body_prefs_voting, "subscribed": $subscribed} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1272,7 +1299,7 @@ export def "get-boards-actions-by-id-board" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1282,7 +1309,7 @@ export def "get-boards-actions-by-id-board" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/actions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1314,7 +1341,7 @@ export def "get-boards-board-stars-by-id-board" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: mine or none (default: mine)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1324,7 +1351,7 @@ export def "get-boards-board-stars-by-id-board" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/boardStars") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1355,7 +1382,7 @@ export def "add-boards-calendar-key-generate-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1365,7 +1392,7 @@ export def "add-boards-calendar-key-generate-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/calendarKey/generate") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1409,7 +1436,7 @@ export def "get-boards-cards-by-id-board" [
   --filter: string # One of: all, closed, none, open or visible (default: visible)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,7 +1446,7 @@ export def "get-boards-cards-by-id-board" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1451,7 +1478,7 @@ export def "get-boards-cards-by-id-board-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1462,7 +1489,7 @@ export def "get-boards-cards-by-id-board-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/cards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1510,7 +1537,7 @@ export def "get-boards-cards-by-id-board-by-id-card" [
   --checklist-fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1521,7 +1548,7 @@ export def "get-boards-cards-by-id-board-by-id-card" [
   let qp = [(serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_card: (encode-path-segment $id_card)} | format pattern "/boards/{id_board}/cards/{id_card}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1558,7 +1585,7 @@ export def "get-boards-checklists-by-id-board" [
   --filter: string # One of: all or none (default: all)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1595,7 @@ export def "get-boards-checklists-by-id-board" [
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/checklists") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1599,7 +1626,7 @@ export def "add-boards-checklists-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -1611,9 +1638,9 @@ export def "add-boards-checklists-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/checklists") $qp $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1644,7 +1671,7 @@ export def "update-boards-closed-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -1656,9 +1683,9 @@ export def "update-boards-closed-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/closed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1691,7 +1718,7 @@ export def "get-boards-deltas-by-id-board" [
   --tags: string # A valid tag for subscribing (required)
   --ix-last-update: string # a number from -1 to Infinity (required)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,7 +1730,7 @@ export def "get-boards-deltas-by-id-board" [
   let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/deltas") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1734,7 +1761,7 @@ export def "update-boards-desc-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -1746,9 +1773,9 @@ export def "update-boards-desc-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/desc") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1779,7 +1806,7 @@ export def "add-boards-email-key-generate-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1789,7 +1816,7 @@ export def "add-boards-email-key-generate-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/emailKey/generate") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1820,7 +1847,7 @@ export def "update-boards-id-organization-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -1832,9 +1859,9 @@ export def "update-boards-id-organization-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/idOrganization") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1865,7 +1892,7 @@ export def "update-boards-label-names-blue-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -1877,9 +1904,9 @@ export def "update-boards-label-names-blue-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/blue") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1910,7 +1937,7 @@ export def "update-boards-label-names-green-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -1922,9 +1949,9 @@ export def "update-boards-label-names-green-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/green") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1955,7 +1982,7 @@ export def "update-boards-label-names-orange-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -1967,9 +1994,9 @@ export def "update-boards-label-names-orange-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/orange") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2000,7 +2027,7 @@ export def "update-boards-label-names-purple-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -2012,9 +2039,9 @@ export def "update-boards-label-names-purple-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/purple") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2045,7 +2072,7 @@ export def "update-boards-label-names-red-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -2057,9 +2084,9 @@ export def "update-boards-label-names-red-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/red") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2090,7 +2117,7 @@ export def "update-boards-label-names-yellow-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -2102,9 +2129,9 @@ export def "update-boards-label-names-yellow-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labelNames/yellow") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2137,7 +2164,7 @@ export def "get-boards-labels-by-id-board" [
   --fields: string # all or a comma-separated list of: color, idBoard, name or uses (default: all)
   --limit: string # a number from 0 to 1000 (default: 50)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2147,7 +2174,7 @@ export def "get-boards-labels-by-id-board" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2178,7 +2205,7 @@ export def "add-boards-labels-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --color: string # A valid label color or null
   --name: string # a string with a length from 0 to 16384
 ]: any -> any {
@@ -2191,9 +2218,9 @@ export def "add-boards-labels-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/labels") $qp $auth.query)
   let req_body = {"color": $color, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2226,7 +2253,7 @@ export def "get-boards-labels-by-id-board-by-id-label" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: color, idBoard, name or uses (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2237,7 +2264,7 @@ export def "get-boards-labels-by-id-board-by-id-label" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_label: (encode-path-segment $id_label)} | format pattern "/boards/{id_board}/labels/{id_label}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2272,7 +2299,7 @@ export def "get-boards-lists-by-id-board" [
   --filter: string # One of: all, closed, none or open (default: open)
   --fields: string # all or a comma-separated list of: closed, idBoard, name, pos or subscribed (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2282,7 +2309,7 @@ export def "get-boards-lists-by-id-board" [
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/lists") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2313,7 +2340,7 @@ export def "add-boards-lists-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -2326,9 +2353,9 @@ export def "add-boards-lists-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/lists") $qp $auth.query)
   let req_body = {"name": $name, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2360,7 +2387,7 @@ export def "get-boards-lists-by-id-board-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2371,7 +2398,7 @@ export def "get-boards-lists-by-id-board-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/lists/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2402,7 +2429,7 @@ export def "add-boards-mark-as-viewed-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2412,7 +2439,7 @@ export def "add-boards-mark-as-viewed-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/markAsViewed") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2446,7 +2473,7 @@ export def "get-boards-members-by-id-board" [
   --fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --activity: string # true or false ; works for premium organizations only.
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2456,7 +2483,7 @@ export def "get-boards-members-by-id-board" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2487,7 +2514,7 @@ export def "update-boards-members-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --email: string # An email address
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
@@ -2501,9 +2528,9 @@ export def "update-boards-members-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/members") $qp $auth.query)
   let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2535,7 +2562,7 @@ export def "get-boards-members-by-id-board-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2546,7 +2573,7 @@ export def "get-boards-members-by-id-board-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), filter: (encode-path-segment $filter)} | format pattern "/boards/{id_board}/members/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2578,7 +2605,7 @@ export def "delete-boards-members-by-id-board-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2589,7 +2616,7 @@ export def "delete-boards-members-by-id-board-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2621,7 +2648,7 @@ export def "update-boards-members-by-id-board-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --email: string # An email address
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
@@ -2636,9 +2663,9 @@ export def "update-boards-members-by-id-board-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}") $qp $auth.query)
   let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2683,7 +2710,7 @@ export def "get-boards-members-cards-by-id-board-by-id-member" [
   --filter: string # One of: all, closed, none, open or visible (default: visible)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2721,7 @@ export def "get-boards-members-cards-by-id-board-by-id-member" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_member: (encode-path-segment $id_member)} | format pattern "/boards/{id_board}/members/{id_member}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2726,7 +2753,7 @@ export def "get-boards-members-invited-by-id-board" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2736,7 +2763,7 @@ export def "get-boards-members-invited-by-id-board" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/membersInvited") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2768,7 +2795,7 @@ export def "get-boards-members-invited-by-id-board-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2779,7 +2806,7 @@ export def "get-boards-members-invited-by-id-board-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/membersInvited/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2813,7 +2840,7 @@ export def "get-boards-memberships-by-id-board" [
   --member: string # true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,7 +2850,7 @@ export def "get-boards-memberships-by-id-board" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/memberships") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2857,7 +2884,7 @@ export def "get-boards-memberships-by-id-board-by-id-membership" [
   --member: string # true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2895,7 @@ export def "get-boards-memberships-by-id-board-by-id-membership" [
   let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_membership: (encode-path-segment $id_membership)} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2900,7 +2927,7 @@ export def "update-boards-memberships-by-id-board-by-id-membership" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username
   --type: string # One of: admin, normal or observer
 ]: any -> any {
@@ -2914,9 +2941,9 @@ export def "update-boards-memberships-by-id-board-by-id-membership" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), id_membership: (encode-path-segment $id_membership)} | format pattern "/boards/{id_board}/memberships/{id_membership}") $qp $auth.query)
   let req_body = {"member_fields": $member_fields, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2947,7 +2974,7 @@ export def "get-boards-my-prefs-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2957,7 +2984,7 @@ export def "get-boards-my-prefs-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2988,7 +3015,7 @@ export def "update-boards-my-prefs-email-position-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: bottom or top
 ]: any -> any {
   let input = $in
@@ -3000,9 +3027,9 @@ export def "update-boards-my-prefs-email-position-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/emailPosition") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3033,7 +3060,7 @@ export def "update-boards-my-prefs-id-email-list-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An id
 ]: any -> any {
   let input = $in
@@ -3045,9 +3072,9 @@ export def "update-boards-my-prefs-id-email-list-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/idEmailList") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3078,7 +3105,7 @@ export def "update-boards-my-prefs-show-list-guide-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3090,9 +3117,9 @@ export def "update-boards-my-prefs-show-list-guide-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showListGuide") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3123,7 +3150,7 @@ export def "update-boards-my-prefs-show-sidebar-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3135,9 +3162,9 @@ export def "update-boards-my-prefs-show-sidebar-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebar") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3168,7 +3195,7 @@ export def "update-boards-my-prefs-show-sidebar-activity-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3180,9 +3207,9 @@ export def "update-boards-my-prefs-show-sidebar-activity-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarActivity") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3213,7 +3240,7 @@ export def "update-boards-my-prefs-show-sidebar-board-actions-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3225,9 +3252,9 @@ export def "update-boards-my-prefs-show-sidebar-board-actions-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarBoardActions") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3258,7 +3285,7 @@ export def "update-boards-my-prefs-show-sidebar-members-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3270,9 +3297,9 @@ export def "update-boards-my-prefs-show-sidebar-members-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/myPrefs/showSidebarMembers") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3303,7 +3330,7 @@ export def "update-boards-name-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -3315,9 +3342,9 @@ export def "update-boards-name-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3349,7 +3376,7 @@ export def "get-boards-organization-by-id-board" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3359,7 +3386,7 @@ export def "get-boards-organization-by-id-board" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/organization") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3391,7 +3418,7 @@ export def "get-boards-organization-by-id-board-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3402,7 +3429,7 @@ export def "get-boards-organization-by-id-board-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/organization/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3433,7 +3460,7 @@ export def "add-boards-power-ups-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: calendar, cardAging, recap or voting
 ]: any -> any {
   let input = $in
@@ -3445,9 +3472,9 @@ export def "add-boards-power-ups-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/powerUps") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3479,7 +3506,7 @@ export def "delete-boards-power-ups-by-id-board-by-power-up" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3490,7 +3517,7 @@ export def "delete-boards-power-ups-by-id-board-by-power-up" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), power_up: (encode-path-segment $power_up)} | format pattern "/boards/{id_board}/powerUps/{power_up}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3521,7 +3548,7 @@ export def "update-boards-prefs-background-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A standard background name, or the id of a custom background
 ]: any -> any {
   let input = $in
@@ -3533,9 +3560,9 @@ export def "update-boards-prefs-background-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/background") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3566,7 +3593,7 @@ export def "update-boards-prefs-calendar-feed-enabled-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3578,9 +3605,9 @@ export def "update-boards-prefs-calendar-feed-enabled-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/calendarFeedEnabled") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3611,7 +3638,7 @@ export def "update-boards-prefs-card-aging-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: pirate or regular
 ]: any -> any {
   let input = $in
@@ -3623,9 +3650,9 @@ export def "update-boards-prefs-card-aging-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/cardAging") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3656,7 +3683,7 @@ export def "update-boards-prefs-card-covers-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3668,9 +3695,9 @@ export def "update-boards-prefs-card-covers-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/cardCovers") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3701,7 +3728,7 @@ export def "update-boards-prefs-comments-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: disabled, members, observers, org or public
 ]: any -> any {
   let input = $in
@@ -3713,9 +3740,9 @@ export def "update-boards-prefs-comments-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/comments") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3746,7 +3773,7 @@ export def "update-boards-prefs-invitations-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admins or members
 ]: any -> any {
   let input = $in
@@ -3758,9 +3785,9 @@ export def "update-boards-prefs-invitations-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/invitations") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3791,7 +3818,7 @@ export def "update-boards-prefs-permission-level-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: private or public
 ]: any -> any {
   let input = $in
@@ -3803,9 +3830,9 @@ export def "update-boards-prefs-permission-level-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/permissionLevel") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3836,7 +3863,7 @@ export def "update-boards-prefs-self-join-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3848,9 +3875,9 @@ export def "update-boards-prefs-self-join-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/selfJoin") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3881,7 +3908,7 @@ export def "update-boards-prefs-voting-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: disabled, members, observers, org or public
 ]: any -> any {
   let input = $in
@@ -3893,9 +3920,9 @@ export def "update-boards-prefs-voting-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/prefs/voting") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3926,7 +3953,7 @@ export def "update-boards-subscribed-by-id-board" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -3938,9 +3965,9 @@ export def "update-boards-subscribed-by-id-board" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board)} | format pattern "/boards/{id_board}/subscribed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3972,7 +3999,7 @@ export def "get-boards-by-id-board-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3983,7 +4010,7 @@ export def "get-boards-by-id-board-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_board: (encode-path-segment $id_board), field: (encode-path-segment $field)} | format pattern "/boards/{id_board}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4013,7 +4040,7 @@ export def "add-cards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
@@ -4039,9 +4066,9 @@ export def "add-cards" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cards" $qp $auth.query)
   let req_body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4072,7 +4099,7 @@ export def "delete-cards-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4082,7 +4109,7 @@ export def "delete-cards-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4136,7 +4163,7 @@ export def "get-cards-by-id-card" [
   --sticker-fields: string # all or a comma-separated list of: image, imageScaled, imageUrl, left, rotate, top or zIndex (default: all)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idBoard, idChecklists, idLabels, idList, idMembers, idShort, idAttachmentCover, manualCoverAttachment, labels, name, pos, shortUrl and url)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4146,7 +4173,7 @@ export def "get-cards-by-id-card" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_memberCreator_fields" $action_member_creator_fields "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "membersVoted" $members_voted "scalar") (serialize-qp "memberVoted_fields" $member_voted_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checkItemState_fields" $check_item_state_fields "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "checklist_fields" $checklist_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "sticker_fields" $sticker_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4177,7 +4204,7 @@ export def "update-cards-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
@@ -4204,9 +4231,9 @@ export def "update-cards-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}") $qp $auth.query)
   let req_body = {"closed": $closed, "desc": $desc, "due": $due, "fileSource": $file_source, "idAttachmentCover": $id_attachment_cover, "idBoard": $id_board, "idCardSource": $id_card_source, "idLabels": $id_labels, "idList": $id_list, "idMembers": $id_members, "keepFromSource": $keep_from_source, "labels": $labels, "name": $name, "pos": $pos, "subscribed": $subscribed, "urlSource": $url_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4251,7 +4278,7 @@ export def "get-cards-actions-by-id-card" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4261,7 +4288,7 @@ export def "get-cards-actions-by-id-card" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/actions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4292,7 +4319,7 @@ export def "add-cards-actions-comments-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -4304,9 +4331,9 @@ export def "add-cards-actions-comments-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/actions/comments") $qp $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4338,7 +4365,7 @@ export def "delete-cards-actions-comments-by-id-card-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4349,7 +4376,7 @@ export def "delete-cards-actions-comments-by-id-card-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_action: (encode-path-segment $id_action)} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4381,7 +4408,7 @@ export def "update-cards-actions-comments-by-id-card-by-id-action" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --text: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -4394,9 +4421,9 @@ export def "update-cards-actions-comments-by-id-card-by-id-action" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_action: (encode-path-segment $id_action)} | format pattern "/cards/{id_card}/actions/{id_action}/comments") $qp $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4429,7 +4456,7 @@ export def "get-cards-attachments-by-id-card" [
   --fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --filter: string # A boolean value or "cover" for only card cover attachments
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4439,7 +4466,7 @@ export def "get-cards-attachments-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/attachments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4470,7 +4497,7 @@ export def "add-cards-attachments-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
   --mime-type: string # a string with a length from 0 to 256
   --name: string # a string with a length from 0 to 256
@@ -4485,9 +4512,9 @@ export def "add-cards-attachments-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/attachments") $qp $auth.query)
   let req_body = {"file": $file, "mimeType": $mime_type, "name": $name, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4519,7 +4546,7 @@ export def "delete-cards-attachments-by-id-card-by-id-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4530,7 +4557,7 @@ export def "delete-cards-attachments-by-id-card-by-id-attachment" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_attachment: (encode-path-segment $id_attachment)} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4563,7 +4590,7 @@ export def "get-cards-attachments-by-id-card-by-id-attachment" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: bytes, date, edgeColor, idMember, isUpload, mimeType, name, previews or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4574,7 +4601,7 @@ export def "get-cards-attachments-by-id-card-by-id-attachment" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_attachment: (encode-path-segment $id_attachment)} | format pattern "/cards/{id_card}/attachments/{id_attachment}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4606,7 +4633,7 @@ export def "get-cards-board-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4616,7 +4643,7 @@ export def "get-cards-board-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4648,7 +4675,7 @@ export def "get-cards-board-by-id-card-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4659,7 +4686,7 @@ export def "get-cards-board-by-id-card-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4691,7 +4718,7 @@ export def "get-cards-check-item-states-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: idCheckItem or state (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4701,7 +4728,7 @@ export def "get-cards-check-item-states-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checkItemStates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4734,7 +4761,7 @@ export def "update-cards-checklist-check-item-by-id-card-by-id-checklist-current
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-checklist: string # An id, or null
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
@@ -4751,9 +4778,9 @@ export def "update-cards-checklist-check-item-by-id-card-by-id-checklist-current
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist_current: (encode-path-segment $id_checklist_current), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist_current}/checkItem/{id_check_item}") $qp $auth.query)
   let req_body = {"idChecklist": $id_checklist, "name": $name, "pos": $pos, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4785,7 +4812,7 @@ export def "add-cards-checklist-check-item-by-id-card-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -4799,9 +4826,9 @@ export def "add-cards-checklist-check-item-by-id-card-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem") $qp $auth.query)
   let req_body = {"name": $name, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4834,7 +4861,7 @@ export def "delete-cards-checklist-check-item-by-id-card-by-id-checklist-by-id-c
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4846,7 +4873,7 @@ export def "delete-cards-checklist-check-item-by-id-card-by-id-checklist-by-id-c
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4879,7 +4906,7 @@ export def "add-cards-checklist-check-item-convert-to-card-by-id-card-by-id-chec
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4891,7 +4918,7 @@ export def "add-cards-checklist-check-item-convert-to-card-by-id-card-by-id-chec
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/convertToCard") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4924,7 +4951,7 @@ export def "update-cards-checklist-check-item-name-by-id-card-by-id-checklist-by
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -4938,9 +4965,9 @@ export def "update-cards-checklist-check-item-name-by-id-card-by-id-checklist-by
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4973,7 +5000,7 @@ export def "update-cards-checklist-check-item-pos-by-id-card-by-id-checklist-by-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -4987,9 +5014,9 @@ export def "update-cards-checklist-check-item-pos-by-id-card-by-id-checklist-by-
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5022,7 +5049,7 @@ export def "update-cards-checklist-check-item-state-by-id-card-by-id-checklist-b
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: complete, false, incomplete or true
 ]: any -> any {
   let input = $in
@@ -5036,9 +5063,9 @@ export def "update-cards-checklist-check-item-state-by-id-card-by-id-checklist-b
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/cards/{id_card}/checklist/{id_checklist}/checkItem/{id_check_item}/state") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5075,7 +5102,7 @@ export def "get-cards-checklists-by-id-card" [
   --filter: string # One of: all or none (default: all)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5085,7 +5112,7 @@ export def "get-cards-checklists-by-id-card" [
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checklists") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5116,7 +5143,7 @@ export def "add-cards-checklists-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
   --name: string # a string with a length from 0 to 16384
   --value: string # The id of the checklist to add to the card, or null to create a new one.
@@ -5130,9 +5157,9 @@ export def "add-cards-checklists-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/checklists") $qp $auth.query)
   let req_body = {"idChecklistSource": $id_checklist_source, "name": $name, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5164,7 +5191,7 @@ export def "delete-cards-checklists-by-id-card-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5175,7 +5202,7 @@ export def "delete-cards-checklists-by-id-card-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_checklist: (encode-path-segment $id_checklist)} | format pattern "/cards/{id_card}/checklists/{id_checklist}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5206,7 +5233,7 @@ export def "update-cards-closed-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -5218,9 +5245,9 @@ export def "update-cards-closed-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/closed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5251,7 +5278,7 @@ export def "update-cards-desc-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -5263,9 +5290,9 @@ export def "update-cards-desc-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/desc") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5296,7 +5323,7 @@ export def "update-cards-due-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A date, or null
 ]: any -> any {
   let input = $in
@@ -5308,9 +5335,9 @@ export def "update-cards-due-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/due") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5341,7 +5368,7 @@ export def "update-cards-id-attachment-cover-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # Id of the image attachment of this card to use as its cover, or null for no cover
 ]: any -> any {
   let input = $in
@@ -5353,9 +5380,9 @@ export def "update-cards-id-attachment-cover-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idAttachmentCover") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5386,7 +5413,7 @@ export def "update-cards-id-board-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-list: string # id of the list that the card should be moved to on the new board
   --value: string # id of the board the card should be moved to
 ]: any -> any {
@@ -5399,9 +5426,9 @@ export def "update-cards-id-board-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idBoard") $qp $auth.query)
   let req_body = {"idList": $id_list, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5432,7 +5459,7 @@ export def "add-cards-id-labels-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the label to add
 ]: any -> any {
   let input = $in
@@ -5444,9 +5471,9 @@ export def "add-cards-id-labels-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idLabels") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5478,7 +5505,7 @@ export def "delete-cards-id-labels-by-id-card-by-id-label" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5489,7 +5516,7 @@ export def "delete-cards-id-labels-by-id-card-by-id-label" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_label: (encode-path-segment $id_label)} | format pattern "/cards/{id_card}/idLabels/{id_label}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5520,7 +5547,7 @@ export def "update-cards-id-list-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # id of the list the card should be moved to
 ]: any -> any {
   let input = $in
@@ -5532,9 +5559,9 @@ export def "update-cards-id-list-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idList") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5565,7 +5592,7 @@ export def "add-cards-id-members-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to add to the card
 ]: any -> any {
   let input = $in
@@ -5577,9 +5604,9 @@ export def "add-cards-id-members-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idMembers") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5610,7 +5637,7 @@ export def "update-cards-id-members-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to add to the card
 ]: any -> any {
   let input = $in
@@ -5622,9 +5649,9 @@ export def "update-cards-id-members-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/idMembers") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5656,7 +5683,7 @@ export def "delete-cards-id-members-by-id-card-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5667,7 +5694,7 @@ export def "delete-cards-id-members-by-id-card-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_member: (encode-path-segment $id_member)} | format pattern "/cards/{id_card}/idMembers/{id_member}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5698,7 +5725,7 @@ export def "add-cards-labels-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --color: string # A valid label color or null
   --name: string # a string with a length from 0 to 16384
   --value: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
@@ -5712,9 +5739,9 @@ export def "add-cards-labels-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/labels") $qp $auth.query)
   let req_body = {"color": $color, "name": $name, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5745,7 +5772,7 @@ export def "update-cards-labels-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --color: string # A valid label color or null
   --name: string # a string with a length from 0 to 16384
   --value: string # all or a comma-separated list of: blue, green, orange, purple, red or yellow
@@ -5759,9 +5786,9 @@ export def "update-cards-labels-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/labels") $qp $auth.query)
   let req_body = {"color": $color, "name": $name, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5793,7 +5820,7 @@ export def "delete-cards-labels-by-id-card-by-color" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5804,7 +5831,7 @@ export def "delete-cards-labels-by-id-card-by-color" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), color: (encode-path-segment $color)} | format pattern "/cards/{id_card}/labels/{color}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5836,7 +5863,7 @@ export def "get-cards-list-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, idBoard, name, pos or subscribed (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5846,7 +5873,7 @@ export def "get-cards-list-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5878,7 +5905,7 @@ export def "get-cards-list-by-id-card-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5889,7 +5916,7 @@ export def "get-cards-list-by-id-card-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/list/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5920,7 +5947,7 @@ export def "add-cards-mark-associated-notifications-read-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5930,7 +5957,7 @@ export def "add-cards-mark-associated-notifications-read-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/markAssociatedNotificationsRead") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5962,7 +5989,7 @@ export def "get-cards-members-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5972,7 +5999,7 @@ export def "get-cards-members-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6004,7 +6031,7 @@ export def "get-cards-members-voted-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6014,7 +6041,7 @@ export def "get-cards-members-voted-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/membersVoted") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6045,7 +6072,7 @@ export def "add-cards-members-voted-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the member to vote 'yes' on the card
 ]: any -> any {
   let input = $in
@@ -6057,9 +6084,9 @@ export def "add-cards-members-voted-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/membersVoted") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6091,7 +6118,7 @@ export def "delete-cards-members-voted-by-id-card-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6102,7 +6129,7 @@ export def "delete-cards-members-voted-by-id-card-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_member: (encode-path-segment $id_member)} | format pattern "/cards/{id_card}/membersVoted/{id_member}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6133,7 +6160,7 @@ export def "update-cards-name-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -6145,9 +6172,9 @@ export def "update-cards-name-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6178,7 +6205,7 @@ export def "update-cards-pos-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -6190,9 +6217,9 @@ export def "update-cards-pos-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6224,7 +6251,7 @@ export def "get-cards-stickers-by-id-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: image, imageScaled, imageUrl, left, rotate, top or zIndex (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6234,7 +6261,7 @@ export def "get-cards-stickers-by-id-card" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/stickers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6265,7 +6292,7 @@ export def "add-cards-stickers-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --image: string # a string with a length from 0 to 16384
   --left: string # undefined
   --rotate: string # undefined
@@ -6281,9 +6308,9 @@ export def "add-cards-stickers-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/stickers") $qp $auth.query)
   let req_body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6315,7 +6342,7 @@ export def "delete-cards-stickers-by-id-card-by-id-sticker" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6326,7 +6353,7 @@ export def "delete-cards-stickers-by-id-card-by-id-sticker" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6359,7 +6386,7 @@ export def "get-cards-stickers-by-id-card-by-id-sticker" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: image, imageScaled, imageUrl, left, rotate, top or zIndex (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6370,7 +6397,7 @@ export def "get-cards-stickers-by-id-card-by-id-sticker" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6402,7 +6429,7 @@ export def "update-cards-stickers-by-id-card-by-id-sticker" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --image: string # a string with a length from 0 to 16384
   --left: string # undefined
   --rotate: string # undefined
@@ -6419,9 +6446,9 @@ export def "update-cards-stickers-by-id-card-by-id-sticker" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), id_sticker: (encode-path-segment $id_sticker)} | format pattern "/cards/{id_card}/stickers/{id_sticker}") $qp $auth.query)
   let req_body = {"image": $image, "left": $left, "rotate": $rotate, "top": $top, "zIndex": $z_index} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6452,7 +6479,7 @@ export def "update-cards-subscribed-by-id-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -6464,9 +6491,9 @@ export def "update-cards-subscribed-by-id-card" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card)} | format pattern "/cards/{id_card}/subscribed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6498,7 +6525,7 @@ export def "get-cards-by-id-card-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6509,7 +6536,7 @@ export def "get-cards-by-id-card-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_card: (encode-path-segment $id_card), field: (encode-path-segment $field)} | format pattern "/cards/{id_card}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6539,7 +6566,7 @@ export def "add-checklists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # id of the board that the checklist should be added to
   --id-card: string # id of the card that the checklist should be added to
   --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
@@ -6554,9 +6581,9 @@ export def "add-checklists" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checklists" $qp $auth.query)
   let req_body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6587,7 +6614,7 @@ export def "delete-checklists-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6597,7 +6624,7 @@ export def "delete-checklists-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6633,7 +6660,7 @@ export def "get-checklists-by-id-checklist" [
   --check-item-fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --fields: string # all or a comma-separated list of: idBoard, idCard, name or pos (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6643,7 +6670,7 @@ export def "get-checklists-by-id-checklist" [
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "checkItems" $check_items "scalar") (serialize-qp "checkItem_fields" $check_item_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6674,7 +6701,7 @@ export def "update-checklists-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # id of the board that the checklist should be added to
   --id-card: string # id of the card that the checklist should be added to
   --id-checklist-source: string # The id of the source checklist to copy into a new checklist.
@@ -6690,9 +6717,9 @@ export def "update-checklists-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}") $qp $auth.query)
   let req_body = {"idBoard": $id_board, "idCard": $id_card, "idChecklistSource": $id_checklist_source, "name": $name, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6724,7 +6751,7 @@ export def "get-checklists-board-by-id-checklist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6734,7 +6761,7 @@ export def "get-checklists-board-by-id-checklist" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6766,7 +6793,7 @@ export def "get-checklists-board-by-id-checklist-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6777,7 +6804,7 @@ export def "get-checklists-board-by-id-checklist-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), field: (encode-path-segment $field)} | format pattern "/checklists/{id_checklist}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6821,7 +6848,7 @@ export def "get-checklists-cards-by-id-checklist" [
   --filter: string # One of: all, closed, none or open (default: open)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6831,7 +6858,7 @@ export def "get-checklists-cards-by-id-checklist" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6863,7 +6890,7 @@ export def "get-checklists-cards-by-id-checklist-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6874,7 +6901,7 @@ export def "get-checklists-cards-by-id-checklist-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), filter: (encode-path-segment $filter)} | format pattern "/checklists/{id_checklist}/cards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6907,7 +6934,7 @@ export def "get-checklists-check-items-by-id-checklist" [
   --filter: string # One of: all or none (default: all)
   --fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6917,7 +6944,7 @@ export def "get-checklists-check-items-by-id-checklist" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/checkItems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6948,7 +6975,7 @@ export def "add-checklists-check-items-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --checked: string # true or false
   --name: string # a string with a length from 1 to 16384
   --pos: string # A position. top , bottom , or a positive number.
@@ -6962,9 +6989,9 @@ export def "add-checklists-check-items-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/checkItems") $qp $auth.query)
   let req_body = {"checked": $checked, "name": $name, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6996,7 +7023,7 @@ export def "delete-checklists-check-items-by-id-checklist-by-id-check-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7007,7 +7034,7 @@ export def "delete-checklists-check-items-by-id-checklist-by-id-check-item" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7040,7 +7067,7 @@ export def "get-checklists-check-items-by-id-checklist-by-id-check-item" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: name, nameData, pos, state or type (default: name, nameData, pos and state)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7051,7 +7078,7 @@ export def "get-checklists-check-items-by-id-checklist-by-id-check-item" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), id_check_item: (encode-path-segment $id_check_item)} | format pattern "/checklists/{id_checklist}/checkItems/{id_check_item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7082,7 +7109,7 @@ export def "update-checklists-id-card-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The id of the card that the checklist is on
 ]: any -> any {
   let input = $in
@@ -7094,9 +7121,9 @@ export def "update-checklists-id-card-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/idCard") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7127,7 +7154,7 @@ export def "update-checklists-name-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -7139,9 +7166,9 @@ export def "update-checklists-name-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7172,7 +7199,7 @@ export def "update-checklists-pos-by-id-checklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -7184,9 +7211,9 @@ export def "update-checklists-pos-by-id-checklist" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist)} | format pattern "/checklists/{id_checklist}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7218,7 +7245,7 @@ export def "get-checklists-by-id-checklist-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7229,7 +7256,7 @@ export def "get-checklists-by-id-checklist-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_checklist: (encode-path-segment $id_checklist), field: (encode-path-segment $field)} | format pattern "/checklists/{id_checklist}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7259,7 +7286,7 @@ export def "add-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --color: string # A valid label color or null
   --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
@@ -7272,9 +7299,9 @@ export def "add-labels" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/labels" $qp $auth.query)
   let req_body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7305,7 +7332,7 @@ export def "delete-labels-by-id-label" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7315,7 +7342,7 @@ export def "delete-labels-by-id-label" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7347,7 +7374,7 @@ export def "get-labels-by-id-label" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: color, idBoard, name or uses (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7357,7 +7384,7 @@ export def "get-labels-by-id-label" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7388,7 +7415,7 @@ export def "update-labels-by-id-label" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --color: string # A valid label color or null
   --id-board: string # An id
   --name: string # a string with a length from 0 to 16384
@@ -7402,9 +7429,9 @@ export def "update-labels-by-id-label" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}") $qp $auth.query)
   let req_body = {"color": $color, "idBoard": $id_board, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7436,7 +7463,7 @@ export def "get-labels-board-by-id-label" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7446,7 +7473,7 @@ export def "get-labels-board-by-id-label" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7478,7 +7505,7 @@ export def "get-labels-board-by-id-label-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7489,7 +7516,7 @@ export def "get-labels-board-by-id-label-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label), field: (encode-path-segment $field)} | format pattern "/labels/{id_label}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7520,7 +7547,7 @@ export def "update-labels-color-by-id-label" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A valid label color or null
 ]: any -> any {
   let input = $in
@@ -7532,9 +7559,9 @@ export def "update-labels-color-by-id-label" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/color") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7565,7 +7592,7 @@ export def "update-labels-name-by-id-label" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -7577,9 +7604,9 @@ export def "update-labels-name-by-id-label" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_label: (encode-path-segment $id_label)} | format pattern "/labels/{id_label}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7609,7 +7636,7 @@ export def "add-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --id-board: string # id of the board that the list should be added to
   --id-list-source: string # The id of the list to copy into a new list.
@@ -7625,9 +7652,9 @@ export def "add-lists" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lists" $qp $auth.query)
   let req_body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7663,7 +7690,7 @@ export def "get-lists-by-id-list" [
   --board-fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: name, desc, descData, closed, idOrganization, pinned, url and prefs)
   --fields: string # all or a comma-separated list of: closed, idBoard, name, pos or subscribed (default: name, closed, idBoard and pos)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7673,7 +7700,7 @@ export def "get-lists-by-id-list" [
   let qp = [(serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7704,7 +7731,7 @@ export def "update-lists-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --closed: string # true or false
   --id-board: string # id of the board that the list should be added to
   --id-list-source: string # The id of the list to copy into a new list.
@@ -7721,9 +7748,9 @@ export def "update-lists-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}") $qp $auth.query)
   let req_body = {"closed": $closed, "idBoard": $id_board, "idListSource": $id_list_source, "name": $name, "pos": $pos, "subscribed": $subscribed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7768,7 +7795,7 @@ export def "get-lists-actions-by-id-list" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7778,7 +7805,7 @@ export def "get-lists-actions-by-id-list" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/actions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7809,7 +7836,7 @@ export def "add-lists-archive-all-cards-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7819,7 +7846,7 @@ export def "add-lists-archive-all-cards-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/archiveAllCards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7851,7 +7878,7 @@ export def "get-lists-board-by-id-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7861,7 +7888,7 @@ export def "get-lists-board-by-id-list" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7893,7 +7920,7 @@ export def "get-lists-board-by-id-list-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7904,7 +7931,7 @@ export def "get-lists-board-by-id-list-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), field: (encode-path-segment $field)} | format pattern "/lists/{id_list}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7948,7 +7975,7 @@ export def "get-lists-cards-by-id-list" [
   --filter: string # One of: all, closed, none or open (default: open)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7958,7 +7985,7 @@ export def "get-lists-cards-by-id-list" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7989,7 +8016,7 @@ export def "add-lists-cards-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --desc: string # a string with a length from 0 to 16384
   --due: string # A date, or null
   --id-members: string # A comma-separated list of objectIds, 24-character hex strings
@@ -8005,9 +8032,9 @@ export def "add-lists-cards-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/cards") $qp $auth.query)
   let req_body = {"desc": $desc, "due": $due, "idMembers": $id_members, "labels": $labels, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8039,7 +8066,7 @@ export def "get-lists-cards-by-id-list-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8050,7 +8077,7 @@ export def "get-lists-cards-by-id-list-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), filter: (encode-path-segment $filter)} | format pattern "/lists/{id_list}/cards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8081,7 +8108,7 @@ export def "update-lists-closed-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -8093,9 +8120,9 @@ export def "update-lists-closed-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/closed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8126,7 +8153,7 @@ export def "update-lists-id-board-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --pos: string # position of the list on the new board
   --value: string # id of the board the list should be moved to
 ]: any -> any {
@@ -8139,9 +8166,9 @@ export def "update-lists-id-board-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/idBoard") $qp $auth.query)
   let req_body = {"pos": $pos, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8172,7 +8199,7 @@ export def "add-lists-move-all-cards-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # id of the board that the cards should be moved to
 ]: any -> any {
   let input = $in
@@ -8184,9 +8211,9 @@ export def "add-lists-move-all-cards-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/moveAllCards") $qp $auth.query)
   let req_body = {"idBoard": $id_board} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8217,7 +8244,7 @@ export def "update-lists-name-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -8229,9 +8256,9 @@ export def "update-lists-name-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8262,7 +8289,7 @@ export def "update-lists-pos-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -8274,9 +8301,9 @@ export def "update-lists-pos-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8307,7 +8334,7 @@ export def "update-lists-subscribed-by-id-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -8319,9 +8346,9 @@ export def "update-lists-subscribed-by-id-list" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list)} | format pattern "/lists/{id_list}/subscribed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8353,7 +8380,7 @@ export def "get-lists-by-id-list-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8364,7 +8391,7 @@ export def "get-lists-by-id-list-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_list: (encode-path-segment $id_list), field: (encode-path-segment $field)} | format pattern "/lists/{id_list}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8447,7 +8474,7 @@ export def "get-members-by-id-member" [
   --custom-emoji: string # One of: all or none (default: none)
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8457,7 +8484,7 @@ export def "get-members-by-id-member" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "action_since" $action_since "scalar") (serialize-qp "action_before" $action_before "scalar") (serialize-qp "cards" $cards "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_member_fields" $card_member_fields "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "card_attachment_fields" $card_attachment_fields "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "board_memberships" $board_memberships "scalar") (serialize-qp "board_organization" $board_organization "scalar") (serialize-qp "board_organization_fields" $board_organization_fields "scalar") (serialize-qp "boardsInvited" $boards_invited "scalar") (serialize-qp "boardsInvited_fields" $boards_invited_fields "scalar") (serialize-qp "boardStars" $board_stars "scalar") (serialize-qp "savedSearches" $saved_searches "scalar") (serialize-qp "organizations" $organizations "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organization_paid_account" $organization_paid_account "scalar") (serialize-qp "organizationsInvited" $organizations_invited "scalar") (serialize-qp "organizationsInvited_fields" $organizations_invited_fields "scalar") (serialize-qp "notifications" $notifications "scalar") (serialize-qp "notifications_entities" $notifications_entities "scalar") (serialize-qp "notifications_display" $notifications_display "scalar") (serialize-qp "notifications_limit" $notifications_limit "scalar") (serialize-qp "notification_fields" $notification_fields "scalar") (serialize-qp "notification_memberCreator" $notification_member_creator "scalar") (serialize-qp "notification_memberCreator_fields" $notification_member_creator_fields "scalar") (serialize-qp "notification_before" $notification_before "scalar") (serialize-qp "notification_since" $notification_since "scalar") (serialize-qp "tokens" $tokens "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "boardBackgrounds" $board_backgrounds "scalar") (serialize-qp "customBoardBackgrounds" $custom_board_backgrounds "scalar") (serialize-qp "customStickers" $custom_stickers "scalar") (serialize-qp "customEmoji" $custom_emoji "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8488,7 +8515,7 @@ export def "update-members-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --avatar-source: string # One of: gravatar, none or upload
   --bio: string # a string with a length from 0 to 16384
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
@@ -8507,9 +8534,9 @@ export def "update-members-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}") $qp $auth.query)
   let req_body = {"avatarSource": $avatar_source, "bio": $bio, "fullName": $full_name, "initials": $initials, "prefs/colorBlind": $prefs_color_blind, "prefs/locale": $prefs_locale, "prefs/minutesBetweenSummaries": $prefs_minutes_between_summaries, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8554,7 +8581,7 @@ export def "get-members-actions-by-id-member" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8564,7 +8591,7 @@ export def "get-members-actions-by-id-member" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/actions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8595,7 +8622,7 @@ export def "add-members-avatar-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
   let input = $in
@@ -8607,9 +8634,9 @@ export def "add-members-avatar-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/avatar") $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8640,7 +8667,7 @@ export def "update-members-avatar-source-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: gravatar, none or upload
 ]: any -> any {
   let input = $in
@@ -8652,9 +8679,9 @@ export def "update-members-avatar-source-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/avatarSource") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8685,7 +8712,7 @@ export def "update-members-bio-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -8697,9 +8724,9 @@ export def "update-members-bio-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/bio") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8731,7 +8758,7 @@ export def "get-members-board-backgrounds-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: all, custom, default, none or premium (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8741,7 +8768,7 @@ export def "get-members-board-backgrounds-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardBackgrounds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8772,7 +8799,7 @@ export def "add-members-board-backgrounds-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --brightness: string # One of: dark, light or unknown
   --file: string # A file
   --tile: string # true or false
@@ -8786,9 +8813,9 @@ export def "add-members-board-backgrounds-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardBackgrounds") $qp $auth.query)
   let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8820,7 +8847,7 @@ export def "delete-members-board-backgrounds-by-id-member-by-id-board-background
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8831,7 +8858,7 @@ export def "delete-members-board-backgrounds-by-id-member-by-id-board-background
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8864,7 +8891,7 @@ export def "get-members-board-backgrounds-by-id-member-by-id-board-background" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: brightness, fullSizeUrl, scaled or tile (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8875,7 +8902,7 @@ export def "get-members-board-backgrounds-by-id-member-by-id-board-background" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8907,7 +8934,7 @@ export def "update-members-board-backgrounds-by-id-member-by-id-board-background
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --brightness: string # One of: dark, light or unknown
   --file: string # A file
   --tile: string # true or false
@@ -8922,9 +8949,9 @@ export def "update-members-board-backgrounds-by-id-member-by-id-board-background
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/boardBackgrounds/{id_board_background}") $qp $auth.query)
   let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8955,7 +8982,7 @@ export def "get-members-board-stars-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -8965,7 +8992,7 @@ export def "get-members-board-stars-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardStars") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8996,7 +9023,7 @@ export def "add-members-board-stars-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -9009,9 +9036,9 @@ export def "add-members-board-stars-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardStars") $qp $auth.query)
   let req_body = {"idBoard": $id_board, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9043,7 +9070,7 @@ export def "delete-members-board-stars-by-id-member-by-id-board-star" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9054,7 +9081,7 @@ export def "delete-members-board-stars-by-id-member-by-id-board-star" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9086,7 +9113,7 @@ export def "get-members-board-stars-by-id-member-by-id-board-star" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9097,7 +9124,7 @@ export def "get-members-board-stars-by-id-member-by-id-board-star" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9129,7 +9156,7 @@ export def "update-members-board-stars-by-id-member-by-id-board-star" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # The id of the board to star
   --pos: string # A position. top , bottom , or a positive number.
 ]: any -> any {
@@ -9143,9 +9170,9 @@ export def "update-members-board-stars-by-id-member-by-id-board-star" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}") $qp $auth.query)
   let req_body = {"idBoard": $id_board, "pos": $pos} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9177,7 +9204,7 @@ export def "update-members-board-stars-id-board-by-id-member-by-id-board-star" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An id
 ]: any -> any {
   let input = $in
@@ -9190,9 +9217,9 @@ export def "update-members-board-stars-id-board-by-id-member-by-id-board-star" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}/idBoard") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9224,7 +9251,7 @@ export def "update-members-board-stars-pos-by-id-member-by-id-board-star" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -9237,9 +9264,9 @@ export def "update-members-board-stars-pos-by-id-member-by-id-board-star" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_star: (encode-path-segment $id_board_star)} | format pattern "/members/{id_member}/boardStars/{id_board_star}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9282,7 +9309,7 @@ export def "get-members-boards-by-id-member" [
   --organization-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: name and displayName)
   --lists: string # One of: all, closed, none or open (default: none)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9292,7 +9319,7 @@ export def "get-members-boards-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9324,7 +9351,7 @@ export def "get-members-boards-by-id-member-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9335,7 +9362,7 @@ export def "get-members-boards-by-id-member-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/boards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9367,7 +9394,7 @@ export def "get-members-boards-invited-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9377,7 +9404,7 @@ export def "get-members-boards-invited-by-id-member" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/boardsInvited") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9409,7 +9436,7 @@ export def "get-members-boards-invited-by-id-member-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9420,7 +9447,7 @@ export def "get-members-boards-invited-by-id-member-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/boardsInvited/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9464,7 +9491,7 @@ export def "get-members-cards-by-id-member" [
   --filter: string # One of: all, closed, none, open or visible (default: visible)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9474,7 +9501,7 @@ export def "get-members-cards-by-id-member" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "stickers" $stickers "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9506,7 +9533,7 @@ export def "get-members-cards-by-id-member-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9517,7 +9544,7 @@ export def "get-members-cards-by-id-member-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/cards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9549,7 +9576,7 @@ export def "get-members-custom-board-backgrounds-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: all or none (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9559,7 +9586,7 @@ export def "get-members-custom-board-backgrounds-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9590,7 +9617,7 @@ export def "add-members-custom-board-backgrounds-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --brightness: string # One of: dark, light or unknown
   --file: string # A file
   --tile: string # true or false
@@ -9604,9 +9631,9 @@ export def "add-members-custom-board-backgrounds-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customBoardBackgrounds") $qp $auth.query)
   let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9638,7 +9665,7 @@ export def "delete-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9649,7 +9676,7 @@ export def "delete-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9682,7 +9709,7 @@ export def "get-members-custom-board-backgrounds-by-id-member-by-id-board-backgr
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: brightness, fullSizeUrl, scaled or tile (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9693,7 +9720,7 @@ export def "get-members-custom-board-backgrounds-by-id-member-by-id-board-backgr
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9725,7 +9752,7 @@ export def "update-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --brightness: string # One of: dark, light or unknown
   --file: string # A file
   --tile: string # true or false
@@ -9740,9 +9767,9 @@ export def "update-members-custom-board-backgrounds-by-id-member-by-id-board-bac
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_board_background: (encode-path-segment $id_board_background)} | format pattern "/members/{id_member}/customBoardBackgrounds/{id_board_background}") $qp $auth.query)
   let req_body = {"brightness": $brightness, "file": $file, "tile": $tile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9774,7 +9801,7 @@ export def "get-members-custom-emoji-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: all or none (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9784,7 +9811,7 @@ export def "get-members-custom-emoji-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customEmoji") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9815,7 +9842,7 @@ export def "add-members-custom-emoji-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
   --name: string # a string with a length from 2 to 64
 ]: any -> any {
@@ -9828,9 +9855,9 @@ export def "add-members-custom-emoji-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customEmoji") $qp $auth.query)
   let req_body = {"file": $file, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9863,7 +9890,7 @@ export def "get-members-custom-emoji-by-id-member-by-id-custom-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: name or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9874,7 +9901,7 @@ export def "get-members-custom-emoji-by-id-member-by-id-custom-emoji" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_emoji: (encode-path-segment $id_custom_emoji)} | format pattern "/members/{id_member}/customEmoji/{id_custom_emoji}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9906,7 +9933,7 @@ export def "get-members-custom-stickers-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: all or none (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9916,7 +9943,7 @@ export def "get-members-custom-stickers-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customStickers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9947,7 +9974,7 @@ export def "add-members-custom-stickers-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
   let input = $in
@@ -9959,9 +9986,9 @@ export def "add-members-custom-stickers-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/customStickers") $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9993,7 +10020,7 @@ export def "delete-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10004,7 +10031,7 @@ export def "delete-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_sticker: (encode-path-segment $id_custom_sticker)} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10037,7 +10064,7 @@ export def "get-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: scaled or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10048,7 +10075,7 @@ export def "get-members-custom-stickers-by-id-member-by-id-custom-sticker" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_custom_sticker: (encode-path-segment $id_custom_sticker)} | format pattern "/members/{id_member}/customStickers/{id_custom_sticker}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10081,7 +10108,7 @@ export def "get-members-deltas-by-id-member" [
   --tags: string # A valid tag for subscribing (required)
   --ix-last-update: string # a number from -1 to Infinity (required)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10093,7 +10120,7 @@ export def "get-members-deltas-by-id-member" [
   let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/deltas") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10124,7 +10151,7 @@ export def "update-members-full-name-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 1. Cannot begin or end with a space.
 ]: any -> any {
   let input = $in
@@ -10136,9 +10163,9 @@ export def "update-members-full-name-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/fullName") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10169,7 +10196,7 @@ export def "update-members-initials-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length from 1 to 4. Cannot begin or end with a space
 ]: any -> any {
   let input = $in
@@ -10181,9 +10208,9 @@ export def "update-members-initials-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/initials") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10225,7 +10252,7 @@ export def "get-members-notifications-by-id-member" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10235,7 +10262,7 @@ export def "get-members-notifications-by-id-member" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "read_filter" $read_filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/notifications") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10267,7 +10294,7 @@ export def "get-members-notifications-by-id-member-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10278,7 +10305,7 @@ export def "get-members-notifications-by-id-member-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/notifications/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10309,7 +10336,7 @@ export def "add-members-one-time-messages-dismissed-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # Type of message dismissed
 ]: any -> any {
   let input = $in
@@ -10321,9 +10348,9 @@ export def "add-members-one-time-messages-dismissed-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/oneTimeMessagesDismissed") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10357,7 +10384,7 @@ export def "get-members-organizations-by-id-member" [
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --paid-account: string # true or false
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10367,7 +10394,7 @@ export def "get-members-organizations-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/organizations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10399,7 +10426,7 @@ export def "get-members-organizations-by-id-member-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10410,7 +10437,7 @@ export def "get-members-organizations-by-id-member-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), filter: (encode-path-segment $filter)} | format pattern "/members/{id_member}/organizations/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10442,7 +10469,7 @@ export def "get-members-organizations-invited-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10452,7 +10479,7 @@ export def "get-members-organizations-invited-by-id-member" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/organizationsInvited") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10484,7 +10511,7 @@ export def "get-members-organizations-invited-by-id-member-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10495,7 +10522,7 @@ export def "get-members-organizations-invited-by-id-member-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/organizationsInvited/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10526,7 +10553,7 @@ export def "update-members-prefs-color-blind-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -10538,9 +10565,9 @@ export def "update-members-prefs-color-blind-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/colorBlind") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10571,7 +10598,7 @@ export def "update-members-prefs-locale-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 255
 ]: any -> any {
   let input = $in
@@ -10583,9 +10610,9 @@ export def "update-members-prefs-locale-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/locale") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10616,7 +10643,7 @@ export def "update-members-prefs-minutes-between-summaries-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # -1 (disabled), 1 or 60
 ]: any -> any {
   let input = $in
@@ -10628,9 +10655,9 @@ export def "update-members-prefs-minutes-between-summaries-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/prefs/minutesBetweenSummaries") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10661,7 +10688,7 @@ export def "get-members-saved-searches-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10671,7 +10698,7 @@ export def "get-members-saved-searches-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/savedSearches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10702,7 +10729,7 @@ export def "add-members-saved-searches-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # A non-empty string with at least one non-space character
   --pos: string # A position. top , bottom , or a positive number.
   --query: string # a string with a length from 1 to 16384
@@ -10716,9 +10743,9 @@ export def "add-members-saved-searches-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/savedSearches") $qp $auth.query)
   let req_body = {"name": $name, "pos": $pos, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10750,7 +10777,7 @@ export def "delete-members-saved-searches-by-id-member-by-id-saved-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10761,7 +10788,7 @@ export def "delete-members-saved-searches-by-id-member-by-id-saved-search" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10793,7 +10820,7 @@ export def "get-members-saved-searches-by-id-member-by-id-saved-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10804,7 +10831,7 @@ export def "get-members-saved-searches-by-id-member-by-id-saved-search" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10836,7 +10863,7 @@ export def "update-members-saved-searches-by-id-member-by-id-saved-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --name: string # A non-empty string with at least one non-space character
   --pos: string # A position. top , bottom , or a positive number.
   --query: string # a string with a length from 1 to 16384
@@ -10851,9 +10878,9 @@ export def "update-members-saved-searches-by-id-member-by-id-saved-search" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}") $qp $auth.query)
   let req_body = {"name": $name, "pos": $pos, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10885,7 +10912,7 @@ export def "update-members-saved-searches-name-by-id-member-by-id-saved-search" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A non-empty string with at least one non-space character
 ]: any -> any {
   let input = $in
@@ -10898,9 +10925,9 @@ export def "update-members-saved-searches-name-by-id-member-by-id-saved-search" 
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10932,7 +10959,7 @@ export def "update-members-saved-searches-pos-by-id-member-by-id-saved-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A position. top , bottom , or a positive number.
 ]: any -> any {
   let input = $in
@@ -10945,9 +10972,9 @@ export def "update-members-saved-searches-pos-by-id-member-by-id-saved-search" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/pos") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10979,7 +11006,7 @@ export def "update-members-saved-searches-query-by-id-member-by-id-saved-search"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 1 to 16384
 ]: any -> any {
   let input = $in
@@ -10992,9 +11019,9 @@ export def "update-members-saved-searches-query-by-id-member-by-id-saved-search"
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), id_saved_search: (encode-path-segment $id_saved_search)} | format pattern "/members/{id_member}/savedSearches/{id_saved_search}/query") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11026,7 +11053,7 @@ export def "get-members-tokens-by-id-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # One of: all or none (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11036,7 +11063,7 @@ export def "get-members-tokens-by-id-member" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/tokens") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11067,7 +11094,7 @@ export def "update-members-username-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 3. Only lowercase letters, underscores, and numbers are allowed. Must be unique.
 ]: any -> any {
   let input = $in
@@ -11079,9 +11106,9 @@ export def "update-members-username-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member)} | format pattern "/members/{id_member}/username") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11113,7 +11140,7 @@ export def "get-members-by-id-member-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11124,7 +11151,7 @@ export def "get-members-by-id-member-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_member: (encode-path-segment $id_member), field: (encode-path-segment $field)} | format pattern "/members/{id_member}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11154,7 +11181,7 @@ export def "add-notifications-all-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11163,7 +11190,7 @@ export def "add-notifications-all-read" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications/all/read" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11208,7 +11235,7 @@ export def "get-notifications-by-id-notification" [
   --member: string # true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11218,7 +11245,7 @@ export def "get-notifications-by-id-notification" [
   let qp = [(serialize-qp "display" $display "scalar") (serialize-qp "entities" $entities "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "card" $card "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11249,7 +11276,7 @@ export def "update-notifications-by-id-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --unread: string # true or false
 ]: any -> any {
   let input = $in
@@ -11261,9 +11288,9 @@ export def "update-notifications-by-id-notification" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}") $qp $auth.query)
   let req_body = {"unread": $unread} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11295,7 +11322,7 @@ export def "get-notifications-board-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11305,7 +11332,7 @@ export def "get-notifications-board-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/board") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11337,7 +11364,7 @@ export def "get-notifications-board-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11348,7 +11375,7 @@ export def "get-notifications-board-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/board/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11380,7 +11407,7 @@ export def "get-notifications-card-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11390,7 +11417,7 @@ export def "get-notifications-card-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/card") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11422,7 +11449,7 @@ export def "get-notifications-card-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11433,7 +11460,7 @@ export def "get-notifications-card-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/card/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11464,7 +11491,7 @@ export def "get-notifications-display-by-id-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11474,7 +11501,7 @@ export def "get-notifications-display-by-id-notification" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/display") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11505,7 +11532,7 @@ export def "get-notifications-entities-by-id-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11515,7 +11542,7 @@ export def "get-notifications-entities-by-id-notification" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/entities") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11547,7 +11574,7 @@ export def "get-notifications-list-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: closed, idBoard, name, pos or subscribed (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11557,7 +11584,7 @@ export def "get-notifications-list-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11589,7 +11616,7 @@ export def "get-notifications-list-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11600,7 +11627,7 @@ export def "get-notifications-list-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/list/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11632,7 +11659,7 @@ export def "get-notifications-member-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11642,7 +11669,7 @@ export def "get-notifications-member-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/member") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11674,7 +11701,7 @@ export def "get-notifications-member-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11685,7 +11712,7 @@ export def "get-notifications-member-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/member/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11717,7 +11744,7 @@ export def "get-notifications-member-creator-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11727,7 +11754,7 @@ export def "get-notifications-member-creator-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/memberCreator") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11759,7 +11786,7 @@ export def "get-notifications-member-creator-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11770,7 +11797,7 @@ export def "get-notifications-member-creator-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/memberCreator/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11802,7 +11829,7 @@ export def "get-notifications-organization-by-id-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11812,7 +11839,7 @@ export def "get-notifications-organization-by-id-notification" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/organization") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11844,7 +11871,7 @@ export def "get-notifications-organization-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11855,7 +11882,7 @@ export def "get-notifications-organization-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/organization/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11886,7 +11913,7 @@ export def "update-notifications-unread-by-id-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -11898,9 +11925,9 @@ export def "update-notifications-unread-by-id-notification" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification)} | format pattern "/notifications/{id_notification}/unread") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11932,7 +11959,7 @@ export def "get-notifications-by-id-notification-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -11943,7 +11970,7 @@ export def "get-notifications-by-id-notification-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_notification: (encode-path-segment $id_notification), field: (encode-path-segment $field)} | format pattern "/notifications/{id_notification}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11973,7 +12000,7 @@ export def "add-organizations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --desc: string # a string with a length from 0 to 16384
   --display-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --name: string # a string with a length from 0 to 16384
@@ -11995,9 +12022,9 @@ export def "add-organizations" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organizations" $qp $auth.query)
   let req_body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12028,7 +12055,7 @@ export def "delete-organizations-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12038,7 +12065,7 @@ export def "delete-organizations-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12094,7 +12121,7 @@ export def "get-organizations-by-id-org" [
   --paid-account: string # true or false
   --fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: name, displayName, desc, descData, url, website, logoHash, products and powerUps)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12104,7 +12131,7 @@ export def "get-organizations-by-id-org" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_display" $actions_display "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "memberships_member" $memberships_member "scalar") (serialize-qp "memberships_member_fields" $memberships_member_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "member_activity" $member_activity "scalar") (serialize-qp "membersInvited" $members_invited "scalar") (serialize-qp "membersInvited_fields" $members_invited_fields "scalar") (serialize-qp "boards" $boards "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "board_actions" $board_actions "scalar") (serialize-qp "board_actions_entities" $board_actions_entities "scalar") (serialize-qp "board_actions_display" $board_actions_display "scalar") (serialize-qp "board_actions_format" $board_actions_format "scalar") (serialize-qp "board_actions_since" $board_actions_since "scalar") (serialize-qp "board_actions_limit" $board_actions_limit "scalar") (serialize-qp "board_action_fields" $board_action_fields "scalar") (serialize-qp "board_lists" $board_lists "scalar") (serialize-qp "paid_account" $paid_account "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12135,7 +12162,7 @@ export def "update-organizations-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --desc: string # a string with a length from 0 to 16384
   --display-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --name: string # a string with a length from 0 to 16384
@@ -12158,9 +12185,9 @@ export def "update-organizations-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}") $qp $auth.query)
   let req_body = {"desc": $desc, "displayName": $display_name, "name": $name, "prefs/associatedDomain": $prefs_associated_domain, "prefs/boardVisibilityRestrict/org": $prefs_board_visibility_restrict_org, "prefs/boardVisibilityRestrict/private": $prefs_board_visibility_restrict_private, "prefs/boardVisibilityRestrict/public": $prefs_board_visibility_restrict_public, "prefs/externalMembersDisabled": $prefs_external_members_disabled, "prefs/googleAppsVersion": $prefs_google_apps_version, "prefs/orgInviteRestrict": $prefs_org_invite_restrict, "prefs/permissionLevel": $prefs_permission_level, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12205,7 +12232,7 @@ export def "get-organizations-actions-by-id-org" [
   --member-creator: string # true or false
   --member-creator-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: avatarHash, fullName, initials and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12215,7 +12242,7 @@ export def "get-organizations-actions-by-id-org" [
   let qp = [(serialize-qp "entities" $entities "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "idModels" $id_models "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "memberCreator" $member_creator "scalar") (serialize-qp "memberCreator_fields" $member_creator_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/actions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12258,7 +12285,7 @@ export def "get-organizations-boards-by-id-org" [
   --organization-fields: string # all or a comma-separated list of: billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url or website (default: name and displayName)
   --lists: string # One of: all, closed, none or open (default: none)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12268,7 +12295,7 @@ export def "get-organizations-boards-by-id-org" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "actions" $actions "scalar") (serialize-qp "actions_entities" $actions_entities "scalar") (serialize-qp "actions_limit" $actions_limit "scalar") (serialize-qp "actions_format" $actions_format "scalar") (serialize-qp "actions_since" $actions_since "scalar") (serialize-qp "action_fields" $action_fields "scalar") (serialize-qp "memberships" $memberships "scalar") (serialize-qp "organization" $organization "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "lists" $lists "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/boards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12300,7 +12327,7 @@ export def "get-organizations-boards-by-id-org-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12311,7 +12338,7 @@ export def "get-organizations-boards-by-id-org-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), filter: (encode-path-segment $filter)} | format pattern "/organizations/{id_org}/boards/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12344,7 +12371,7 @@ export def "get-organizations-deltas-by-id-org" [
   --tags: string # A valid tag for subscribing (required)
   --ix-last-update: string # a number from -1 to Infinity (required)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12356,7 +12383,7 @@ export def "get-organizations-deltas-by-id-org" [
   let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "ixLastUpdate" $ix_last_update "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/deltas") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12387,7 +12414,7 @@ export def "update-organizations-desc-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -12399,9 +12426,9 @@ export def "update-organizations-desc-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/desc") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12432,7 +12459,7 @@ export def "update-organizations-display-name-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 1. Cannot begin or end with a space.
 ]: any -> any {
   let input = $in
@@ -12444,9 +12471,9 @@ export def "update-organizations-display-name-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/displayName") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12477,7 +12504,7 @@ export def "delete-organizations-logo-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12487,7 +12514,7 @@ export def "delete-organizations-logo-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/logo") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12518,7 +12545,7 @@ export def "add-organizations-logo-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --file: string # A file
 ]: any -> any {
   let input = $in
@@ -12530,9 +12557,9 @@ export def "add-organizations-logo-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/logo") $qp $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12566,7 +12593,7 @@ export def "get-organizations-members-by-id-org" [
   --fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --activity: string # true or false ; works for premium organizations only.
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12576,7 +12603,7 @@ export def "get-organizations-members-by-id-org" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "activity" $activity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12607,7 +12634,7 @@ export def "update-organizations-members-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --email: string # An email address
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
@@ -12621,9 +12648,9 @@ export def "update-organizations-members-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/members") $qp $auth.query)
   let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12655,7 +12682,7 @@ export def "get-organizations-members-by-id-org-by-filter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12666,7 +12693,7 @@ export def "get-organizations-members-by-id-org-by-filter" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), filter: (encode-path-segment $filter)} | format pattern "/organizations/{id_org}/members/{filter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12698,7 +12725,7 @@ export def "delete-organizations-members-by-id-org-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12709,7 +12736,7 @@ export def "delete-organizations-members-by-id-org-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12741,7 +12768,7 @@ export def "update-organizations-members-by-id-org-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --email: string # An email address
   --full-name: string # A string with a length of at least 1. Cannot begin or end with a space.
   --type: string # One of: admin, normal or observer
@@ -12756,9 +12783,9 @@ export def "update-organizations-members-by-id-org-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}") $qp $auth.query)
   let req_body = {"email": $email, "fullName": $full_name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12790,7 +12817,7 @@ export def "delete-organizations-members-all-by-id-org-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12801,7 +12828,7 @@ export def "delete-organizations-members-all-by-id-org-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/all") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12846,7 +12873,7 @@ export def "get-organizations-members-cards-by-id-org-by-id-member" [
   --filter: string # One of: all, closed, none, open or visible (default: visible)
   --fields: string # all or a comma-separated list of: badges, checkItemStates, closed, dateLastActivity, desc, descData, due, email, idAttachmentCover, idBoard, idChecklists, idLabels, idList, idMembers, idMembersVoted, idShort, labels, manualCoverAttachment, name, pos, shortLink, shortUrl, subscribed or url (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12857,7 +12884,7 @@ export def "get-organizations-members-cards-by-id-org-by-id-member" [
   let qp = [(serialize-qp "actions" $actions "scalar") (serialize-qp "attachments" $attachments "scalar") (serialize-qp "attachment_fields" $attachment_fields "scalar") (serialize-qp "members" $members "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "checkItemStates" $check_item_states "scalar") (serialize-qp "checklists" $checklists "scalar") (serialize-qp "board" $board "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "list" $list "scalar") (serialize-qp "list_fields" $list_fields "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/cards") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12889,7 +12916,7 @@ export def "update-organizations-members-deactivated-by-id-org-by-id-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -12902,9 +12929,9 @@ export def "update-organizations-members-deactivated-by-id-org-by-id-member" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_member: (encode-path-segment $id_member)} | format pattern "/organizations/{id_org}/members/{id_member}/deactivated") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12936,7 +12963,7 @@ export def "get-organizations-members-invited-by-id-org" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12946,7 +12973,7 @@ export def "get-organizations-members-invited-by-id-org" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/membersInvited") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12978,7 +13005,7 @@ export def "get-organizations-members-invited-by-id-org-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -12989,7 +13016,7 @@ export def "get-organizations-members-invited-by-id-org-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), field: (encode-path-segment $field)} | format pattern "/organizations/{id_org}/membersInvited/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13023,7 +13050,7 @@ export def "get-organizations-memberships-by-id-org" [
   --member: string # true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13033,7 +13060,7 @@ export def "get-organizations-memberships-by-id-org" [
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/memberships") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13067,7 +13094,7 @@ export def "get-organizations-memberships-by-id-org-by-id-membership" [
   --member: string # true or false
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username (default: fullName and username)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13078,7 +13105,7 @@ export def "get-organizations-memberships-by-id-org-by-id-membership" [
   let qp = [(serialize-qp "member" $member "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_membership: (encode-path-segment $id_membership)} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13110,7 +13137,7 @@ export def "update-organizations-memberships-by-id-org-by-id-membership" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url or username
   --type: string # One of: admin, normal or observer
 ]: any -> any {
@@ -13124,9 +13151,9 @@ export def "update-organizations-memberships-by-id-org-by-id-membership" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), id_membership: (encode-path-segment $id_membership)} | format pattern "/organizations/{id_org}/memberships/{id_membership}") $qp $auth.query)
   let req_body = {"member_fields": $member_fields, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13157,7 +13184,7 @@ export def "update-organizations-name-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A string with a length of at least 3. Only lowercase letters, underscores, and numbers are allowed. Must be unique.
 ]: any -> any {
   let input = $in
@@ -13169,9 +13196,9 @@ export def "update-organizations-name-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/name") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13202,7 +13229,7 @@ export def "delete-organizations-prefs-associated-domain-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13212,7 +13239,7 @@ export def "delete-organizations-prefs-associated-domain-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13243,7 +13270,7 @@ export def "update-organizations-prefs-associated-domain-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # The google apps domain to link this org to.
 ]: any -> any {
   let input = $in
@@ -13255,9 +13282,9 @@ export def "update-organizations-prefs-associated-domain-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/associatedDomain") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13288,7 +13315,7 @@ export def "update-organizations-prefs-board-visibility-restrict-org-by-id-org" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
   let input = $in
@@ -13300,9 +13327,9 @@ export def "update-organizations-prefs-board-visibility-restrict-org-by-id-org" 
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/org") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13333,7 +13360,7 @@ export def "update-organizations-prefs-board-visibility-restrict-private-by-id-o
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
   let input = $in
@@ -13345,9 +13372,9 @@ export def "update-organizations-prefs-board-visibility-restrict-private-by-id-o
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/private") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13378,7 +13405,7 @@ export def "update-organizations-prefs-board-visibility-restrict-public-by-id-or
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: admin, none or org
 ]: any -> any {
   let input = $in
@@ -13390,9 +13417,9 @@ export def "update-organizations-prefs-board-visibility-restrict-public-by-id-or
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/boardVisibilityRestrict/public") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13423,7 +13450,7 @@ export def "update-organizations-prefs-external-members-disabled-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -13435,9 +13462,9 @@ export def "update-organizations-prefs-external-members-disabled-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/externalMembersDisabled") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13468,7 +13495,7 @@ export def "update-organizations-prefs-google-apps-version-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a number from 1 to 2
 ]: any -> any {
   let input = $in
@@ -13480,9 +13507,9 @@ export def "update-organizations-prefs-google-apps-version-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/googleAppsVersion") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13514,7 +13541,7 @@ export def "delete-organizations-prefs-org-invite-restrict-by-id-org" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string # An email address with optional expansion tokens (required)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13525,7 +13552,7 @@ export def "delete-organizations-prefs-org-invite-restrict-by-id-org" [
   let qp = [(serialize-qp "value" $value "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13556,7 +13583,7 @@ export def "update-organizations-prefs-org-invite-restrict-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # An email address with optional expansion tokens
 ]: any -> any {
   let input = $in
@@ -13568,9 +13595,9 @@ export def "update-organizations-prefs-org-invite-restrict-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/orgInviteRestrict") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13601,7 +13628,7 @@ export def "update-organizations-prefs-permission-level-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: private or public
 ]: any -> any {
   let input = $in
@@ -13613,9 +13640,9 @@ export def "update-organizations-prefs-permission-level-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/prefs/permissionLevel") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13646,7 +13673,7 @@ export def "update-organizations-website-by-id-org" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A URL starting with http:// or https:// or null
 ]: any -> any {
   let input = $in
@@ -13658,9 +13685,9 @@ export def "update-organizations-website-by-id-org" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org)} | format pattern "/organizations/{id_org}/website") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13692,7 +13719,7 @@ export def "get-organizations-by-id-org-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13703,7 +13730,7 @@ export def "get-organizations-by-id-org-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_org: (encode-path-segment $id_org), field: (encode-path-segment $field)} | format pattern "/organizations/{id_org}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13753,7 +13780,7 @@ export def "get-search" [
   --members-limit: string # a number from 1 to 1000 (default: 10)
   --partial: string # true or false
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13764,7 +13791,7 @@ export def "get-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "idBoards" $id_boards "scalar") (serialize-qp "idOrganizations" $id_organizations "scalar") (serialize-qp "idCards" $id_cards "scalar") (serialize-qp "modelTypes" $model_types "scalar") (serialize-qp "board_fields" $board_fields "scalar") (serialize-qp "boards_limit" $boards_limit "scalar") (serialize-qp "card_fields" $card_fields "scalar") (serialize-qp "cards_limit" $cards_limit "scalar") (serialize-qp "cards_page" $cards_page "scalar") (serialize-qp "card_board" $card_board "scalar") (serialize-qp "card_list" $card_list "scalar") (serialize-qp "card_members" $card_members "scalar") (serialize-qp "card_stickers" $card_stickers "scalar") (serialize-qp "card_attachments" $card_attachments "scalar") (serialize-qp "organization_fields" $organization_fields "scalar") (serialize-qp "organizations_limit" $organizations_limit "scalar") (serialize-qp "member_fields" $member_fields "scalar") (serialize-qp "members_limit" $members_limit "scalar") (serialize-qp "partial" $partial "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13799,7 +13826,7 @@ export def "get-search-members" [
   --id-organization: string # An id, or null
   --only-org-members: string # A boolean
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13809,7 +13836,7 @@ export def "get-search-members" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "idBoard" $id_board "scalar") (serialize-qp "idOrganization" $id_organization "scalar") (serialize-qp "onlyOrgMembers" $only_org_members "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/members" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13839,7 +13866,7 @@ export def "add-sessions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # The id of the board you're viewing. Boards with no viewers will not get updates about members' statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
@@ -13851,9 +13878,9 @@ export def "add-sessions" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sessions" $qp $auth.query)
   let req_body = {"idBoard": $id_board, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13883,7 +13910,7 @@ export def "get-sessions-socket" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13892,7 +13919,7 @@ export def "get-sessions-socket" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sessions/socket" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13923,7 +13950,7 @@ export def "update-sessions-by-id-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --id-board: string # The id of the board you're viewing. Boards with no viewers will not get updates about members' statuses.
   --status: string # One of: active, disconnected or idle
 ]: any -> any {
@@ -13936,9 +13963,9 @@ export def "update-sessions-by-id-session" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_session: (encode-path-segment $id_session)} | format pattern "/sessions/{id_session}") $qp $auth.query)
   let req_body = {"idBoard": $id_board, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13969,7 +13996,7 @@ export def "update-sessions-status-by-id-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # One of: active, disconnected or idle
 ]: any -> any {
   let input = $in
@@ -13981,9 +14008,9 @@ export def "update-sessions-status-by-id-session" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_session: (encode-path-segment $id_session)} | format pattern "/sessions/{id_session}/status") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14014,7 +14041,7 @@ export def "delete-tokens-by-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14024,7 +14051,7 @@ export def "delete-tokens-by-token" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14057,7 +14084,7 @@ export def "get-tokens-by-token" [
   --fields: string # all or a comma-separated list of: dateCreated, dateExpires, idMember, identifier or permissions (default: all)
   --webhooks: string # true or false
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14067,7 +14094,7 @@ export def "get-tokens-by-token" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "webhooks" $webhooks "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14099,7 +14126,7 @@ export def "get-tokens-member-by-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: string # all or a comma-separated list of: avatarHash, avatarSource, bio, bioData, confirmed, email, fullName, gravatarHash, idBoards, idBoardsPinned, idOrganizations, idPremOrgsAdmin, initials, loginTypes, memberType, oneTimeMessagesDismissed, prefs, premiumFeatures, products, status, status, trophies, uploadedAvatarHash, url or username (default: all)
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14109,7 +14136,7 @@ export def "get-tokens-member-by-token" [
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/member") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14141,7 +14168,7 @@ export def "get-tokens-member-by-token-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14152,7 +14179,7 @@ export def "get-tokens-member-by-token-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), field: (encode-path-segment $field)} | format pattern "/tokens/{token_arg}/member/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14183,7 +14210,7 @@ export def "get-tokens-webhooks-by-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14193,7 +14220,7 @@ export def "get-tokens-webhooks-by-token" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14224,7 +14251,7 @@ export def "add-tokens-webhooks-by-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model to be monitored
@@ -14238,9 +14265,9 @@ export def "add-tokens-webhooks-by-token" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
   let req_body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14271,7 +14298,7 @@ export def "update-tokens-webhooks-by-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
   --id-model: string # id of the model to be monitored
@@ -14285,9 +14312,9 @@ export def "update-tokens-webhooks-by-token" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}/webhooks") $qp $auth.query)
   let req_body = {"callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14319,7 +14346,7 @@ export def "delete-tokens-webhooks-by-token-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14330,7 +14357,7 @@ export def "delete-tokens-webhooks-by-token-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), id_webhook: (encode-path-segment $id_webhook)} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14362,7 +14389,7 @@ export def "get-tokens-webhooks-by-token-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14373,7 +14400,7 @@ export def "get-tokens-webhooks-by-token-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), id_webhook: (encode-path-segment $id_webhook)} | format pattern "/tokens/{token_arg}/webhooks/{id_webhook}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14405,7 +14432,7 @@ export def "get-tokens-by-token-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14416,7 +14443,7 @@ export def "get-tokens-by-token-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg), field: (encode-path-segment $field)} | format pattern "/tokens/{token_arg}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14447,7 +14474,7 @@ export def "get-types-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14457,7 +14484,7 @@ export def "get-types-by-id" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/types/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14487,7 +14514,7 @@ export def "add-webhooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --active: string # true or false
   --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
@@ -14501,9 +14528,9 @@ export def "add-webhooks" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp $auth.query)
   let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14533,7 +14560,7 @@ export def "update-webhooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --active: string # true or false
   --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
@@ -14547,9 +14574,9 @@ export def "update-webhooks" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks/" $qp $auth.query)
   let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14580,7 +14607,7 @@ export def "delete-webhooks-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14590,7 +14617,7 @@ export def "delete-webhooks-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14621,7 +14648,7 @@ export def "get-webhooks-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14631,7 +14658,7 @@ export def "get-webhooks-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14662,7 +14689,7 @@ export def "update-webhooks-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --active: string # true or false
   --callback-url: string # A valid URL that is reachable with a HEAD request
   --description: string # a string with a length from 0 to 16384
@@ -14677,9 +14704,9 @@ export def "update-webhooks-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp $auth.query)
   let req_body = {"active": $active, "callbackURL": $callback_url, "description": $description, "idModel": $id_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14710,7 +14737,7 @@ export def "update-webhooks-active-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # true or false
 ]: any -> any {
   let input = $in
@@ -14722,9 +14749,9 @@ export def "update-webhooks-active-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/active") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14755,7 +14782,7 @@ export def "update-webhooks-callback-url-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # A valid URL that is reachable with a HEAD request
 ]: any -> any {
   let input = $in
@@ -14767,9 +14794,9 @@ export def "update-webhooks-callback-url-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/callbackURL") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14800,7 +14827,7 @@ export def "update-webhooks-description-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # a string with a length from 0 to 16384
 ]: any -> any {
   let input = $in
@@ -14812,9 +14839,9 @@ export def "update-webhooks-description-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/description") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14845,7 +14872,7 @@ export def "update-webhooks-id-model-by-id-webhook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
   --value: string # id of the model to be monitored
 ]: any -> any {
   let input = $in
@@ -14857,9 +14884,9 @@ export def "update-webhooks-id-model-by-id-webhook" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/idModel") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14891,7 +14918,7 @@ export def "get-webhooks-by-id-webhook-by-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Generate your application key (https://trello.com/1/appKey/generate) (required)
-  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required)
+  --qp-token: string # Getting a token from a user (https://trello.com/docs/gettingstarted/index.html#getting-a-token-from-a-user) (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14902,7 +14929,7 @@ export def "get-webhooks-by-id-webhook-by-field" [
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), field: (encode-path-segment $field)} | format pattern "/webhooks/{id_webhook}/{field}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

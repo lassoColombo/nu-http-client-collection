@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -208,7 +235,7 @@ export def "app-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -245,7 +272,7 @@ export def "app-create" [
   let qp = [(serialize-qp "organization_name" $organization_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -281,7 +308,7 @@ export def "app-policies-registration-delete" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'accessToken' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -317,7 +344,7 @@ export def "app-policies-registration-get" [
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'accessToken' must be non-empty" } }
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -360,7 +387,7 @@ export def "app-policies-registration-register" [
   let qp = [(serialize-qp "password" $password "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "cgu" $cgu "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({access_token: (encode-path-segment $access_token)} | format pattern "/apps/access/invite/{access_token}/register") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -396,7 +423,7 @@ export def "app-get" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -437,7 +464,7 @@ export def "app-policies-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -478,7 +505,7 @@ export def "app-policies-invitations-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/invite") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -523,7 +550,7 @@ export def "app-policies-invitations-create" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "policy_profile_id" $policy_profile_id "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "civility" $civility "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/invite") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -561,7 +588,7 @@ export def "app-policies-invitations-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/access/invite/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -597,7 +624,7 @@ export def "app-policies-profiles-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/profiles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -635,7 +662,7 @@ export def "app-policies-delete" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -673,7 +700,7 @@ export def "app-policies-get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -714,7 +741,7 @@ export def "app-policies-update" [
   let qp = [(serialize-qp "policy_profile_id" $policy_profile_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), user_id: (encode-path-segment $user_id)} | format pattern "/apps/{app_id}/access/{user_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -756,7 +783,7 @@ export def "app-accounting-categories-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accountcategories/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -796,7 +823,7 @@ export def "app-accounting-categories-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accountcategories/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -834,7 +861,7 @@ export def "app-accounting-categories-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -872,7 +899,7 @@ export def "app-accounting-categories-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -914,7 +941,7 @@ export def "app-accounting-categories-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accountcategories/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -956,7 +983,7 @@ export def "app-accounting-entries-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounting_entries/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -998,7 +1025,7 @@ export def "app-accounting-accounts-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,7 +1070,7 @@ export def "app-accounting-accounts-create" [
   let qp = [(serialize-qp "journalcode" $journalcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "keywords" $keywords "scalar") (serialize-qp "accounting_number" $accounting_number "scalar") (serialize-qp "is_cashflow" $is_cashflow "scalar") (serialize-qp "is_sales" $is_sales "scalar") (serialize-qp "is_purchase" $is_purchase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1082,7 +1109,7 @@ export def "app-accounting-accounts-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/accounts/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1120,7 +1147,7 @@ export def "app-accounting-accounts-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1158,7 +1185,7 @@ export def "app-accounting-accounts-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "app-accounting-accounts-update" [
   let qp = [(serialize-qp "journalcode" $journalcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "keywords" $keywords "scalar") (serialize-qp "accounting_number" $accounting_number "scalar") (serialize-qp "is_cashflow" $is_cashflow "scalar") (serialize-qp "is_sales" $is_sales "scalar") (serialize-qp "is_purchase" $is_purchase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/accounts/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1246,7 +1273,7 @@ export def "app-apikeys-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apikeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1286,7 +1313,7 @@ export def "app-apikeys-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "api_partner_id" $api_partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apikeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1324,7 +1351,7 @@ export def "app-apikeys-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/apikeys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1365,7 +1392,7 @@ export def "app-apipartners-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/apipartners") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1407,7 +1434,7 @@ export def "app-attachments-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1448,7 +1475,7 @@ export def "app-attachments-create" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "attachable_id" $attachable_id "scalar") (serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1484,7 +1511,7 @@ export def "app-sap-attestations-generate-sap-attestations" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1525,7 +1552,7 @@ export def "app-attachments-download" [
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1566,7 +1593,7 @@ export def "app-sap-attestations-download" [
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments/sap-download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1604,7 +1631,7 @@ export def "app-attachments-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1642,7 +1669,7 @@ export def "app-attachments-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1683,7 +1710,7 @@ export def "app-attachments-redirect-to-public-url" [
   let qp = [(serialize-qp "random" $random "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/attachments/{id}/pdf") $qp $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1725,7 +1752,7 @@ export def "app-documents-sales-bankdetails-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/bankdetails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1765,7 +1792,7 @@ export def "app-documents-sales-bankdetails-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/bankdetails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1803,7 +1830,7 @@ export def "app-documents-sales-bankdetails-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1841,7 +1868,7 @@ export def "app-documents-sales-bankdetails-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1883,7 +1910,7 @@ export def "app-documents-sales-bankdetails-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/bankdetails/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1922,7 +1949,7 @@ export def "app-cashflow-banks-delete" [
   let qp = [(serialize-qp "item_id" $item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1958,7 +1985,7 @@ export def "app-cashflow-banks-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1994,7 +2021,7 @@ export def "app-cashflow-banks-connect" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/connect") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2033,7 +2060,7 @@ export def "app-cashflow-banks-synchronize" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "is_incremential" $is_incremential "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/synchronize") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2071,7 +2098,7 @@ export def "app-cashflow-banks-url-edit" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/edit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2109,7 +2136,7 @@ export def "app-cashflow-banks-url-sync" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/sync") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2147,7 +2174,7 @@ export def "app-cashflow-banks-url-validate" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/funnel/validate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2187,7 +2214,7 @@ export def "app-cashflow-banks-select-accounts" [
   let qp = [(serialize-qp "bank_account_ids" $bank_account_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/banks/{id}/select_accounts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2229,7 +2256,7 @@ export def "app-cashflow-cashflowsources-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/cashflowsources/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2272,7 +2299,7 @@ export def "app-cashflow-cashflowsources-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifiant" $identifiant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "balance_amount" $balance_amount "scalar") (serialize-qp "account_type" $account_type "scalar") (serialize-qp "parent_cashflow_source_id" $parent_cashflow_source_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/cashflowsources/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2310,7 +2337,7 @@ export def "app-cashflow-cashflowsources-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2348,7 +2375,7 @@ export def "app-cashflow-cashflowsources-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2393,7 +2420,7 @@ export def "app-cashflow-cashflowsources-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifiant" $identifiant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "balance_amount" $balance_amount "scalar") (serialize-qp "account_type" $account_type "scalar") (serialize-qp "parent_cashflow_source_id" $parent_cashflow_source_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/cashflowsources/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2432,7 +2459,7 @@ export def "app-contacts-transform-merge" [
   let qp = [(serialize-qp "contacts" $contacts "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/contacts/merge") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2472,7 +2499,7 @@ export def "app-contacts-email-batch" [
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "messages" $messages "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/email/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2507,7 +2534,7 @@ export def "app-contacts-email-send" [
   --recipients-cc: list<string>
   --recipients-bcc: list<string>
   --title: string
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --documents: list # required
   --need-copy-bcc: oneof<nothing, bool> # default: false
 ]: nothing -> any {
@@ -2519,7 +2546,7 @@ export def "app-contacts-email-send" [
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "recipients" $recipients "multi") (serialize-qp "recipients_cc" $recipients_cc "multi") (serialize-qp "recipients_bcc" $recipients_bcc "multi") (serialize-qp "title" $title "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "documents" $documents "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/email/document") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2557,7 +2584,7 @@ export def "app-contacts-establishments-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2595,7 +2622,7 @@ export def "app-contacts-establishments-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2639,7 +2666,7 @@ export def "app-contacts-establishments-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "phones" $phones "multi") (serialize-qp "emails" $emails "multi") (serialize-qp "nic" $nic "scalar") (serialize-qp "place" $place "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/establishments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2681,7 +2708,7 @@ export def "app-accounting-export-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2720,7 +2747,7 @@ export def "app-accounting-export-create" [
   let qp = [(serialize-qp "until" $until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2756,7 +2783,7 @@ export def "app-accounting-export-acd-compta-get-uuid" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/acd_compta") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2788,7 +2815,7 @@ export def "app-accounting-export-acd-compta-set-uuid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # the login provided by ACD Compta (required)
   --password: string # the password provided by ACD Compta (required)
-  --qp-base: string # Your ACD account number (3XXXX) (required)
+  --qp-base: string # Your ACD account number (3XXXX) (required) (spec name: base)
   --cnx: string # your CNX by ACD Compta (required)
 ]: nothing -> oneof<record<uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
@@ -2801,7 +2828,7 @@ export def "app-accounting-export-acd-compta-set-uuid" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "cnx" $cnx "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/acd_compta") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2844,7 +2871,7 @@ export def "app-accounting-export-download" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "export_entities_ids" $export_entities_ids "multi") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "since_last" $since_last "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2880,7 +2907,7 @@ export def "app-accounting-export-list-by-months" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/months") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2918,7 +2945,7 @@ export def "app-accounting-export-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/exports/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2956,7 +2983,7 @@ export def "app-accounting-export-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/exports/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2998,7 +3025,7 @@ export def "app-documents-sales-invoices-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3055,7 +3082,7 @@ export def "app-documents-sales-invoices-create" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayments" $downpayments "multi") (serialize-qp "downpayment_cash" $downpayment_cash "scalar") (serialize-qp "avoid_of" $avoid_of "scalar") (serialize-qp "delivered_at" $delivered_at "scalar") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "payment_methods" $payment_methods "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3094,7 +3121,7 @@ export def "app-documents-sales-invoices-batch-delete" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3133,7 +3160,7 @@ export def "app-documents-sales-invoices-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3173,7 +3200,7 @@ export def "app-documents-sales-invoices-download" [
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3212,7 +3239,7 @@ export def "app-documents-sales-invoices-fresh" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/fresh") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3250,7 +3277,7 @@ export def "app-documents-sales-invoices-nextnumber" [
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/nextnumber") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3289,7 +3316,7 @@ export def "app-documents-sales-invoices-statistics" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/invoices/statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3327,7 +3354,7 @@ export def "app-documents-sales-invoices-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3365,7 +3392,7 @@ export def "app-documents-sales-invoices-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3423,7 +3450,7 @@ export def "app-documents-sales-invoices-update" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayments" $downpayments "multi") (serialize-qp "downpayment_cash" $downpayment_cash "scalar") (serialize-qp "avoid_of" $avoid_of "scalar") (serialize-qp "delivered_at" $delivered_at "scalar") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "payment_methods" $payment_methods "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3463,7 +3490,7 @@ export def "app-documents-sales-invoices-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3503,7 +3530,7 @@ export def "app-documents-sales-invoices-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3541,7 +3568,7 @@ export def "app-documents-sales-invoices-avoid" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/avoid") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3579,7 +3606,7 @@ export def "app-documents-sales-invoices-duplicate" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/duplicate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3619,7 +3646,7 @@ export def "app-documents-sales-invoices-finalize" [
   let qp = [(serialize-qp "force_date" $force_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/finalize") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3659,7 +3686,7 @@ export def "app-documents-sales-invoices-pdf" [
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/pdf") $qp $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3701,7 +3728,7 @@ export def "app-documents-sales-invoices-preview" [
   let qp = [(serialize-qp "template" $template "scalar") (serialize-qp "disable_cache" $disable_cache "scalar") (serialize-qp "base64" $base64 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/preview.jpg") $qp $auth.query)
   let accept_val = "application/jpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3741,7 +3768,7 @@ export def "app-documents-sales-invoices-untag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3781,7 +3808,7 @@ export def "app-documents-sales-invoices-tag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3821,7 +3848,7 @@ export def "app-documents-sales-invoices-updatestatus" [
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/invoices/{id}/updatestatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3857,7 +3884,7 @@ export def "app-cashflow-logsautoreconciliations-clear" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3899,7 +3926,7 @@ export def "app-cashflow-logsautoreconciliations-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3935,7 +3962,7 @@ export def "app-cashflow-logsautoreconciliations-start" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3971,7 +3998,7 @@ export def "app-organization-get" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organization") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4030,7 +4057,7 @@ export def "app-organization-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "trade_directory_registration" $trade_directory_registration "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "industry" $industry "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "sap_number_registration" $sap_number_registration "scalar") (serialize-qp "sap_activities" $sap_activities "scalar") (serialize-qp "sap_date_registration" $sap_date_registration "scalar") (serialize-qp "capital" $capital "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organization") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4071,7 +4098,7 @@ export def "app-contacts-organizations-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4128,7 +4155,7 @@ export def "app-contacts-organizations-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "vat_system" $vat_system "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "capital" $capital "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4167,7 +4194,7 @@ export def "app-contacts-organizations-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organizations/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4205,7 +4232,7 @@ export def "app-contacts-organizations-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4243,7 +4270,7 @@ export def "app-contacts-organizations-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4301,7 +4328,7 @@ export def "app-contacts-organizations-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "vat_system" $vat_system "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "capital" $capital "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4339,7 +4366,7 @@ export def "app-contacts-organizations-restore" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/organizations/{id}/restore") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4381,7 +4408,7 @@ export def "app-payments-payments-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/payments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4417,7 +4444,7 @@ export def "app-payments-payments-recipe-book" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/payments/recipe_book") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4455,7 +4482,7 @@ export def "app-payments-payments-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/payments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4493,7 +4520,7 @@ export def "app-payments-payments-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/payments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4534,7 +4561,7 @@ export def "app-contacts-persons-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4577,7 +4604,7 @@ export def "app-contacts-persons-create" [
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "picture" $picture "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4616,7 +4643,7 @@ export def "app-contacts-persons-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/persons/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4654,7 +4681,7 @@ export def "app-contacts-persons-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4692,7 +4719,7 @@ export def "app-contacts-persons-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4736,7 +4763,7 @@ export def "app-contacts-persons-update" [
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "picture" $picture "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4774,7 +4801,7 @@ export def "app-contacts-persons-restore" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/persons/{id}/restore") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4810,7 +4837,7 @@ export def "app-ping" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/ping") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4852,7 +4879,7 @@ export def "app-catalog-categories-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productcategory") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4893,7 +4920,7 @@ export def "app-catalog-categories-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "parent_category_id" $parent_category_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productcategory") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4931,7 +4958,7 @@ export def "app-catalog-categories-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4969,7 +4996,7 @@ export def "app-catalog-categories-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5012,7 +5039,7 @@ export def "app-catalog-categories-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "parent_category_id" $parent_category_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productcategory/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5054,7 +5081,7 @@ export def "app-catalog-products-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5106,7 +5133,7 @@ export def "app-catalog-products-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_accurately" $amount_accurately "scalar") (serialize-qp "vat_percent" $vat_percent "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "lifetime" $lifetime "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "quantity_name" $quantity_name "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5145,7 +5172,7 @@ export def "app-catalog-products-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/products/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5183,7 +5210,7 @@ export def "app-catalog-products-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5221,7 +5248,7 @@ export def "app-catalog-products-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5274,7 +5301,7 @@ export def "app-catalog-products-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_accurately" $amount_accurately "scalar") (serialize-qp "vat_percent" $vat_percent "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "lifetime" $lifetime "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "quantity_name" $quantity_name "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5314,7 +5341,7 @@ export def "app-catalog-products-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5354,7 +5381,7 @@ export def "app-catalog-products-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/products/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5396,7 +5423,7 @@ export def "app-catalog-stocks-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productstocks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5443,7 +5470,7 @@ export def "app-catalog-stocks-create" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "purchase_id" $purchase_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "bar_code" $bar_code "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "entered_at" $entered_at "scalar") (serialize-qp "expired_at" $expired_at "scalar") (serialize-qp "cost_amount" $cost_amount "scalar") (serialize-qp "use_duration" $use_duration "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/productstocks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5481,7 +5508,7 @@ export def "app-catalog-stocks-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5519,7 +5546,7 @@ export def "app-catalog-stocks-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5565,7 +5592,7 @@ export def "app-catalog-stocks-update" [
   let qp = [(serialize-qp "purchase_id" $purchase_id "scalar") (serialize-qp "bar_code" $bar_code "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "entered_at" $entered_at "scalar") (serialize-qp "expired_at" $expired_at "scalar") (serialize-qp "cost_amount" $cost_amount "scalar") (serialize-qp "use_duration" $use_duration "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5606,7 +5633,7 @@ export def "app-catalog-stocks-destruct" [
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/destruct") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5650,7 +5677,7 @@ export def "app-catalog-stocks-rental-back" [
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "current_return_date" $current_return_date "scalar") (serialize-qp "use_duration" $use_duration "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/rental/back") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5692,7 +5719,7 @@ export def "app-catalog-stocks-rental-exit" [
   let qp = [(serialize-qp "quantity" $quantity "scalar") (serialize-qp "future_return_date" $future_return_date "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/productstocks/{id}/rental/exit") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5735,7 +5762,7 @@ export def "app-documents-purchases-purchases-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5790,7 +5817,7 @@ export def "app-documents-purchases-purchases-create" [
   let qp = [(serialize-qp "invoice" $invoice "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "supplier_organization_id" $supplier_organization_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "supplier_name" $supplier_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_tax" $amount_tax "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "vat_detail" $vat_detail "multi") (serialize-qp "billed_at" $billed_at "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "vat_repayment" $vat_repayment "scalar") (serialize-qp "payment_deadline_at" $payment_deadline_at "scalar") (serialize-qp "payment_account_number" $payment_account_number "scalar") (serialize-qp "payment_routing_number" $payment_routing_number "scalar") (serialize-qp "payment_swift" $payment_swift "scalar") (serialize-qp "payment_iban" $payment_iban "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5829,7 +5856,7 @@ export def "app-documents-purchases-purchases-batch-delete" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5868,7 +5895,7 @@ export def "app-documents-purchases-purchases-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5907,7 +5934,7 @@ export def "app-documents-purchases-purchases-download" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5946,7 +5973,7 @@ export def "app-documents-purchases-purchases-statistics" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/purchases/statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5984,7 +6011,7 @@ export def "app-documents-purchases-purchases-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6022,7 +6049,7 @@ export def "app-documents-purchases-purchases-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6079,7 +6106,7 @@ export def "app-documents-purchases-purchases-update" [
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "supplier_organization_id" $supplier_organization_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "supplier_name" $supplier_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_tax" $amount_tax "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "vat_detail" $vat_detail "multi") (serialize-qp "billed_at" $billed_at "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "vat_repayment" $vat_repayment "scalar") (serialize-qp "payment_deadline_at" $payment_deadline_at "scalar") (serialize-qp "payment_account_number" $payment_account_number "scalar") (serialize-qp "payment_routing_number" $payment_routing_number "scalar") (serialize-qp "payment_swift" $payment_swift "scalar") (serialize-qp "payment_iban" $payment_iban "scalar") (serialize-qp "purchase_lines" $purchase_lines "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6119,7 +6146,7 @@ export def "app-documents-purchases-purchases-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6159,7 +6186,7 @@ export def "app-documents-purchases-purchases-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6197,7 +6224,7 @@ export def "app-documents-purchases-purchases-original" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/original") $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6235,7 +6262,7 @@ export def "app-documents-purchases-purchases-preview" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/preview.jpg") $auth.query)
   let accept_val = "application/jpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6275,7 +6302,7 @@ export def "app-documents-purchases-purchases-untag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6315,7 +6342,7 @@ export def "app-documents-purchases-purchases-tag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6353,7 +6380,7 @@ export def "app-documents-purchases-purchases-thumbnail" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/thumbnail.jpg") $auth.query)
   let accept_val = "application/jpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6393,7 +6420,7 @@ export def "app-documents-purchases-purchases-updatestatus" [
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/purchases/{id}/updatestatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6435,7 +6462,7 @@ export def "app-documents-sales-quotes-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6488,7 +6515,7 @@ export def "app-documents-sales-quotes-create" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayment_request" $downpayment_request "multi") (serialize-qp "commercialvalidity_deadline" $commercialvalidity_deadline "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6527,7 +6554,7 @@ export def "app-documents-sales-quotes-batch-delete" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6566,7 +6593,7 @@ export def "app-documents-sales-quotes-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6606,7 +6633,7 @@ export def "app-documents-sales-quotes-download" [
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6645,7 +6672,7 @@ export def "app-documents-sales-quotes-fresh" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/fresh") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6684,7 +6711,7 @@ export def "app-documents-sales-quotes-invoices" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/invoice") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6722,7 +6749,7 @@ export def "app-documents-sales-quotes-nextnumber" [
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/nextnumber") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6761,7 +6788,7 @@ export def "app-documents-sales-quotes-statistics" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/quotes/statistics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6799,7 +6826,7 @@ export def "app-documents-sales-quotes-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6837,7 +6864,7 @@ export def "app-documents-sales-quotes-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6891,7 +6918,7 @@ export def "app-documents-sales-quotes-update" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayment_request" $downpayment_request "multi") (serialize-qp "commercialvalidity_deadline" $commercialvalidity_deadline "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6931,7 +6958,7 @@ export def "app-documents-sales-quotes-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6971,7 +6998,7 @@ export def "app-documents-sales-quotes-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7012,7 +7039,7 @@ export def "app-documents-sales-quotes-downpayment" [
   let qp = [(serialize-qp "percent" $percent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/downpayment") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7050,7 +7077,7 @@ export def "app-documents-sales-quotes-duplicate" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/duplicate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7088,7 +7115,7 @@ export def "app-documents-sales-quotes-finalize" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/finalize") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7126,7 +7153,7 @@ export def "app-documents-sales-quotes-invoice" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/invoice") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7166,7 +7193,7 @@ export def "app-documents-sales-quotes-pdf" [
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/pdf") $qp $auth.query)
   let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7206,7 +7233,7 @@ export def "app-documents-sales-quotes-preview" [
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/preview.jpg") $qp $auth.query)
   let accept_val = "application/jpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7247,7 +7274,7 @@ export def "app-documents-sales-quotes-situation-invoice" [
   let qp = [(serialize-qp "progress" $progress "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/situation_invoice") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7287,7 +7314,7 @@ export def "app-documents-sales-quotes-untag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7327,7 +7354,7 @@ export def "app-documents-sales-quotes-tag" [
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/tag") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7367,7 +7394,7 @@ export def "app-documents-sales-quotes-updatestatus" [
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/updatestatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7407,7 +7434,7 @@ export def "app-documents-sales-quotes-yousign-preview" [
   let qp = [(serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/quotes/{id}/yousign/preview.jpg") $qp $auth.query)
   let accept_val = "application/jpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7448,7 +7475,7 @@ export def "app-payments-reconciliation-unreconcile" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7494,7 +7521,7 @@ export def "app-payments-reconciliation-reconcile" [
   let qp = [(serialize-qp "replace_all" $replace_all "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "movements" $movements "multi") (serialize-qp "paid_at" $paid_at "scalar") (serialize-qp "rule" $rule "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7533,7 +7560,7 @@ export def "app-payments-reconciliation-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reconcile/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7575,7 +7602,7 @@ export def "app-documents-sales-recurringinvoices-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7635,7 +7662,7 @@ export def "app-documents-sales-recurringinvoices-create" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "next_invoice_at" $next_invoice_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "frequency_count" $frequency_count "scalar") (serialize-qp "frequency_duration" $frequency_duration "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "discount_mode" $discount_mode "scalar") (serialize-qp "discount_start_at" $discount_start_at "scalar") (serialize-qp "discount_end_at" $discount_end_at "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "orders_plan" $orders_plan "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7674,7 +7701,7 @@ export def "app-documents-sales-recurringinvoices-batch-delete" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7713,7 +7740,7 @@ export def "app-documents-sales-recurringinvoices-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7751,7 +7778,7 @@ export def "app-documents-sales-recurringinvoices-get-periods" [
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/recurringinvoices/periods") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7789,7 +7816,7 @@ export def "app-documents-sales-recurringinvoices-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7827,7 +7854,7 @@ export def "app-documents-sales-recurringinvoices-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7887,7 +7914,7 @@ export def "app-documents-sales-recurringinvoices-update" [
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "next_invoice_at" $next_invoice_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "frequency_count" $frequency_count "scalar") (serialize-qp "frequency_duration" $frequency_duration "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "discount_mode" $discount_mode "scalar") (serialize-qp "discount_start_at" $discount_start_at "scalar") (serialize-qp "discount_end_at" $discount_end_at "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "orders_plan" $orders_plan "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7928,7 +7955,7 @@ export def "app-documents-sales-recurringinvoices-plan" [
   let qp = [(serialize-qp "until" $until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/recurringinvoices/{id}/plan") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7969,7 +7996,7 @@ export def "app-contacts-relationships-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/relationships") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8007,7 +8034,7 @@ export def "app-contacts-relationships-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8059,7 +8086,7 @@ export def "app-contacts-relationships-update" [
   let qp = [(serialize-qp "is_customer" $is_customer "scalar") (serialize-qp "is_supplier" $is_supplier "scalar") (serialize-qp "is_prospect" $is_prospect "scalar") (serialize-qp "importance_level" $importance_level "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "balance_initial_amount" $balance_initial_amount "scalar") (serialize-qp "is_notifying" $is_notifying "scalar") (serialize-qp "note" $note "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8099,7 +8126,7 @@ export def "app-contacts-relationships-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8139,7 +8166,7 @@ export def "app-contacts-relationships-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/relationships/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8175,7 +8202,7 @@ export def "app-reset" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reset") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8217,7 +8244,7 @@ export def "app-rules-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8259,7 +8286,7 @@ export def "app-rules-create" [
   let qp = [(serialize-qp "conditions" $conditions "multi") (serialize-qp "on_event" $on_event "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8297,7 +8324,7 @@ export def "app-rules-execute-on" [
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/rules/execute_on") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8335,7 +8362,7 @@ export def "app-rules-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8373,7 +8400,7 @@ export def "app-rules-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8417,7 +8444,7 @@ export def "app-rules-update" [
   let qp = [(serialize-qp "conditions" $conditions "multi") (serialize-qp "on_event" $on_event "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/rules/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8459,7 +8486,7 @@ export def "app-documents-sales-models-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8500,7 +8527,7 @@ export def "app-documents-sales-models-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/salesdocumentmodels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8538,7 +8565,7 @@ export def "app-documents-sales-models-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8576,7 +8603,7 @@ export def "app-documents-sales-models-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8619,7 +8646,7 @@ export def "app-documents-sales-models-update" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/salesdocumentmodels/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8661,7 +8688,7 @@ export def "app-payments-sepamandates-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8712,7 +8739,7 @@ export def "app-payments-sepamandates-create" [
   let qp = [(serialize-qp "customer_organization_id" $customer_organization_id "scalar") (serialize-qp "customer_person_id" $customer_person_id "scalar") (serialize-qp "old_mandate_id" $old_mandate_id "scalar") (serialize-qp "mandate_id" $mandate_id "scalar") (serialize-qp "signed_at" $signed_at "scalar") (serialize-qp "electronic_signature" $electronic_signature "scalar") (serialize-qp "customer_name" $customer_name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar") (serialize-qp "is_first" $is_first "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8751,7 +8778,7 @@ export def "app-payments-sepacredittransfer-preview" [
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8795,7 +8822,7 @@ export def "app-payments-sepacredittransfer-download" [
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "debtor_name" $debtor_name "scalar") (serialize-qp "debtor_iban" $debtor_iban "scalar") (serialize-qp "debtor_bic" $debtor_bic "scalar") (serialize-qp "btchBookg" $btch_bookg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/credittransfer") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8834,7 +8861,7 @@ export def "app-payments-sepadirectdebit-preview" [
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8879,7 +8906,7 @@ export def "app-payments-sepadirectdebit-download" [
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "creditor_name" $creditor_name "scalar") (serialize-qp "creditor_iban" $creditor_iban "scalar") (serialize-qp "creditor_bic" $creditor_bic "scalar") (serialize-qp "creditor_ics" $creditor_ics "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/sepamandates/directdebit") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8917,7 +8944,7 @@ export def "app-payments-sepamandates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8955,7 +8982,7 @@ export def "app-payments-sepamandates-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9004,7 +9031,7 @@ export def "app-payments-sepamandates-update" [
   let qp = [(serialize-qp "customer_organization_id" $customer_organization_id "scalar") (serialize-qp "customer_person_id" $customer_person_id "scalar") (serialize-qp "old_mandate_id" $old_mandate_id "scalar") (serialize-qp "mandate_id" $mandate_id "scalar") (serialize-qp "signed_at" $signed_at "scalar") (serialize-qp "electronic_signature" $electronic_signature "scalar") (serialize-qp "customer_name" $customer_name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar") (serialize-qp "is_first" $is_first "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/sepamandates/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9040,7 +9067,7 @@ export def "app-services-stripe-webhook-ping" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/stripe/webhook") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9076,7 +9103,7 @@ export def "app-services-stripe-webhook-handle" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/stripe/webhook") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9112,7 +9139,7 @@ export def "app-services-yousign-webhook-handle" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/services/yousign/webhook") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9150,7 +9177,7 @@ export def "app-settings-get" [
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9190,7 +9217,7 @@ export def "app-settings-update" [
   let qp = [(serialize-qp "settings" $settings "multi") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/settings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9237,7 +9264,7 @@ export def "app-documents-sales-signature-create" [
   let qp = [(serialize-qp "documentId" $document_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "phone" $phone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/signature") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9290,7 +9317,7 @@ export def "app-statistics-charts-get" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "object" $object "scalar") (serialize-qp "object_property" $object_property "scalar") (serialize-qp "calcul" $calcul "scalar") (serialize-qp "methods" $methods "multi") (serialize-qp "object_date_property" $object_date_property "scalar") (serialize-qp "group_by" $group_by "multi") (serialize-qp "group_by_object_name" $group_by_object_name "scalar") (serialize-qp "exclude_keys" $exclude_keys "multi") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "show_details" $show_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), type: (encode-path-segment $type)} | format pattern "/apps/{app_id}/statistics/charts/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9329,7 +9356,7 @@ export def "app-statistics-timetable-purchases" [
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/timetable/purchases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9368,7 +9395,7 @@ export def "app-statistics-timetable-sales" [
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/timetable/sales") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9409,7 +9436,7 @@ export def "app-statistics-vat-get" [
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/statistics/vat") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9445,7 +9472,7 @@ export def "app-subscription-anchordate" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/anchordate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9481,7 +9508,7 @@ export def "app-subscription-checkout-add-source" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/checkout_add_source") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9520,7 +9547,7 @@ export def "app-subscription-coupon" [
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/coupon") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9556,7 +9583,7 @@ export def "app-subscription-extend-trial" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/extend_trial") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9594,7 +9621,7 @@ export def "app-subscription-extra-enable" [
   if ($stripe_plan | is-empty) { error make --unspanned { msg: "path parameter 'stripe_plan' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/extra/{stripe_plan}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9630,7 +9657,7 @@ export def "app-subscription-pay-all" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/pay_all") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9666,7 +9693,7 @@ export def "app-subscription-end" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9702,7 +9729,7 @@ export def "app-subscription-get" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9738,7 +9765,7 @@ export def "app-subscription-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plans") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9778,7 +9805,7 @@ export def "app-subscription-upcoming" [
   let qp = [(serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9819,7 +9846,7 @@ export def "app-subscription-pay" [
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar") (serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9859,7 +9886,7 @@ export def "app-subscription-checkout" [
   let qp = [(serialize-qp "stripe_coupon" $stripe_coupon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), stripe_plan: (encode-path-segment $stripe_plan)} | format pattern "/apps/{app_id}/subscription/plans/{stripe_plan}/checkout") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9898,7 +9925,7 @@ export def "app-subscription-remove-source" [
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9937,7 +9964,7 @@ export def "app-subscription-add-source" [
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9976,7 +10003,7 @@ export def "app-subscription-set-default" [
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/source/default") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10014,7 +10041,7 @@ export def "app-statistics-tags-get" [
   let qp = [(serialize-qp "object" $object "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/tags") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10050,7 +10077,7 @@ export def "app-settings-templates-list" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10086,7 +10113,7 @@ export def "app-settings-templates-create" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10125,7 +10152,7 @@ export def "app-settings-templates-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10161,7 +10188,7 @@ export def "app-settings-templates-default-template" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates/default") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10199,7 +10226,7 @@ export def "app-settings-templates-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/templates/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10237,7 +10264,7 @@ export def "app-settings-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/templates/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10279,7 +10306,7 @@ export def "app-cashflow-transactions-list" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10329,7 +10356,7 @@ export def "app-cashflow-transactions-create" [
   let qp = [(serialize-qp "contact_organization_id" $contact_organization_id "scalar") (serialize-qp "contact_person_id" $contact_person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "cashflow_source_id" $cashflow_source_id "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "received_at" $received_at "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10368,7 +10395,7 @@ export def "app-cashflow-transactions-batch" [
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/transactions/batch") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10406,7 +10433,7 @@ export def "app-cashflow-transactions-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10444,7 +10471,7 @@ export def "app-cashflow-transactions-get" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10493,7 +10520,7 @@ export def "app-cashflow-transactions-update" [
   let qp = [(serialize-qp "contact_organization_id" $contact_organization_id "scalar") (serialize-qp "contact_person_id" $contact_person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "cashflow_source_id" $cashflow_source_id "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "received_at" $received_at "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10533,7 +10560,7 @@ export def "app-cashflow-transactions-detach" [
   let qp = [(serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10573,7 +10600,7 @@ export def "app-cashflow-transactions-attach" [
   let qp = [(serialize-qp "file" $file "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), id: (encode-path-segment $id)} | format pattern "/apps/{app_id}/transactions/{id}/attach") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10614,7 +10641,7 @@ export def "app-payments-urssaftiers-auth" [
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/auth") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10653,7 +10680,7 @@ export def "app-payments-urssaftiers-get-status" [
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/payment") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10689,7 +10716,7 @@ export def "app-payments-urssaftiers-send-payments" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/payment") $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10730,7 +10757,7 @@ export def "app-payments-urssaftiers-preview" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/preview") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10766,7 +10793,7 @@ export def "app-payments-urssaftiers-register-customer" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/register_customer") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10805,7 +10832,7 @@ export def "auth-changepassword" [
   let qp = [(serialize-qp "forgotten_password_token" $forgotten_password_token "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changepassword" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10844,7 +10871,7 @@ export def "auth-login" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/login" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10878,7 +10905,7 @@ export def "auth-logout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logout" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10912,7 +10939,7 @@ export def "account-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10954,7 +10981,7 @@ export def "account-update" [
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/me" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10988,7 +11015,7 @@ export def "auth-ping" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11022,7 +11049,7 @@ export def "auth-refresh" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refresh" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11066,7 +11093,7 @@ export def "account-create" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "cgu" $cgu "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/register" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11103,7 +11130,7 @@ export def "auth-sendpassword" [
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendpassword" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11144,7 +11171,7 @@ export def "admin-purchase-collector-push" [
   let qp = [(serialize-qp "app_identifiant" $app_identifiant "scalar") (serialize-qp "collector_key" $collector_key "scalar") (serialize-qp "invoice" $invoice "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/services/collector" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11180,7 +11207,7 @@ export def "services-vies-get" [
   if ($siren | is-empty) { error make --unspanned { msg: "path parameter 'siren' must be non-empty" } }
   let full_url = (build-url $base ({siren: (encode-path-segment $siren)} | format pattern "/services/vies/{siren}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

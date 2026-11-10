@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -185,7 +212,7 @@ export def "get-accounts" [
   let qp = [(serialize-qp "account" $account "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -233,9 +260,9 @@ export def "post-accounts-account-order-impact" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/order_impact") $auth.query)
   let req_body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Order Type": $order_type, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -270,7 +297,7 @@ export def "get-accounts-account-orders" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/orders") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -325,9 +352,9 @@ export def "post-accounts-account-orders" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/orders") $auth.query)
   let req_body = {"Aux Price": $aux_price, "ContractId": $contract_id, "Currency": $currency, "CustomerOrderId": $customer_order_id, "GermanHftAlgo": $german_hft_algo, "InstrumentType": $instrument_type, "ListingExchange": $listing_exchange, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrderRestrictions": $order_restrictions, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Ticker": $ticker, "Time in Force": $time_in_force} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -364,7 +391,7 @@ export def "delete-accounts-account-orders-customer-order-id" [
   if ($customer_order_id | is-empty) { error make --unspanned { msg: "path parameter 'CustomerOrderId' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -401,7 +428,7 @@ export def "get-accounts-account-orders-customer-order-id" [
   if ($customer_order_id | is-empty) { error make --unspanned { msg: "path parameter 'CustomerOrderId' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -432,7 +459,7 @@ export def "put-accounts-account-orders-customer-order-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --aux-price: float # Required Price to support Stop and Stop Limit orders
-  --body-customer-order-id: string # The new order ID assigned by the customer for the modification.
+  --body-customer-order-id: string # The new order ID assigned by the customer for the modification. (spec name: CustomerOrderId)
   --german-hft-algo: oneof<nothing, bool> # By setting this bool to false the customer attests that the order is not subject to German HFT Act, was not generated using any automated algorithm, and no algorithm determined or changed financial instrument, side, quantity, order type, limit or other price, trading venue or timing of this order. Currently we cannot accept orders where this flag is set to true. Such orders will be rejected.
   --mifid2-algo: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for algos that are responsible for investment decisions
   --mifid2-decision-maker: string # This field permits specification of the user's preregistered (via account management) MiFID II short code for decision makers.
@@ -453,9 +480,9 @@ export def "put-accounts-account-orders-customer-order-id" [
   if ($customer_order_id | is-empty) { error make --unspanned { msg: "path parameter 'CustomerOrderId' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account), customer_order_id: (encode-path-segment $customer_order_id)} | format pattern "/accounts/{account}/orders/{customer_order_id}") $auth.query)
   let req_body = {"Aux Price": $aux_price, "CustomerOrderId": $body_customer_order_id, "GermanHftAlgo": $german_hft_algo, "Mifid2Algo": $mifid2_algo, "Mifid2DecisionMaker": $mifid2_decision_maker, "Mifid2ExecutionAlgo": $mifid2_execution_algo, "Mifid2ExecutionTrader": $mifid2_execution_trader, "Order Type": $order_type, "OrigCustomerOrderId": $orig_customer_order_id, "Outside RTH": $outside_rth, "Price": $price, "Quantity": $quantity, "Side": $side, "Time in Force": $time_in_force} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -490,7 +517,7 @@ export def "get-accounts-account-positions" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/positions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -525,7 +552,7 @@ export def "get-accounts-account-summary" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -560,7 +587,7 @@ export def "get-accounts-account-trades" [
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/accounts/{account}/trades") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -593,7 +620,7 @@ export def "get-marketdata-exchange-components" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/exchange_components" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -626,7 +653,7 @@ export def "get-marketdata-snapshot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketdata/snapshot" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -667,9 +694,9 @@ export def "post-oauth-access-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/access_token" $auth.query)
   let req_body = {"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token, "oauth_verifier": $oauth_verifier} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -710,9 +737,9 @@ export def "post-oauth-live-session-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/live_session_token" $auth.query)
   let req_body = {"diffie_hellman_challenge": $diffie_hellman_challenge, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp, "oauth_token": $oauth_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -752,9 +779,9 @@ export def "post-oauth-request-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/request_token" $auth.query)
   let req_body = {"oauth_callback": $oauth_callback, "oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_signature": $oauth_signature, "oauth_signature_method": $oauth_signature_method, "oauth_timestamp": $oauth_timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -787,7 +814,7 @@ export def "get-secdef" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secdef" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

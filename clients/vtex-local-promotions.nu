@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -189,7 +216,7 @@ export def "usagenotification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   account_id: string
   calculator_ids: list<string>
   coupon: string
@@ -205,14 +232,14 @@ export def "usagenotification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pub/notifications" $auth.query)
   let req_body = {"accountId": $account_id, "calculatorIds": $calculator_ids, "coupon": $coupon, "itemsCount": $items_count, "orderId": $order_id, "profileId": $profile_id, "used": $used} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "used") == null) { error make --unspanned { msg: "required body field 'used' missing: pass --used or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -242,7 +269,7 @@ export def "get-archived-promotions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -250,9 +277,9 @@ export def "get-archived-promotions" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/archive/benefits/calculatorConfiguration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "archive-promotion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -292,9 +319,9 @@ export def "archive-promotion" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/archive/calculatorConfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -325,7 +352,7 @@ export def "getarchivedbycouponcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -334,9 +361,9 @@ export def "getarchivedbycouponcode" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -367,7 +394,7 @@ export def "archivebycouponcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -376,9 +403,9 @@ export def "archivebycouponcode" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/archive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -408,7 +435,7 @@ export def "get-archived-taxes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -416,9 +443,9 @@ export def "get-archived-taxes" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/archive/taxes/calculatorConfiguration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -448,7 +475,7 @@ export def "get-all-benefits" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<archivedItems: list<string>, disabledItems: list<any>, items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>, limitConfiguration: record<activesCount: int, limit: int>, limitConfigurationMaxPrice: record<activesCount: int, limit: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -456,9 +483,9 @@ export def "get-all-benefits" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/benefits/calculatorconfiguration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -500,7 +527,7 @@ export def "create-or-update-calculator-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --absolute-shipping-discount-value: float # Maximum shipping value. (e.g. 0)
   --accumulate-with-manual-price: oneof<nothing, bool> # Allows the promotion to apply to products whose prices have been manually added by a call-center operator. (e.g. false)
   --activate-gifts-multiplier: oneof<nothing, bool> # If set as `true`, it activates gifts Multiplier. (e.g. false)
@@ -612,13 +639,13 @@ export def "create-or-update-calculator-configuration" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/calculatorconfiguration" $auth.query)
   let req_body = {"absoluteShippingDiscountValue": $absolute_shipping_discount_value, "accumulateWithManualPrice": $accumulate_with_manual_price, "activateGiftsMultiplier": $activate_gifts_multiplier, "activeDaysOfWeek": $active_days_of_week, "affiliates": $affiliates, "applyToAllShippings": $apply_to_all_shippings, "areSalesChannelIdsExclusive": $are_sales_channel_ids_exclusive, "beginDateUtc": $begin_date_utc, "brands": $brands, "brandsAreInclusive": $brands_are_inclusive, "campaigns": $campaigns, "cardIssuers": $card_issuers, "categories": $categories, "categoriesAreInclusive": $categories_are_inclusive, "clusterExpressions": $cluster_expressions, "collections": $collections, "collections1BuyTogether": $collections1_buy_together, "collections2BuyTogether": $collections2_buy_together, "collectionsIsInclusive": $collections_is_inclusive, "compareListPriceAndPrice": $compare_list_price_and_price, "conditionsIds": $conditions_ids, "coupon": $coupon, "cumulative": $cumulative, "daysAgoOfPurchases": $days_ago_of_purchases, "description": $description, "disableDeal": $disable_deal, "discountType": $discount_type, "enableBuyTogetherPerSku": $enable_buy_together_per_sku, "endDateUtc": $end_date_utc, "firstBuyIsProfileOptimistic": $first_buy_is_profile_optimistic, "giftListTypes": $gift_list_types, "idCalculatorConfiguration": $id_calculator_configuration, "idSeller": $id_seller, "idSellerIsInclusive": $id_seller_is_inclusive, "idsSalesChannel": $ids_sales_channel, "installment": $installment, "isActive": $is_active, "isArchived": $is_archived, "isDifferentListPriceAndPrice": $is_different_list_price_and_price, "isFeatured": $is_featured, "isFirstBuy": $is_first_buy, "isMinMaxInstallments": $is_min_max_installments, "isSlaSelected": $is_sla_selected, "itemMaxPrice": $item_max_price, "itemMinPrice": $item_min_price, "lastModified": $last_modified, "listSku1BuyTogether": $list_sku1_buy_together, "listSku2BuyTogether": $list_sku2_buy_together, "marketingTags": $marketing_tags, "marketingTagsAreNotInclusive": $marketing_tags_are_not_inclusive, "maxInstallment": $max_installment, "maxNumberOfAffectedItems": $max_number_of_affected_items, "maxNumberOfAffectedItemsGroupKey": $max_number_of_affected_items_group_key, "maxPricesPerItems": $max_prices_per_items, "maxUsage": $max_usage, "maxUsagePerClient": $max_usage_per_client, "maximumUnitPriceDiscount": $maximum_unit_price_discount, "merchants": $merchants, "minInstallment": $min_installment, "minimumQuantityBuyTogether": $minimum_quantity_buy_together, "multipleUsePerClient": $multiple_use_per_client, "name": $name, "newOffset": $new_offset, "nominalDiscountValue": $nominal_discount_value, "nominalRewardValue": $nominal_reward_value, "nominalShippingDiscountValue": $nominal_shipping_discount_value, "nominalTax": $nominal_tax, "offset": $offset, "orderStatusRewardValue": $order_status_reward_value, "origin": $origin, "paymentsMethods": $payments_methods, "paymentsRules": $payments_rules, "percentualDiscountValue": $percentual_discount_value, "percentualDiscountValueList": $percentual_discount_value_list, "percentualDiscountValueList1": $percentual_discount_value_list1, "percentualDiscountValueList2": $percentual_discount_value_list2, "percentualRewardValue": $percentual_reward_value, "percentualShippingDiscountValue": $percentual_shipping_discount_value, "percentualTax": $percentual_tax, "products": $products, "productsAreInclusive": $products_are_inclusive, "productsSpecifications": $products_specifications, "quantityToAffectBuyTogether": $quantity_to_affect_buy_together, "rebatePercentualDiscountValue": $rebate_percentual_discount_value, "restrictionsBins": $restrictions_bins, "shippingPercentualTax": $shipping_percentual_tax, "shouldDistributeDiscountAmongMatchedItems": $should_distribute_discount_among_matched_items, "skus": $skus, "skusAreInclusive": $skus_are_inclusive, "skusGift": $skus_gift, "slasIds": $slas_ids, "stores": $stores, "storesAreInclusive": $stores_are_inclusive, "totalValueCeling": $total_value_celing, "totalValueFloor": $total_value_floor, "totalValueIncludeAllItems": $total_value_include_all_items, "totalValueMode": $total_value_mode, "totalValuePurchase": $total_value_purchase, "type": $type, "useNewProgressiveAlgorithm": $use_new_progressive_algorithm, "utmCampaign": $utm_campaign, "utmSource": $utm_source, "zipCodeRanges": $zip_code_ranges} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -650,7 +677,7 @@ export def "get-calculator-configuration-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<absoluteShippingDiscountValue: float, accumulateWithManualPrice: bool, activateGiftsMultiplier: bool, activeDaysOfWeek: list<string>, affiliates: table<id: string, name: string>, applyToAllShippings: bool, areSalesChannelIdsExclusive: bool, beginDateUtc: string, brands: table<id: string, name: string>, brandsAreInclusive: bool, campaigns: list<any>, cardIssuers: list<any>, categories: table<id: string, name: string>, categoriesAreInclusive: bool, clusterExpressions: list<string>, collections: table<id: string, name: string>, collections1BuyTogether: list<string>, collections2BuyTogether: list<any>, collectionsIsInclusive: bool, compareListPriceAndPrice: bool, conditionsIds: list<string>, coupon: list<any>, cumulative: bool, daysAgoOfPurchases: int, description: string, disableDeal: bool, discountType: string, enableBuyTogetherPerSku: bool, endDateUtc: string, firstBuyIsProfileOptimistic: bool, giftListTypes: list<string>, idCalculatorConfiguration: string, idSeller: string, idSellerIsInclusive: bool, idsSalesChannel: list<string>, installment: int, isActive: bool, isArchived: bool, isDifferentListPriceAndPrice: bool, isFeatured: bool, isFirstBuy: bool, isMinMaxInstallments: bool, isSlaSelected: bool, itemMaxPrice: float, itemMinPrice: float, lastModified: string, listSku1BuyTogether: list<any>, listSku2BuyTogether: list<any>, marketingTags: list<string>, marketingTagsAreNotInclusive: bool, maxInstallment: int, maxNumberOfAffectedItems: int, maxNumberOfAffectedItemsGroupKey: string, maxPricesPerItems: list<any>, maxUsage: int, maxUsagePerClient: int, maximumUnitPriceDiscount: float, merchants: list<any>, minInstallment: int, minimumQuantityBuyTogether: int, multipleSkusCause: record, multipleUsePerClient: bool, name: string, newOffset: float, nominalDiscountValue: float, nominalRewardValue: float, nominalShippingDiscountValue: float, nominalTax: float, offset: int, orderStatusRewardValue: string, origin: string, paymentsMethods: table<id: string, name: string>, paymentsRules: list<any>, percentualDiscountValue: float, percentualDiscountValueList: list<float>, percentualDiscountValueList1: float, percentualDiscountValueList2: float, percentualRewardValue: float, percentualShippingDiscountValue: float, percentualTax: float, products: table<id: string, name: string>, productsAreInclusive: bool, productsSpecifications: list<any>, quantityToAffectBuyTogether: int, rebatePercentualDiscountValue: float, restrictionsBins: list<string>, shippingPercentualTax: float, shouldDistributeDiscountAmongMatchedItems: bool, skus: table<id: string, name: string>, skusAreInclusive: bool, skusGift: record<gifts: int, quantitySelectable: int>, slasIds: list<string>, stores: list<any>, storesAreInclusive: bool, totalValueCeling: float, totalValueFloor: float, totalValueIncludeAllItems: bool, totalValueMode: string, totalValuePurchase: float, type: string, useNewProgressiveAlgorithm: bool, utmCampaign: string, utmSource: string, zipCodeRanges: table<inclusive: bool, zipCodeFrom: string, zipCodeTo: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -659,9 +686,9 @@ export def "get-calculator-configuration-by-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/calculatorconfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = ($accept | default "Promotion")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -691,16 +718,16 @@ export def "getcampaignaudiences" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, e.g. application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<beginDateUtc: string, endDateUtc: string, id: string, isActive: bool, isAndOperator: bool, isArchived: bool, lastModified: record<dateUtc: string, user: string>, name: string, targetConfigurations: list<record>>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -730,7 +757,7 @@ export def "setcampaignconfiguration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --begin-date-utc: string # Start date of the campaign audience in UTC format. (e.g. 2020-05-01T21:30:00Z)
   --end-date-utc: string # End date of the campaign audience in UTC format. (e.g. 2020-05-02T01:30:00Z)
   --id: string # Campaign audience ID. (e.g. dd270d06-1ed1-47fc-b04e-a2431121b5a4)
@@ -748,13 +775,13 @@ export def "setcampaignconfiguration" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/campaignConfiguration" $auth.query)
   let req_body = {"beginDateUtc": $begin_date_utc, "endDateUtc": $end_date_utc, "id": $id, "isActive": $is_active, "isAndOperator": $is_and_operator, "isArchived": $is_archived, "lastModified": $last_modified, "name": $name, "targetConfigurations": $target_configurations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -785,7 +812,7 @@ export def "getcampaignconfiguration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<beginDateUtc: string, endDateUtc: string, id: string, isActive: bool, isAndOperator: bool, isArchived: bool, lastModified: record<dateUtc: string, user: string>, name: string, targetConfigurations: table<affiliates: list, areSalesChannelIdsExclusive: bool, brands: list, brandsAreInclusive: bool, campaigns: list, cardIssuers: list, categories: list, categoriesAreInclusive: bool, clusterExpressions: list, collections: list, collections1BuyTogether: list, collections2BuyTogether: list, collectionsIsInclusive: bool, compareListPriceAndPrice: bool, coupon: list, daysAgoOfPurchases: int, enableBuyTogetherPerSku: bool, featured: bool, firstBuyIsProfileOptimistic: bool, giftListTypes: list, id: string, idSellerIsInclusive: bool, idsSalesChannel: list, installment: int, isDifferentListPriceAndPrice: bool, isFirstBuy: bool, isMinMaxInstallments: bool, isSlaSelected: bool, itemMaxPrice: float, itemMinPrice: float, listBrand1BuyTogether: list, listCategory1BuyTogether: list, listSku1BuyTogether: list, listSku2BuyTogether: list, marketingTags: list, marketingTagsAreNotInclusive: bool, maxInstallment: int, maxUsage: int, maxUsagePerClient: int, merchants: list, minInstallment: int, minimumQuantityBuyTogether: int, multipleUsePerClient: bool, name: string, origin: string, paymentsMethods: list, paymentsRules: list, percentualDiscountValueList: list, products: list, productsAreInclusive: bool, productsSpecifications: list, quantityToAffectBuyTogether: int, restrictionsBins: list, shouldDistributeDiscountAmongMatchedItems: bool, skus: list, skusAreInclusive: bool, slasIds: list, stores: list, storesAreInclusive: bool, totalValueCeling: float, totalValueFloor: float, totalValueIncludeAllItems: bool, totalValueMode: string, totalValuePurchase: float, useNewProgressiveAlgorithm: bool, zipCodeRanges: list>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -794,9 +821,9 @@ export def "getcampaignconfiguration" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/api/rnb/pvt/campaignConfiguration/{campaign_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -826,7 +853,7 @@ export def "getall" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, default: application/json
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -834,9 +861,9 @@ export def "getall" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/coupon" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -866,7 +893,7 @@ export def "post-api-rnb-pvt-coupon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   coupon_code: string # Coupon code. (e.g. test)
   expiration_interval_per_use: string # Coupon expiration interval per use. (e.g. 00:00:00)
   --is-archived: oneof<nothing, bool> # Defines if the coupon is archived (`true`) or not (`false`). (e.g. false)
@@ -881,14 +908,14 @@ export def "post-api-rnb-pvt-coupon" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/coupon" $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "isArchived": $is_archived, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isArchived") == null) { error make --unspanned { msg: "required body field 'isArchived' missing: pass --is-archived or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -917,7 +944,7 @@ export def "post-api-rnb-pvt-coupon-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   coupon_code: string # Coupon code. (e.g. summersale10)
   expiration_interval_per_use: string # Coupon expiration interval per use. (e.g. 00:00:00)
   max_items_per_client: int # Maximum items per client that the coupon can be applied. (e.g. 10)
@@ -931,13 +958,13 @@ export def "post-api-rnb-pvt-coupon-1" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/coupon/" $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -968,7 +995,7 @@ export def "getusage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<couponCode: string, hostName: string, profileUsages: record<profileId: record<orderUsage: list>>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -977,9 +1004,9 @@ export def "getusage" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/usage/{coupon_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1010,7 +1037,7 @@ export def "getbycouponcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<couponCode: string, expirationIntervalPerUse: string, isArchived: bool, lastModifiedUtc: string, maxItemsPerClient: int, utmCampaign: string, utmSource: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1019,9 +1046,9 @@ export def "getbycouponcode" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1052,7 +1079,7 @@ export def "massive-generation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --quantity: int # Quantity of coupons to generate (required, e.g. 10)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   coupon_code: string # Coupon code. (e.g. ctest)
   expiration_interval_per_use: string # Coupon expiration interval per use. (e.g. 00:00:00)
   max_items_per_client: int # Defines if the coupon is archived (`true`) or not (`false`). (e.g. 1)
@@ -1068,13 +1095,13 @@ export def "massive-generation" [
   let qp = [(serialize-qp "quantity" $quantity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/rnb/pvt/coupons" $qp $auth.query)
   let req_body = {"couponCode": $coupon_code, "expirationIntervalPerUse": $expiration_interval_per_use, "maxItemsPerClient": $max_items_per_client, "utmCampaign": $utm_campaign, "utmSource": $utm_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1103,7 +1130,7 @@ export def "post-api-rnb-pvt-import-calculator-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, e.g. text/csv)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --x-vtex-calculator-name: string # Promotion Name. (required, e.g. Test)
   --x-vtex-cumulative: oneof<nothing, bool> # Defines if the Promotion is cumulative with other promotions. (e.g. false)
   --x-vtex-cluster-operator: string # This header allows implementing the Promotion in multiples client clusters. You can set the value as `all` - the Promotion will be valid to all the clusters - or `any` - the Promotion will be valid to any of the clusters. (e.g. any)
@@ -1123,13 +1150,13 @@ export def "post-api-rnb-pvt-import-calculator-configuration" [
   if ($x_vtex_accumulate_with_manual_prices == null) { error make --unspanned { msg: "required header parameter 'X-VTEX-accumulate-with-manual-prices' missing: pass --x-vtex-accumulate-with-manual-prices" } }
   let full_url = (build-url $base "/api/rnb/pvt/import/calculatorConfiguration" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/csv")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1159,7 +1186,7 @@ export def "put-api-rnb-pvt-import-calculator-configuration-promotion-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, e.g. text/csv)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --x-vtex-calculator-name: string # Promotion Name. (required, e.g. Test)
   --x-vtex-cumulative: oneof<nothing, bool> # Defines if the Promotion is cumulative with other promotions. (e.g. false)
   --x-vtex-cluster-operator: string # This header allows implementing the Promotion in multiples client clusters. You can set the value as `all` - the Promotion will be valid to all the clusters - or `any` - the Promotion will be valid to any of the clusters. (e.g. any)
@@ -1180,13 +1207,13 @@ export def "put-api-rnb-pvt-import-calculator-configuration-promotion-id" [
   if ($x_vtex_accumulate_with_manual_prices == null) { error make --unspanned { msg: "required header parameter 'X-VTEX-accumulate-with-manual-prices' missing: pass --x-vtex-accumulate-with-manual-prices" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/api/rnb/pvt/import/calculatorConfiguration/{promotion_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-calculator-name": $x_vtex_calculator_name, "X-VTEX-cumulative": $x_vtex_cumulative, "X-VTEX-cluster-operator": $x_vtex_cluster_operator, "X-VTEX-cluster-expression": $x_vtex_cluster_expression, "X-VTEX-start-date": $x_vtex_start_date, "X-VTEX-end-date": $x_vtex_end_date, "X-VTEX-accumulate-with-manual-prices": $x_vtex_accumulate_with_manual_prices} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/csv")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1215,7 +1242,7 @@ export def "post-api-rnb-pvt-multiple-coupons" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: list
 ]: any -> oneof<list<string>, string, record, nothing> {
   let input = $in
@@ -1225,13 +1252,13 @@ export def "post-api-rnb-pvt-multiple-coupons" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/multiple-coupons" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1261,7 +1288,7 @@ export def "get-all-taxes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<archivedItems: list<string>, disabledItems: list<string>, items: table<Campaigns: list, activateGiftsMultiplier: bool, areSalesChannelIdsExclusive: bool, beginDate: string, description: string, endDate: string, hasMaxPricePerItem: bool, idCalculatorConfiguration: string, idsSalesChannel: list, isActive: bool, isArchived: bool, isTax: bool, lastModifiedUtc: string, maxUsage: float, name: string, percentualTax: float, scope: record, status: string, type: string, utmCampain: string, utmSource: string, utmiCampaign: string>, limitConfiguration: record<activesCount: int, limit: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1269,9 +1296,9 @@ export def "get-all-taxes" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/rnb/pvt/taxes/calculatorconfiguration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1302,7 +1329,7 @@ export def "unarchive-promotion" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1311,9 +1338,9 @@ export def "unarchive-promotion" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id_calculator_configuration: (encode-path-segment $id_calculator_configuration)} | format pattern "/api/rnb/pvt/unarchive/calculatorConfiguration/{id_calculator_configuration}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1344,7 +1371,7 @@ export def "unarchivebycouponcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1353,9 +1380,9 @@ export def "unarchivebycouponcode" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({coupon_code: (encode-path-segment $coupon_code)} | format pattern "/api/rnb/pvt/unarchive/coupon/{coupon_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1386,7 +1413,7 @@ export def "saveprice" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: list
 ]: any -> any {
   let input = $in
@@ -1398,13 +1425,13 @@ export def "saveprice" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-sheet" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1437,7 +1464,7 @@ export def "getallpaged" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://rnb.vtexcommercestable.com.br/api/pricing/pvt")
@@ -1449,9 +1476,9 @@ export def "getallpaged" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({page: (encode-path-segment $page), page_size: (encode-path-segment $page_size)} | format pattern "/price-sheet/all/{page}/{page_size}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1482,7 +1509,7 @@ export def "pricebycontext" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   id: int # format: int32
   item_id: int # format: int32
   sales_channel: int # format: int32
@@ -1499,13 +1526,13 @@ export def "pricebycontext" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-sheet/context" $qp $auth.query)
   let req_body = {"id": $id, "itemId": $item_id, "salesChannel": $sales_channel, "sellerId": $seller_id, "validFrom": $valid_from, "validTo": $valid_to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1537,7 +1564,7 @@ export def "deletebysku-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://rnb.exampleParameterValue.com.br/api/pricing/pvt")
@@ -1548,9 +1575,9 @@ export def "deletebysku-id" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1582,7 +1609,7 @@ export def "pricebysku-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://rnb.vtexcommercestable.com.br/api/pricing/pvt")
@@ -1593,9 +1620,9 @@ export def "pricebysku-id" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/price-sheet/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1627,7 +1654,7 @@ export def "pricebysku-idandtrade-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # required, e.g. {{accountName}}
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROMOTIONS_TAXES_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROMOTIONS_TAXES_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -1640,9 +1667,9 @@ export def "pricebysku-idandtrade-policy" [
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), trade_policy: (encode-path-segment $trade_policy)} | format pattern "/price-sheet/{sku_id}/{trade_policy}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1672,7 +1699,7 @@ export def "calculatediscountsandtaxes-bundles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-shopping-cart: oneof<nothing, bool>
   items: list # item shape: {id: string, index: int, isGift: bool, logisticsInfos: list<string>, measurementUnit: string, params: list, priceSheet: list<string>, priceTags: list<string>, productSpecifications: list<string>, quantity: int, sellerId: string, unitMultiplier: int}
   origin: string
@@ -1687,14 +1714,14 @@ export def "calculatediscountsandtaxes-bundles" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/pub/bundles" $auth.query)
   let req_body = {"isShoppingCart": $is_shopping_cart, "items": $items, "origin": $origin, "params": $params, "profileId": $profile_id, "salesChannel": $sales_channel} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isShoppingCart") == null) { error make --unspanned { msg: "required body field 'isShoppingCart' missing: pass --is-shopping-cart or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url

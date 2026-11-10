@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -178,7 +205,7 @@ export def "get-api" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -213,7 +240,7 @@ export def "get-api-ability-scores-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/ability-scores/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -248,7 +275,7 @@ export def "get-api-alignments-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/alignments/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "get-api-backgrounds-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/backgrounds/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -318,7 +345,7 @@ export def "get-api-classes-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -353,7 +380,7 @@ export def "get-api-classes-index-features" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/features") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -390,7 +417,7 @@ export def "get-api-classes-index-levels" [
   let qp = [(serialize-qp "subclass" $subclass "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/levels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -427,7 +454,7 @@ export def "get-api-classes-index-levels-class-level" [
   if ($class_level | is-empty) { error make --unspanned { msg: "path parameter 'class_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -464,7 +491,7 @@ export def "get-api-classes-index-levels-class-level-features" [
   if ($class_level | is-empty) { error make --unspanned { msg: "path parameter 'class_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}/features") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -501,7 +528,7 @@ export def "get-api-classes-index-levels-spell-level-spells" [
   if ($spell_level | is-empty) { error make --unspanned { msg: "path parameter 'spell_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), spell_level: (encode-path-segment $spell_level)} | format pattern "/api/classes/{index}/levels/{spell_level}/spells") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -536,7 +563,7 @@ export def "get-api-classes-index-multi-classing" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/multi-classing") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -571,7 +598,7 @@ export def "get-api-classes-index-proficiencies" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/proficiencies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -606,7 +633,7 @@ export def "get-api-classes-index-spellcasting" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spellcasting") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -641,7 +668,7 @@ export def "get-api-classes-index-spells" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spells") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -676,7 +703,7 @@ export def "get-api-classes-index-subclasses" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/subclasses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -711,7 +738,7 @@ export def "get-api-conditions-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/conditions/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -746,7 +773,7 @@ export def "get-api-damage-types-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/damage-types/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -781,7 +808,7 @@ export def "get-api-equipment-categories-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment-categories/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -816,7 +843,7 @@ export def "get-api-equipment-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -851,7 +878,7 @@ export def "get-api-feats-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/feats/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -886,7 +913,7 @@ export def "get-api-features-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/features/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -921,7 +948,7 @@ export def "get-api-languages-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/languages/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -956,7 +983,7 @@ export def "get-api-magic-items-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-items/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -991,7 +1018,7 @@ export def "get-api-magic-schools-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-schools/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1026,7 +1053,7 @@ export def "get-api-monsters" [
   let qp = [(serialize-qp "challenge_rating" $challenge_rating "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/monsters" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1061,7 +1088,7 @@ export def "get-api-monsters-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/monsters/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1096,7 +1123,7 @@ export def "get-api-proficiencies-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/proficiencies/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1131,7 +1158,7 @@ export def "get-api-races-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1166,7 +1193,7 @@ export def "get-api-races-index-proficiencies" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/proficiencies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1201,7 +1228,7 @@ export def "get-api-races-index-subraces" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/subraces") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1236,7 +1263,7 @@ export def "get-api-races-index-traits" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/traits") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1271,7 +1298,7 @@ export def "get-api-rule-sections-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rule-sections/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1306,7 +1333,7 @@ export def "get-api-rules-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rules/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1341,7 +1368,7 @@ export def "get-api-skills-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/skills/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1377,7 +1404,7 @@ export def "get-api-spells" [
   let qp = [(serialize-qp "level" $level "multi") (serialize-qp "school" $school "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/spells" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1412,7 +1439,7 @@ export def "get-api-spells-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/spells/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1447,7 +1474,7 @@ export def "get-api-subclasses-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1482,7 +1509,7 @@ export def "get-api-subclasses-index-features" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/features") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1517,7 +1544,7 @@ export def "get-api-subclasses-index-levels" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/levels") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1554,7 +1581,7 @@ export def "get-api-subclasses-index-levels-subclass-level" [
   if ($subclass_level | is-empty) { error make --unspanned { msg: "path parameter 'subclass_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1591,7 +1618,7 @@ export def "get-api-subclasses-index-levels-subclass-level-features" [
   if ($subclass_level | is-empty) { error make --unspanned { msg: "path parameter 'subclass_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}/features") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1626,7 +1653,7 @@ export def "get-api-subraces-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1661,7 +1688,7 @@ export def "get-api-subraces-index-proficiencies" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/proficiencies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1696,7 +1723,7 @@ export def "get-api-subraces-index-traits" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/traits") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1731,7 +1758,7 @@ export def "get-api-traits-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/traits/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1766,7 +1793,7 @@ export def "get-api-weapon-properties-index" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/weapon-properties/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1801,7 +1828,7 @@ export def "get-api-endpoint" [
   if ($endpoint | is-empty) { error make --unspanned { msg: "path parameter 'endpoint' must be non-empty" } }
   let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/api/{endpoint}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

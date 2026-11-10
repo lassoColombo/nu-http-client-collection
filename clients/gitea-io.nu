@@ -91,9 +91,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -114,6 +116,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -241,7 +268,7 @@ export def "activitypub-person" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/activitypub/user/{username}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -277,7 +304,7 @@ export def "activitypub-person-inbox" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/activitypub/user/{username}/inbox") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -315,7 +342,7 @@ export def "admin-cron-list" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/cron" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -351,7 +378,7 @@ export def "admin-cron-run" [
   if ($task | is-empty) { error make --unspanned { msg: "path parameter 'task' must be non-empty" } }
   let full_url = (build-url $base ({task: (encode-path-segment $task)} | format pattern "/admin/cron/{task}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -389,7 +416,7 @@ export def "admin-list-hooks" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/hooks" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -431,9 +458,9 @@ export def "admin-create-hook" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/hooks" $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -470,7 +497,7 @@ export def "admin-get-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/admin/hooks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -513,9 +540,9 @@ export def "admin-edit-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/admin/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -553,7 +580,7 @@ export def "admin-get-all-orgs" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/orgs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -592,7 +619,7 @@ export def "admin-unadopted-list" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pattern" $pattern "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/unadopted" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -630,7 +657,7 @@ export def "admin-delete-unadopted-repository" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/admin/unadopted/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -668,7 +695,7 @@ export def "admin-adopt-repository" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/admin/unadopted/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -706,7 +733,7 @@ export def "admin-get-all-users" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/users" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -753,9 +780,9 @@ export def "admin-create-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/users" $auth.query)
   let req_body = {"created_at": $created_at, "email": $email, "full_name": $full_name, "login_name": $login_name, "must_change_password": $must_change_password, "password": $password, "restricted": $restricted, "send_notify": $send_notify, "source_id": $source_id, "username": $username, "visibility": $visibility} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -791,7 +818,7 @@ export def "admin-delete-user" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -847,9 +874,9 @@ export def "admin-edit-user" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}") $auth.query)
   let req_body = {"active": $active, "admin": $admin, "allow_create_organization": $allow_create_organization, "allow_git_hook": $allow_git_hook, "allow_import_local": $allow_import_local, "description": $description, "email": $email, "full_name": $full_name, "location": $location, "login_name": $login_name, "max_repo_creation": $max_repo_creation, "must_change_password": $must_change_password, "password": $password, "prohibit_login": $prohibit_login, "restricted": $restricted, "source_id": $source_id, "visibility": $visibility, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -890,9 +917,9 @@ export def "admin-create-public-key" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/keys") $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -930,7 +957,7 @@ export def "admin-delete-user-public-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/admin/users/{username}/keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -965,7 +992,7 @@ export def "admin-create-org" [
   --full-name: string
   --location: string
   --repo-admin-change-team-access: oneof<nothing, bool>
-  --body-username: string
+  --body-username: string # (spec name: username)
   --visibility: string@visibility-completer # possible values are `public` (default), `limited` or `private`
   --website: string
 ]: any -> oneof<record<avatar_url: string, description: string, full_name: string, id: int, location: string, name: string, repo_admin_change_team_access: bool, username: string, visibility: string, website: string>, string, nothing> {
@@ -975,10 +1002,10 @@ export def "admin-create-org" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/orgs") $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $body_username, "visibility": $visibility, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1027,9 +1054,9 @@ export def "admin-create-repo" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1065,7 +1092,7 @@ export def "admin-delete-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/amdin/hooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1105,9 +1132,9 @@ export def "render-markdown" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown" $auth.query)
   let req_body = {"Context": $context, "Mode": $mode, "Text": $text, "Wiki": $wiki} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1144,9 +1171,9 @@ export def "render-markdown-raw" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown/raw" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1181,7 +1208,7 @@ export def "get-node-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nodeinfo" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1224,7 +1251,7 @@ export def "notify-get-list" [
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "subject-type" $subject_type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1264,7 +1291,7 @@ export def "notify-read-list" [
   let qp = [(serialize-qp "last_read_at" $last_read_at "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "to-status" $to_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1299,7 +1326,7 @@ export def "notify-new-available" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/new" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1336,7 +1363,7 @@ export def "notify-get-thread" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/threads/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1375,7 +1402,7 @@ export def "notify-read-thread" [
   let qp = [(serialize-qp "to-status" $to_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/threads/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1426,9 +1453,9 @@ export def "create-org-repo-deprecated" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/org/{org}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1466,7 +1493,7 @@ export def "org-get-all" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orgs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1509,9 +1536,9 @@ export def "org-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs" $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $username, "visibility": $visibility, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1547,7 +1574,7 @@ export def "org-delete" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1584,7 +1611,7 @@ export def "org-get" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1628,9 +1655,9 @@ export def "org-edit" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}") $auth.query)
   let req_body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "visibility": $visibility, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1670,7 +1697,7 @@ export def "org-list-hooks" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1714,9 +1741,9 @@ export def "org-create-hook" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1754,7 +1781,7 @@ export def "org-delete-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/hooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1793,7 +1820,7 @@ export def "org-get-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/hooks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1838,9 +1865,9 @@ export def "org-edit-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1880,7 +1907,7 @@ export def "org-list-labels" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/labels") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1922,9 +1949,9 @@ export def "org-create-label" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/labels") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1962,7 +1989,7 @@ export def "org-delete-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/labels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2001,7 +2028,7 @@ export def "org-get-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/labels/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2045,9 +2072,9 @@ export def "org-edit-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), id: (encode-path-segment $id)} | format pattern "/orgs/{org}/labels/{id}") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2087,7 +2114,7 @@ export def "org-list-members" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2125,7 +2152,7 @@ export def "org-delete-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2163,7 +2190,7 @@ export def "org-is-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2203,7 +2230,7 @@ export def "org-list-public-members" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/public_members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2241,7 +2268,7 @@ export def "org-conceal-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2279,7 +2306,7 @@ export def "org-is-public-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2317,7 +2344,7 @@ export def "org-publicize-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2357,7 +2384,7 @@ export def "org-list-repos" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2406,9 +2433,9 @@ export def "create-org-repo" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2448,7 +2475,7 @@ export def "org-list-teams" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2493,9 +2520,9 @@ export def "org-create-team" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $auth.query)
   let req_body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2536,7 +2563,7 @@ export def "team-search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "include_desc" $include_desc "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams/search") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2578,7 +2605,7 @@ export def "list-packages" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner)} | format pattern "/packages/{owner}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2620,7 +2647,7 @@ export def "delete-package" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), type: (encode-path-segment $type), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/packages/{owner}/{type}/{name}/{version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2663,7 +2690,7 @@ export def "get-package" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), type: (encode-path-segment $type), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/packages/{owner}/{type}/{name}/{version}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2706,7 +2733,7 @@ export def "list-package-files" [
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), type: (encode-path-segment $type), name: (encode-path-segment $name), version: (encode-path-segment $version)} | format pattern "/packages/{owner}/{type}/{name}/{version}/files") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2759,7 +2786,7 @@ export def "issue-search-issues" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestones" $milestones "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "priority_repo_id" $priority_repo_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "assigned" $assigned "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "mentioned" $mentioned "scalar") (serialize-qp "review_requested" $review_requested "scalar") (serialize-qp "reviewed" $reviewed "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "team" $team "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repos/issues/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2815,9 +2842,9 @@ export def "repo-migrate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repos/migrate" $auth.query)
   let req_body = {"auth_password": $auth_password, "auth_token": $auth_token, "auth_username": $auth_username, "clone_addr": $clone_addr, "description": $description, "issues": $issues, "labels": $labels, "lfs": $lfs, "lfs_endpoint": $lfs_endpoint, "milestones": $milestones, "mirror": $mirror, "mirror_interval": $mirror_interval, "private": $private, "pull_requests": $pull_requests, "releases": $releases, "repo_name": $repo_name, "repo_owner": $repo_owner, "service": $service, "uid": $uid, "wiki": $wiki} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2870,7 +2897,7 @@ export def "repo-search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "includeDesc" $include_desc "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "priority_owner_id" $priority_owner_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "starredBy" $starred_by "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "exclusive" $exclusive "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repos/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2908,7 +2935,7 @@ export def "repo-delete" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2947,7 +2974,7 @@ export def "repo-get" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3014,9 +3041,9 @@ export def "repo-edit" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}") $auth.query)
   let req_body = {"allow_manual_merge": $allow_manual_merge, "allow_merge_commits": $allow_merge_commits, "allow_rebase": $allow_rebase, "allow_rebase_explicit": $allow_rebase_explicit, "allow_rebase_update": $allow_rebase_update, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "autodetect_manual_merge": $autodetect_manual_merge, "default_allow_maintainer_edit": $default_allow_maintainer_edit, "default_branch": $default_branch, "default_delete_branch_after_merge": $default_delete_branch_after_merge, "default_merge_style": $default_merge_style, "description": $description, "enable_prune": $enable_prune, "external_tracker": $external_tracker, "external_wiki": $external_wiki, "has_issues": $has_issues, "has_projects": $has_projects, "has_pull_requests": $has_pull_requests, "has_wiki": $has_wiki, "ignore_whitespace_conflicts": $ignore_whitespace_conflicts, "internal_tracker": $internal_tracker, "mirror_interval": $mirror_interval, "name": $name, "private": $private, "template": $template, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3056,7 +3083,7 @@ export def "repo-get-archive" [
   if ($archive | is-empty) { error make --unspanned { msg: "path parameter 'archive' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), archive: (encode-path-segment $archive)} | format pattern "/repos/{owner}/{repo}/archive/{archive}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3095,7 +3122,7 @@ export def "repo-get-assignees" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/assignees") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3134,7 +3161,7 @@ export def "repo-list-branch-protection" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branch_protections") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3197,9 +3224,9 @@ export def "repo-create-branch-protection" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branch_protections") $auth.query)
   let req_body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "branch_name": $branch_name, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "rule_name": $rule_name, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3239,7 +3266,7 @@ export def "repo-delete-branch-protection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3280,7 +3307,7 @@ export def "repo-get-branch-protection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3343,9 +3370,9 @@ export def "repo-edit-branch-protection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}") $auth.query)
   let req_body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3387,7 +3414,7 @@ export def "repo-list-branches" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3429,9 +3456,9 @@ export def "repo-create-branch" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $auth.query)
   let req_body = {"new_branch_name": $new_branch_name, "old_branch_name": $old_branch_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3471,7 +3498,7 @@ export def "repo-delete-branch" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3512,7 +3539,7 @@ export def "repo-get-branch" [
   if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3554,7 +3581,7 @@ export def "repo-list-collaborators" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/collaborators") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3594,7 +3621,7 @@ export def "repo-delete-collaborator" [
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), collaborator: (encode-path-segment $collaborator)} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3634,7 +3661,7 @@ export def "repo-check-collaborator" [
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), collaborator: (encode-path-segment $collaborator)} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3676,9 +3703,9 @@ export def "repo-add-collaborator" [
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), collaborator: (encode-path-segment $collaborator)} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}") $auth.query)
   let req_body = {"permission": $permission} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3719,7 +3746,7 @@ export def "repo-get-repo-permissions" [
   if ($collaborator | is-empty) { error make --unspanned { msg: "path parameter 'collaborator' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), collaborator: (encode-path-segment $collaborator)} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}/permission") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3764,7 +3791,7 @@ export def "repo-get-all-commits" [
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "stat" $stat "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/commits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3808,7 +3835,7 @@ export def "repo-get-combined-status-by-ref" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3854,7 +3881,7 @@ export def "repo-list-statuses-by-ref" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3895,7 +3922,7 @@ export def "repo-get-contents-list" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/contents") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3945,9 +3972,9 @@ export def "repo-delete-file" [
   if ($filepath | is-empty) { error make --unspanned { msg: "path parameter 'filepath' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "dates": $dates, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3990,7 +4017,7 @@ export def "repo-get-contents" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4040,9 +4067,9 @@ export def "repo-create-file" [
   if ($filepath | is-empty) { error make --unspanned { msg: "path parameter 'filepath' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "message": $message, "new_branch": $new_branch, "signoff": $signoff} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4094,9 +4121,9 @@ export def "repo-update-file" [
   if ($filepath | is-empty) { error make --unspanned { msg: "path parameter 'filepath' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4146,9 +4173,9 @@ export def "repo-apply-diff-patch" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/diffpatch") $auth.query)
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4190,7 +4217,7 @@ export def "repo-get-editor-config" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/editorconfig/{filepath}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4232,7 +4259,7 @@ export def "list-forks" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4274,9 +4301,9 @@ export def "create-fork" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $auth.query)
   let req_body = {"name": $name, "organization": $organization} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4317,7 +4344,7 @@ export def "get-blob" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/blobs/{sha}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4358,7 +4385,7 @@ export def "repo-get-single-commit" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4401,7 +4428,7 @@ export def "repo-download-commit-diff-or-patch" [
   if ($diff_type | is-empty) { error make --unspanned { msg: "path parameter 'diffType' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha), diff_type: (encode-path-segment $diff_type)} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}.{diff_type}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4442,7 +4469,7 @@ export def "repo-get-note" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/notes/{sha}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4481,7 +4508,7 @@ export def "repo-list-all-git-refs" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/refs") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4522,7 +4549,7 @@ export def "repo-list-git-refs" [
   if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4563,7 +4590,7 @@ export def "get-annotated-tag" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/tags/{sha}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4608,7 +4635,7 @@ export def "get-tree" [
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/git/trees/{sha}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4650,7 +4677,7 @@ export def "repo-list-hooks" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4696,9 +4723,9 @@ export def "repo-create-hook" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4737,7 +4764,7 @@ export def "repo-list-git-hooks" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks/git") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4777,7 +4804,7 @@ export def "repo-delete-git-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4818,7 +4845,7 @@ export def "repo-get-git-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4861,9 +4888,9 @@ export def "repo-edit-git-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}") $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4903,7 +4930,7 @@ export def "repo-delete-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4944,7 +4971,7 @@ export def "repo-get-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4991,9 +5018,9 @@ export def "repo-edit-hook" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}") $auth.query)
   let req_body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5035,7 +5062,7 @@ export def "repo-test-hook" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/hooks/{id}/tests") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5074,7 +5101,7 @@ export def "repo-get-issue-templates" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issue_templates") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5126,7 +5153,7 @@ export def "issue-list-issues" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "milestones" $milestones "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "created_by" $created_by "scalar") (serialize-qp "assigned_by" $assigned_by "scalar") (serialize-qp "mentioned_by" $mentioned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5175,9 +5202,9 @@ export def "issue-create-issue" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "closed": $closed, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "ref": $ref, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5221,7 +5248,7 @@ export def "issue-get-repo-comments" [
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5261,7 +5288,7 @@ export def "issue-delete-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5302,7 +5329,7 @@ export def "issue-get-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5345,9 +5372,9 @@ export def "issue-edit-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5388,7 +5415,7 @@ export def "issue-list-issue-comment-attachments" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5433,10 +5460,10 @@ export def "issue-create-issue-comment-attachment" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -5479,7 +5506,7 @@ export def "issue-delete-issue-comment-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5522,7 +5549,7 @@ export def "issue-get-issue-comment-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5567,9 +5594,9 @@ export def "issue-edit-issue-comment-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5611,9 +5638,9 @@ export def "issue-delete-comment-reaction" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5654,7 +5681,7 @@ export def "issue-get-comment-reactions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5697,9 +5724,9 @@ export def "issue-post-comment-reaction" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5739,7 +5766,7 @@ export def "issue-delete" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5780,7 +5807,7 @@ export def "issue-get-issue" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5831,9 +5858,9 @@ export def "issue-edit-issue" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "due_date": $due_date, "milestone": $milestone, "ref": $ref, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5874,7 +5901,7 @@ export def "issue-list-issue-attachments" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5919,10 +5946,10 @@ export def "issue-create-issue-attachment" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -5965,7 +5992,7 @@ export def "issue-delete-issue-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6008,7 +6035,7 @@ export def "issue-get-issue-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6053,9 +6080,9 @@ export def "issue-edit-issue-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6099,7 +6126,7 @@ export def "issue-get-comments" [
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6142,9 +6169,9 @@ export def "issue-create-comment" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6188,7 +6215,7 @@ export def "issue-delete-comment-deprecated" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6235,9 +6262,9 @@ export def "issue-edit-comment-deprecated" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments/{id}") $auth.query)
   let req_body = {"body": $body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6280,9 +6307,9 @@ export def "issue-edit-issue-deadline" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/deadline") $auth.query)
   let req_body = {"due_date": $due_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6322,7 +6349,7 @@ export def "issue-clear-labels" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6363,7 +6390,7 @@ export def "issue-get-labels" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6406,9 +6433,9 @@ export def "issue-add-label" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let req_body = {"labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6451,9 +6478,9 @@ export def "issue-replace-labels" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels") $auth.query)
   let req_body = {"labels": $labels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6495,7 +6522,7 @@ export def "issue-remove-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6537,9 +6564,9 @@ export def "issue-delete-issue-reaction" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6583,7 +6610,7 @@ export def "issue-get-issue-reactions" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6626,9 +6653,9 @@ export def "issue-post-issue-reaction" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6668,7 +6695,7 @@ export def "issue-delete-stop-watch" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/delete") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6708,7 +6735,7 @@ export def "issue-start-stop-watch" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6748,7 +6775,7 @@ export def "issue-stop-stop-watch" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/stop") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6792,7 +6819,7 @@ export def "issue-subscriptions" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6833,7 +6860,7 @@ export def "issue-check-subscription" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/check") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6875,7 +6902,7 @@ export def "issue-delete-subscription" [
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), user: (encode-path-segment $user)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6917,7 +6944,7 @@ export def "issue-add-subscription" [
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), user: (encode-path-segment $user)} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6963,7 +6990,7 @@ export def "issue-get-comments-and-timeline" [
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/timeline") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7003,7 +7030,7 @@ export def "issue-reset-time" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7050,7 +7077,7 @@ export def "issue-tracked-times" [
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7095,9 +7122,9 @@ export def "issue-add-time" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $auth.query)
   let req_body = {"created": $created, "time": $time, "user_name": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7139,7 +7166,7 @@ export def "issue-delete-time" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/issues/{index}/times/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7183,7 +7210,7 @@ export def "repo-list-keys" [
   let qp = [(serialize-qp "key_id" $key_id "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7226,9 +7253,9 @@ export def "repo-create-key" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7268,7 +7295,7 @@ export def "repo-delete-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7309,7 +7336,7 @@ export def "repo-get-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/keys/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7351,7 +7378,7 @@ export def "issue-list-labels" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7395,9 +7422,9 @@ export def "issue-create-label" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7437,7 +7464,7 @@ export def "issue-delete-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/labels/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7478,7 +7505,7 @@ export def "issue-get-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/labels/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7524,9 +7551,9 @@ export def "issue-edit-label" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/labels/{id}") $auth.query)
   let req_body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7565,7 +7592,7 @@ export def "repo-get-languages" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/languages") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7607,7 +7634,7 @@ export def "repo-get-raw-file-or-lfs" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/media/{filepath}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7651,7 +7678,7 @@ export def "issue-get-milestones-list" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7695,9 +7722,9 @@ export def "issue-create-milestone" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $auth.query)
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7737,7 +7764,7 @@ export def "issue-delete-milestone" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/milestones/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7778,7 +7805,7 @@ export def "issue-get-milestone" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/milestones/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7824,9 +7851,9 @@ export def "issue-edit-milestone" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/milestones/{id}") $auth.query)
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7864,7 +7891,7 @@ export def "repo-mirror-sync" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/mirror-sync") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7911,7 +7938,7 @@ export def "notify-get-repo-list" [
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "subject-type" $subject_type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7955,7 +7982,7 @@ export def "notify-read-repo-list" [
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "to-status" $to_status "scalar") (serialize-qp "last_read_at" $last_read_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8001,7 +8028,7 @@ export def "repo-list-pull-requests" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8035,7 +8062,7 @@ export def "repo-create-pull-request" [
   --accept: string@accept-completer # Response content type
   --assignee: string
   --assignees: list<string>
-  --body-base: string
+  --body-base: string # (spec name: base)
   --body: string
   --due-date: string # format: date-time
   --head: string
@@ -8050,9 +8077,9 @@ export def "repo-create-pull-request" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $auth.query)
   let req_body = {"assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body, "due_date": $due_date, "head": $head, "labels": $labels, "milestone": $milestone, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8093,7 +8120,7 @@ export def "repo-get-pull-request" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8129,7 +8156,7 @@ export def "repo-edit-pull-request" [
   --allow-maintainer-edit: oneof<nothing, bool>
   --assignee: string
   --assignees: list<string>
-  --body-base: string
+  --body-base: string # (spec name: base)
   --body: string
   --due-date: string # format: date-time
   --labels: list<int>
@@ -8146,9 +8173,9 @@ export def "repo-edit-pull-request" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}") $auth.query)
   let req_body = {"allow_maintainer_edit": $allow_maintainer_edit, "assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -8193,7 +8220,7 @@ export def "repo-download-pull-diff-or-patch" [
   let qp = [(serialize-qp "binary" $binary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), diff_type: (encode-path-segment $diff_type)} | format pattern "/repos/{owner}/{repo}/pulls/{index}.{diff_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8237,7 +8264,7 @@ export def "repo-get-pull-request-commits" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/commits") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8283,7 +8310,7 @@ export def "repo-get-pull-request-files" [
   let qp = [(serialize-qp "skip-to" $skip_to "scalar") (serialize-qp "whitespace" $whitespace "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/files") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8323,7 +8350,7 @@ export def "repo-cancel-scheduled-auto-merge" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8363,7 +8390,7 @@ export def "repo-pull-request-is-merged" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8412,9 +8439,9 @@ export def "repo-merge-pull-request" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge") $auth.query)
   let req_body = {"Do": $do, "MergeCommitID": $merge_commit_id, "MergeMessageField": $merge_message_field, "MergeTitleField": $merge_title_field, "delete_branch_after_merge": $delete_branch_after_merge, "force_merge": $force_merge, "head_commit_id": $head_commit_id, "merge_when_checks_succeed": $merge_when_checks_succeed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8457,9 +8484,9 @@ export def "repo-delete-pull-review-requests" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers") $auth.query)
   let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8503,9 +8530,9 @@ export def "repo-create-pull-review-requests" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers") $auth.query)
   let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8549,7 +8576,7 @@ export def "repo-list-pull-reviews" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8595,9 +8622,9 @@ export def "repo-create-pull-review" [
   if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews") $auth.query)
   let req_body = {"body": $body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8639,7 +8666,7 @@ export def "repo-delete-pull-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8682,7 +8709,7 @@ export def "repo-get-pull-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8728,9 +8755,9 @@ export def "repo-submit-pull-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}") $auth.query)
   let req_body = {"body": $body, "event": $event} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8773,7 +8800,7 @@ export def "repo-get-pull-review-comments" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8819,9 +8846,9 @@ export def "repo-dismiss-pull-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/dismissals") $auth.query)
   let req_body = {"message": $message, "priors": $priors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8864,7 +8891,7 @@ export def "repo-un-dismiss-pull-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/undismissals") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8906,7 +8933,7 @@ export def "repo-update-pull-request" [
   let qp = [(serialize-qp "style" $style "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), index: (encode-path-segment $index)} | format pattern "/repos/{owner}/{repo}/pulls/{index}/update") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8948,7 +8975,7 @@ export def "repo-list-push-mirrors" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/push_mirrors") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8993,9 +9020,9 @@ export def "repo-add-push-mirror" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/push_mirrors") $auth.query)
   let req_body = {"interval": $interval, "remote_address": $remote_address, "remote_password": $remote_password, "remote_username": $remote_username, "sync_on_commit": $sync_on_commit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9033,7 +9060,7 @@ export def "repo-push-mirror-sync" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/push_mirrors-sync") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9073,7 +9100,7 @@ export def "repo-delete-push-mirror" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/push_mirrors/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9114,7 +9141,7 @@ export def "repo-get-push-mirror-by-remote-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/push_mirrors/{name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9156,7 +9183,7 @@ export def "repo-get-raw-file" [
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), filepath: (encode-path-segment $filepath)} | format pattern "/repos/{owner}/{repo}/raw/{filepath}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9201,7 +9228,7 @@ export def "repo-list-releases" [
   let qp = [(serialize-qp "draft" $draft "scalar") (serialize-qp "pre-release" $pre_release "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9247,9 +9274,9 @@ export def "repo-create-release" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $auth.query)
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9288,7 +9315,7 @@ export def "repo-get-latest-release" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases/latest") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9328,7 +9355,7 @@ export def "repo-delete-release-by-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9369,7 +9396,7 @@ export def "repo-get-release-by-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9409,7 +9436,7 @@ export def "repo-delete-release" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9450,7 +9477,7 @@ export def "repo-get-release" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9498,9 +9525,9 @@ export def "repo-edit-release" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}") $auth.query)
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9541,7 +9568,7 @@ export def "repo-list-release-attachments" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9586,10 +9613,10 @@ export def "repo-create-release-attachment" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["attachment"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -9632,7 +9659,7 @@ export def "repo-delete-release-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9675,7 +9702,7 @@ export def "repo-get-release-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9720,9 +9747,9 @@ export def "repo-edit-release-attachment" [
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9761,7 +9788,7 @@ export def "repo-get-reviewers" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/reviewers") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9799,7 +9826,7 @@ export def "repo-signing-key" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/signing-key.gpg") $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9841,7 +9868,7 @@ export def "repo-list-stargazers" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stargazers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9887,7 +9914,7 @@ export def "repo-list-statuses" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9933,9 +9960,9 @@ export def "repo-create-status" [
   if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}") $auth.query)
   let req_body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9977,7 +10004,7 @@ export def "repo-list-subscribers" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscribers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10015,7 +10042,7 @@ export def "user-current-delete-subscription" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10054,7 +10081,7 @@ export def "user-current-check-subscription" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10093,7 +10120,7 @@ export def "user-current-put-subscription" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10135,7 +10162,7 @@ export def "repo-list-tags" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10178,9 +10205,9 @@ export def "repo-create-tag" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $auth.query)
   let req_body = {"message": $message, "tag_name": $tag_name, "target": $target} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10220,7 +10247,7 @@ export def "repo-delete-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10261,7 +10288,7 @@ export def "repo-get-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/tags/{tag}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10300,7 +10327,7 @@ export def "repo-list-teams" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/teams") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10340,7 +10367,7 @@ export def "repo-delete-team" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), team: (encode-path-segment $team)} | format pattern "/repos/{owner}/{repo}/teams/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10381,7 +10408,7 @@ export def "repo-check-team" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), team: (encode-path-segment $team)} | format pattern "/repos/{owner}/{repo}/teams/{team}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10421,7 +10448,7 @@ export def "repo-add-team" [
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), team: (encode-path-segment $team)} | format pattern "/repos/{owner}/{repo}/teams/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10466,7 +10493,7 @@ export def "repo-tracked-times" [
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/times") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10509,7 +10536,7 @@ export def "user-tracked-times" [
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), user: (encode-path-segment $user)} | format pattern "/repos/{owner}/{repo}/times/{user}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10551,7 +10578,7 @@ export def "repo-list-topics" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10591,9 +10618,9 @@ export def "repo-update-topics" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics") $auth.query)
   let req_body = {"topics": $topics} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10633,7 +10660,7 @@ export def "repo-delete-topic" [
   if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), topic: (encode-path-segment $topic)} | format pattern "/repos/{owner}/{repo}/topics/{topic}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10673,7 +10700,7 @@ export def "repo-add-topic" [
   if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), topic: (encode-path-segment $topic)} | format pattern "/repos/{owner}/{repo}/topics/{topic}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10715,9 +10742,9 @@ export def "repo-transfer" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer") $auth.query)
   let req_body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10756,7 +10783,7 @@ export def "accept-repo-transfer" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer/accept") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10795,7 +10822,7 @@ export def "reject-repo-transfer" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer/reject") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10838,9 +10865,9 @@ export def "repo-create-wiki-page" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/wiki/new") $auth.query)
   let req_body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10880,7 +10907,7 @@ export def "repo-delete-wiki-page" [
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10921,7 +10948,7 @@ export def "repo-get-wiki-page" [
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10966,9 +10993,9 @@ export def "repo-edit-wiki-page" [
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}") $auth.query)
   let req_body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11010,7 +11037,7 @@ export def "repo-get-wiki-pages" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/wiki/pages") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11053,7 +11080,7 @@ export def "repo-get-wiki-page-revisions" [
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), page_name: (encode-path-segment $page_name)} | format pattern "/repos/{owner}/{repo}/wiki/revisions/{page_name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11104,9 +11131,9 @@ export def "generate-repo" [
   if ($template_repo | is-empty) { error make --unspanned { msg: "path parameter 'template_repo' must be non-empty" } }
   let full_url = (build-url $base ({template_owner: (encode-path-segment $template_owner), template_repo: (encode-path-segment $template_repo)} | format pattern "/repos/{template_owner}/{template_repo}/generate") $auth.query)
   let req_body = {"avatar": $avatar, "default_branch": $default_branch, "description": $description, "git_content": $git_content, "git_hooks": $git_hooks, "labels": $labels, "name": $name, "owner": $owner, "private": $private, "topics": $topics, "webhooks": $webhooks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11143,7 +11170,7 @@ export def "repo-get-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/repositories/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11178,7 +11205,7 @@ export def "get-general-api-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/api" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11213,7 +11240,7 @@ export def "get-general-attachment-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/attachment" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11248,7 +11275,7 @@ export def "get-general-repository-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/repository" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11283,7 +11310,7 @@ export def "get-general-ui-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/settings/ui" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11317,7 +11344,7 @@ export def "get-signing-key" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signing-key.gpg" $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11353,7 +11380,7 @@ export def "org-delete-team" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11390,7 +11417,7 @@ export def "org-get-team" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11435,9 +11462,9 @@ export def "org-edit-team" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}") $auth.query)
   let req_body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11477,7 +11504,7 @@ export def "org-list-team-members" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11515,7 +11542,7 @@ export def "org-remove-team-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/teams/{id}/members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11554,7 +11581,7 @@ export def "org-list-team-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/teams/{id}/members/{username}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11592,7 +11619,7 @@ export def "org-add-team-member" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/teams/{id}/members/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11632,7 +11659,7 @@ export def "org-list-team-repos" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/teams/{id}/repos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11672,7 +11699,7 @@ export def "org-remove-team-repository" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), org: (encode-path-segment $org), repo: (encode-path-segment $repo)} | format pattern "/teams/{id}/repos/{org}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11713,7 +11740,7 @@ export def "org-list-team-repo" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), org: (encode-path-segment $org), repo: (encode-path-segment $repo)} | format pattern "/teams/{id}/repos/{org}/{repo}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11753,7 +11780,7 @@ export def "org-add-team-repository" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), org: (encode-path-segment $org), repo: (encode-path-segment $repo)} | format pattern "/teams/{id}/repos/{org}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11793,7 +11820,7 @@ export def "topic-search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topics/search" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11828,7 +11855,7 @@ export def "user-get-current" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11866,7 +11893,7 @@ export def "user-get-oauth2-application" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/applications/oauth2" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11905,9 +11932,9 @@ export def "user-create-o-auth2-application" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/applications/oauth2" $auth.query)
   let req_body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11943,7 +11970,7 @@ export def "user-delete-o-auth2-application" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/applications/oauth2/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11980,7 +12007,7 @@ export def "user-get-o-auth2-application" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/applications/oauth2/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12021,9 +12048,9 @@ export def "user-update-o-auth2-application" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/applications/oauth2/{id}") $auth.query)
   let req_body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12059,9 +12086,9 @@ export def "user-delete-email" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails" $auth.query)
   let req_body = {"emails": $emails} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12096,7 +12123,7 @@ export def "user-list-emails" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12133,9 +12160,9 @@ export def "user-add-email" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails" $auth.query)
   let req_body = {"emails": $emails} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12173,7 +12200,7 @@ export def "user-current-list-followers" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/followers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12211,7 +12238,7 @@ export def "user-current-list-following" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/following" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12247,7 +12274,7 @@ export def "user-current-delete-follow" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12283,7 +12310,7 @@ export def "user-current-check-following" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12319,7 +12346,7 @@ export def "user-current-put-follow" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12354,7 +12381,7 @@ export def "get-verification-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_key_token" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12389,7 +12416,7 @@ export def "user-verify-gpg-key" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_key_verify" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12427,7 +12454,7 @@ export def "user-current-list-gpg-keys" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/gpg_keys" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12465,9 +12492,9 @@ export def "user-current-post-gpg-key" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_keys" $auth.query)
   let req_body = {"armored_public_key": $armored_public_key, "armored_signature": $armored_signature} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12503,7 +12530,7 @@ export def "user-current-delete-gpg-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/gpg_keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12540,7 +12567,7 @@ export def "user-current-get-gpg-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/gpg_keys/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12579,7 +12606,7 @@ export def "user-current-list-keys" [
   let qp = [(serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/keys" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12618,9 +12645,9 @@ export def "user-current-post-key" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/keys" $auth.query)
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12656,7 +12683,7 @@ export def "user-current-delete-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/keys/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12693,7 +12720,7 @@ export def "user-current-get-key" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user/keys/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12731,7 +12758,7 @@ export def "org-list-current-user-orgs" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/orgs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12769,7 +12796,7 @@ export def "user-current-list-repos" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/repos" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12816,9 +12843,9 @@ export def "create-current-user-repo" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/repos" $auth.query)
   let req_body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12853,7 +12880,7 @@ export def "get-user-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/settings" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12898,9 +12925,9 @@ export def "update-user-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/settings" $auth.query)
   let req_body = {"description": $description, "diff_view_style": $diff_view_style, "full_name": $full_name, "hide_activity": $hide_activity, "hide_email": $hide_email, "language": $language, "location": $location, "theme": $theme, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12938,7 +12965,7 @@ export def "user-current-list-starred" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/starred" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12976,7 +13003,7 @@ export def "user-current-delete-star" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13014,7 +13041,7 @@ export def "user-current-check-starring" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13052,7 +13079,7 @@ export def "user-current-put-star" [
   if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13090,7 +13117,7 @@ export def "user-get-stop-watches" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/stopwatches" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13128,7 +13155,7 @@ export def "user-current-list-subscriptions" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/subscriptions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13166,7 +13193,7 @@ export def "user-list-teams" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/teams" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13206,7 +13233,7 @@ export def "user-current-tracked-times" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/times" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13245,7 +13272,7 @@ export def "user-search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13282,7 +13309,7 @@ export def "user-get" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13322,7 +13349,7 @@ export def "user-list-followers" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/followers") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13362,7 +13389,7 @@ export def "user-list-following" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/following") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13400,7 +13427,7 @@ export def "user-check-following" [
   if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), target: (encode-path-segment $target)} | format pattern "/users/{username}/following/{target}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13440,7 +13467,7 @@ export def "user-list-gpg-keys" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gpg_keys") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13477,7 +13504,7 @@ export def "user-get-heatmap-data" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/heatmap") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13518,7 +13545,7 @@ export def "user-list-keys" [
   let qp = [(serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/keys") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13558,7 +13585,7 @@ export def "org-list-user-orgs" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/orgs") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13597,7 +13624,7 @@ export def "org-get-user-permissions" [
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), org: (encode-path-segment $org)} | format pattern "/users/{username}/orgs/{org}/permissions") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13637,7 +13664,7 @@ export def "user-list-repos" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/repos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13677,7 +13704,7 @@ export def "user-list-starred" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/starred") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13717,7 +13744,7 @@ export def "user-list-subscriptions" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/subscriptions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13757,7 +13784,7 @@ export def "user-get-tokens" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/tokens") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13797,9 +13824,9 @@ export def "user-create-token" [
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/tokens") $auth.query)
   let req_body = {"name": $name, "scopes": $scopes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13837,7 +13864,7 @@ export def "user-delete-access-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), token_arg: (encode-path-segment $token_arg)} | format pattern "/users/{username}/tokens/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13872,7 +13899,7 @@ export def "get-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

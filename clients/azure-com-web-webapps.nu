@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -61,9 +84,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -86,9 +111,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +175,9 @@ def format-completer [] { ["FileZilla3" "Ftp" "WebDeploy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-apps-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["web-apps-list" "web-apps-list-by-resource-group" "web-apps-delete" "web-apps-get" "web-apps-update" "web-apps-create-or-update" "web-apps-analyze-custom-hostname" "web-apps-apply-slot-config-to-production" "web-apps-backup" "web-apps-list-backups" "web-apps-delete-backup" "web-apps-get-backup-status" "web-apps-list-backup-status-secrets" "web-apps-restore" "web-apps-list-configurations" "web-apps-update-application-settings" "web-apps-list-application-settings" "web-apps-update-auth-settings" "web-apps-get-auth-settings" "web-apps-update-azure-storage-accounts" "web-apps-list-azure-storage-accounts" "web-apps-delete-backup-configuration" "web-apps-update-backup-configuration" "web-apps-get-backup-configuration" "web-apps-update-connection-strings" "web-apps-list-connection-strings" "web-apps-get-diagnostic-logs-configuration" "web-apps-update-diagnostic-logs-config" "web-apps-update-metadata" "web-apps-list-metadata" "web-apps-list-publishing-credentials" "web-apps-update-site-push-settings" "web-apps-list-site-push-settings" "web-apps-list-slot-configuration-names" "web-apps-update-slot-configuration-names" "web-apps-get-configuration" "web-apps-update-configuration" "web-apps-create-or-update-configuration" "web-apps-list-configuration-snapshot-info" "web-apps-get-configuration-snapshot" "web-apps-recover-site-configuration-snapshot" "web-apps-get-web-site-container-logs" "web-apps-get-container-logs-zip" "web-apps-list-continuous-web-jobs" "web-apps-delete-continuous-web-job" "web-apps-get-continuous-web-job" "web-apps-start-continuous-web-job" "web-apps-stop-continuous-web-job" "web-apps-list-deployments" "web-apps-delete-deployment" "web-apps-get-deployment" "web-apps-create-deployment" "web-apps-list-deployment-log" "web-apps-discover-backup" "web-apps-list-domain-ownership-identifiers" "web-apps-delete-domain-ownership-identifier" "web-apps-get-domain-ownership-identifier" "web-apps-update-domain-ownership-identifier" "web-apps-create-or-update-domain-ownership-identifier" "web-apps-get-ms-deploy-status" "web-apps-create-ms-deploy-operation" "web-apps-get-ms-deploy-log" "web-apps-list-functions" "web-apps-get-functions-admin-token" "web-apps-delete-function" "web-apps-get-function" "web-apps-create-function" "web-apps-list-function-secrets" "web-apps-list-host-name-bindings" "web-apps-delete-host-name-binding" "web-apps-get-host-name-binding" "web-apps-create-or-update-host-name-binding" "web-apps-delete-hybrid-connection" "web-apps-get-hybrid-connection" "web-apps-update-hybrid-connection" "web-apps-create-or-update-hybrid-connection" "web-apps-list-hybrid-connection-keys" "web-apps-list-hybrid-connections" "web-apps-list-relay-service-connections" "web-apps-delete-relay-service-connection" "web-apps-get-relay-service-connection" "web-apps-update-relay-service-connection" "web-apps-create-or-update-relay-service-connection" "web-apps-list-instance-identifiers" "web-apps-get-instance-ms-deploy-status" "web-apps-create-instance-ms-deploy-operation" "web-apps-get-instance-ms-deploy-log" "web-apps-list-instance-processes" "web-apps-delete-instance-process" "web-apps-get-instance-process" "web-apps-get-instance-process-dump" "web-apps-list-instance-process-modules" "web-apps-get-instance-process-module" "web-apps-list-instance-process-threads" "web-apps-get-instance-process-thread" "web-apps-is-cloneable" "web-apps-list-sync-function-triggers" "web-apps-list-metric-definitions" "web-apps-list-metrics" "web-apps-migrate-storage" "web-apps-migrate-my-sql" "web-apps-get-migrate-my-sql-status" "web-apps-delete-swift-virtual-network" "web-apps-get-swift-virtual-network-connection" "web-apps-update-swift-virtual-network-connection" "web-apps-create-or-update-swift-virtual-network-connection" "web-apps-list-network-features" "web-apps-get-network-trace-operation" "web-apps-start-web-site-network-trace" "web-apps-start-web-site-network-trace-operation" "web-apps-stop-web-site-network-trace" "web-apps-get-network-traces" "web-apps-get-network-trace-operation-v2" "web-apps-get-network-traces-v2" "web-apps-generate-new-site-publishing-password" "web-apps-list-perf-mon-counters" "web-apps-get-site-php-error-log-flag" "web-apps-list-premier-add-ons" "web-apps-delete-premier-add-on" "web-apps-get-premier-add-on" "web-apps-update-premier-add-on" "web-apps-add-premier-add-on" "web-apps-get-private-access" "web-apps-put-private-access-vnet" "web-apps-list-processes" "web-apps-delete-process" "web-apps-get-process" "web-apps-get-process-dump" "web-apps-list-process-modules" "web-apps-get-process-module" "web-apps-list-process-threads" "web-apps-get-process-thread" "web-apps-list-public-certificates" "web-apps-delete-public-certificate" "web-apps-get-public-certificate" "web-apps-create-or-update-public-certificate" "web-apps-list-publishing-profile-xml-with-secrets" "web-apps-reset-production-slot-config" "web-apps-restart" "web-apps-restore-from-backup-blob" "web-apps-restore-from-deleted-app" "web-apps-restore-snapshot" "web-apps-list-site-extensions" "web-apps-delete-site-extension" "web-apps-get-site-extension" "web-apps-install-site-extension" "web-apps-list-slots" "web-apps-delete-slot" "web-apps-get-slot" "web-apps-update-slot" "web-apps-create-or-update-slot" "web-apps-analyze-custom-hostname-slot" "web-apps-apply-slot-configuration-slot" "web-apps-backup-slot" "web-apps-list-backups-slot" "web-apps-delete-backup-slot" "web-apps-get-backup-status-slot" "web-apps-list-backup-status-secrets-slot" "web-apps-restore-slot" "web-apps-list-configurations-slot" "web-apps-update-application-settings-slot" "web-apps-list-application-settings-slot" "web-apps-update-auth-settings-slot" "web-apps-get-auth-settings-slot" "web-apps-update-azure-storage-accounts-slot" "web-apps-list-azure-storage-accounts-slot" "web-apps-delete-backup-configuration-slot" "web-apps-update-backup-configuration-slot" "web-apps-get-backup-configuration-slot" "web-apps-update-connection-strings-slot" "web-apps-list-connection-strings-slot" "web-apps-get-diagnostic-logs-configuration-slot" "web-apps-update-diagnostic-logs-config-slot" "web-apps-update-metadata-slot" "web-apps-list-metadata-slot" "web-apps-list-publishing-credentials-slot" "web-apps-update-site-push-settings-slot" "web-apps-list-site-push-settings-slot" "web-apps-get-configuration-slot" "web-apps-update-configuration-slot" "web-apps-create-or-update-configuration-slot" "web-apps-list-configuration-snapshot-info-slot" "web-apps-get-configuration-snapshot-slot" "web-apps-recover-site-configuration-snapshot-slot" "web-apps-get-web-site-container-logs-slot" "web-apps-get-container-logs-zip-slot" "web-apps-list-continuous-web-jobs-slot" "web-apps-delete-continuous-web-job-slot" "web-apps-get-continuous-web-job-slot" "web-apps-start-continuous-web-job-slot" "web-apps-stop-continuous-web-job-slot" "web-apps-list-deployments-slot" "web-apps-delete-deployment-slot" "web-apps-get-deployment-slot" "web-apps-create-deployment-slot" "web-apps-list-deployment-log-slot" "web-apps-discover-backup-slot" "web-apps-list-domain-ownership-identifiers-slot" "web-apps-delete-domain-ownership-identifier-slot" "web-apps-get-domain-ownership-identifier-slot" "web-apps-update-domain-ownership-identifier-slot" "web-apps-create-or-update-domain-ownership-identifier-slot" "web-apps-get-ms-deploy-status-slot" "web-apps-create-ms-deploy-operation-slot" "web-apps-get-ms-deploy-log-slot" "web-apps-list-instance-functions-slot" "web-apps-get-functions-admin-token-slot" "web-apps-delete-instance-function-slot" "web-apps-get-instance-function-slot" "web-apps-create-instance-function-slot" "web-apps-list-function-secrets-slot" "web-apps-list-host-name-bindings-slot" "web-apps-delete-host-name-binding-slot" "web-apps-get-host-name-binding-slot" "web-apps-create-or-update-host-name-binding-slot" "web-apps-delete-hybrid-connection-slot" "web-apps-get-hybrid-connection-slot" "web-apps-update-hybrid-connection-slot" "web-apps-create-or-update-hybrid-connection-slot" "web-apps-list-hybrid-connection-keys-slot" "web-apps-list-hybrid-connections-slot" "web-apps-list-relay-service-connections-slot" "web-apps-delete-relay-service-connection-slot" "web-apps-get-relay-service-connection-slot" "web-apps-update-relay-service-connection-slot" "web-apps-create-or-update-relay-service-connection-slot" "web-apps-list-instance-identifiers-slot" "web-apps-get-instance-ms-deploy-status-slot" "web-apps-create-instance-ms-deploy-operation-slot" "web-apps-get-instance-ms-deploy-log-slot" "web-apps-list-instance-processes-slot" "web-apps-delete-instance-process-slot" "web-apps-get-instance-process-slot" "web-apps-get-instance-process-dump-slot" "web-apps-list-instance-process-modules-slot" "web-apps-get-instance-process-module-slot" "web-apps-list-instance-process-threads-slot" "web-apps-get-instance-process-thread-slot" "web-apps-is-cloneable-slot" "web-apps-list-sync-function-triggers-slot" "web-apps-list-metric-definitions-slot" "web-apps-list-metrics-slot" "web-apps-get-migrate-my-sql-status-slot" "web-apps-delete-swift-virtual-network-slot" "web-apps-get-swift-virtual-network-connection-slot" "web-apps-update-swift-virtual-network-connection-slot" "web-apps-create-or-update-swift-virtual-network-connection-slot" "web-apps-list-network-features-slot" "web-apps-get-network-trace-operation-slot" "web-apps-start-web-site-network-trace-slot" "web-apps-start-web-site-network-trace-operation-slot" "web-apps-stop-web-site-network-trace-slot" "web-apps-get-network-traces-slot" "web-apps-get-network-trace-operation-slot-v2" "web-apps-get-network-traces-slot-v2" "web-apps-generate-new-site-publishing-password-slot" "web-apps-list-perf-mon-counters-slot" "web-apps-get-site-php-error-log-flag-slot" "web-apps-list-premier-add-ons-slot" "web-apps-delete-premier-add-on-slot" "web-apps-get-premier-add-on-slot" "web-apps-update-premier-add-on-slot" "web-apps-add-premier-add-on-slot" "web-apps-get-private-access-slot" "web-apps-put-private-access-vnet-slot" "web-apps-list-processes-slot" "web-apps-delete-process-slot" "web-apps-get-process-slot" "web-apps-get-process-dump-slot" "web-apps-list-process-modules-slot" "web-apps-get-process-module-slot" "web-apps-list-process-threads-slot" "web-apps-get-process-thread-slot" "web-apps-list-public-certificates-slot" "web-apps-delete-public-certificate-slot" "web-apps-get-public-certificate-slot" "web-apps-create-or-update-public-certificate-slot" "web-apps-list-publishing-profile-xml-with-secrets-slot" "web-apps-reset-slot-configuration-slot" "web-apps-restart-slot" "web-apps-restore-from-backup-blob-slot" "web-apps-restore-from-deleted-app-slot" "web-apps-restore-snapshot-slot" "web-apps-list-site-extensions-slot" "web-apps-delete-site-extension-slot" "web-apps-get-site-extension-slot" "web-apps-install-site-extension-slot" "web-apps-list-slot-differences-slot" "web-apps-swap-slot-slot" "web-apps-list-snapshots-slot" "web-apps-list-snapshots-from-dr-secondary-slot" "web-apps-delete-source-control-slot" "web-apps-get-source-control-slot" "web-apps-update-source-control-slot" "web-apps-create-or-update-source-control-slot" "web-apps-start-slot" "web-apps-start-network-trace-slot" "web-apps-stop-slot" "web-apps-stop-network-trace-slot" "web-apps-sync-repository-slot" "web-apps-sync-function-triggers-slot" "web-apps-list-triggered-web-jobs-slot" "web-apps-delete-triggered-web-job-slot" "web-apps-get-triggered-web-job-slot" "web-apps-list-triggered-web-job-history-slot" "web-apps-get-triggered-web-job-history-slot" "web-apps-run-triggered-web-job-slot" "web-apps-list-usages-slot" "web-apps-list-vnet-connections-slot" "web-apps-delete-vnet-connection-slot" "web-apps-get-vnet-connection-slot" "web-apps-update-vnet-connection-slot" "web-apps-create-or-update-vnet-connection-slot" "web-apps-get-vnet-connection-gateway-slot" "web-apps-update-vnet-connection-gateway-slot" "web-apps-create-or-update-vnet-connection-gateway-slot" "web-apps-list-web-jobs-slot" "web-apps-get-web-job-slot" "web-apps-list-slot-differences-from-production" "web-apps-swap-slot-with-production" "web-apps-list-snapshots" "web-apps-list-snapshots-from-dr-secondary" "web-apps-delete-source-control" "web-apps-get-source-control" "web-apps-update-source-control" "web-apps-create-or-update-source-control" "web-apps-start" "web-apps-start-network-trace" "web-apps-stop" "web-apps-stop-network-trace" "web-apps-sync-repository" "web-apps-sync-function-triggers" "web-apps-list-triggered-web-jobs" "web-apps-delete-triggered-web-job" "web-apps-get-triggered-web-job" "web-apps-list-triggered-web-job-history" "web-apps-get-triggered-web-job-history" "web-apps-run-triggered-web-job" "web-apps-list-usages" "web-apps-list-vnet-connections" "web-apps-delete-vnet-connection" "web-apps-get-vnet-connection" "web-apps-update-vnet-connection" "web-apps-create-or-update-vnet-connection" "web-apps-get-vnet-connection-gateway" "web-apps-update-vnet-connection-gateway" "web-apps-create-or-update-vnet-connection-gateway" "web-apps-list-web-jobs" "web-apps-get-web-job" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,15 +210,16 @@ export def "web-apps-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/sites") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -199,16 +251,17 @@ export def "web-apps-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-slots: oneof<nothing, bool> # Specify true to include deployment slots in results. The default is false, which only gives you the production slot of all apps.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "includeSlots" $include_slots "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -242,17 +295,18 @@ export def "web-apps-delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-metrics: oneof<nothing, bool> # If true, web app metrics are also deleted.
   --delete-empty-server-farm: oneof<nothing, bool> # Specify false if you want to keep empty App Service plan. By default, empty App Service plan is deleted.
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "deleteMetrics" $delete_metrics "scalar") (serialize-qp "deleteEmptyServerFarm" $delete_empty_server_farm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -284,17 +338,18 @@ export def "web-apps-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -313,8 +368,6 @@ export def "web-apps-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_Update
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
 export def "web-apps-update" [
   subscription_id: string
   resource_group_name: string
@@ -328,23 +381,24 @@ export def "web-apps-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -363,8 +417,6 @@ export def "web-apps-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}
 # operationId: WebApps_CreateOrUpdate
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
 export def "web-apps-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -378,25 +430,26 @@ export def "web-apps-create-or-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -429,17 +482,18 @@ export def "web-apps-analyze-custom-hostname" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --host-name: string # Custom hostname.
-  --api-version: string # API Version
-]: nothing -> record<properties: record<aRecords: list<string>, alternateCNameRecords: list<string>, alternateTxtRecords: list<string>, cNameRecords: list<string>, conflictingAppResourceId: string, customDomainVerificationFailureInfo: record<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, customDomainVerificationTest: string, hasConflictAcrossSubscription: bool, hasConflictOnScaleUnit: bool, isHostnameAlreadyVerified: bool, txtRecords: list<string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<aRecords: list<string>, alternateCNameRecords: list<string>, alternateTxtRecords: list<string>, cNameRecords: list<string>, conflictingAppResourceId: string, customDomainVerificationFailureInfo: record<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, customDomainVerificationTest: string, hasConflictAcrossSubscription: bool, hasConflictOnScaleUnit: bool, isHostnameAlreadyVerified: bool, txtRecords: list<string>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "hostName" $host_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/analyzeCustomHostname") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -471,7 +525,7 @@ export def "web-apps-apply-slot-config-to-production" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
@@ -481,12 +535,14 @@ export def "web-apps-apply-slot-config-to-production" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/applySlotConfig") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -505,7 +561,6 @@ export def "web-apps-apply-slot-config-to-production" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backup
 # operationId: WebApps_Backup
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-backup" [
   subscription_id: string
   resource_group_name: string
@@ -519,22 +574,23 @@ export def "web-apps-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+]: any -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -566,17 +622,18 @@ export def "web-apps-list-backups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -609,7 +666,7 @@ export def "web-apps-delete-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,10 +674,11 @@ export def "web-apps-delete-backup" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -653,18 +711,19 @@ export def "web-apps-get-backup-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -683,7 +742,6 @@ export def "web-apps-get-backup-status" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/list
 # operationId: WebApps_ListBackupStatusSecrets
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-list-backup-status-secrets" [
   subscription_id: string
   resource_group_name: string
@@ -698,10 +756,10 @@ export def "web-apps-list-backup-status-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+]: any -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -709,12 +767,13 @@ export def "web-apps-list-backup-status-secrets" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/list") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -733,7 +792,6 @@ export def "web-apps-list-backup-status-secrets" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/backups/{backupId}/restore
 # operationId: WebApps_Restore
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-restore" [
   subscription_id: string
   resource_group_name: string
@@ -748,7 +806,7 @@ export def "web-apps-restore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -759,12 +817,13 @@ export def "web-apps-restore" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/backups/{backup_id}/restore") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -796,17 +855,18 @@ export def "web-apps-list-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -838,22 +898,23 @@ export def "web-apps-update-application-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Settings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -885,17 +946,18 @@ export def "web-apps-list-application-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/appsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -914,7 +976,6 @@ export def "web-apps-list-application-settings" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/authsettings
 # operationId: WebApps_UpdateAuthSettings
-# --properties shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
 export def "web-apps-update-auth-settings" [
   subscription_id: string
   resource_group_name: string
@@ -928,22 +989,23 @@ export def "web-apps-update-auth-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
+]: any -> oneof<record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -975,17 +1037,18 @@ export def "web-apps-get-auth-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/authsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1017,22 +1080,23 @@ export def "web-apps-update-azure-storage-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Azure storage accounts.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1064,17 +1128,18 @@ export def "web-apps-list-azure-storage-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/azurestorageaccounts/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1106,17 +1171,18 @@ export def "web-apps-delete-backup-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1135,7 +1201,6 @@ export def "web-apps-delete-backup-configuration" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/backup
 # operationId: WebApps_UpdateBackupConfiguration
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-update-backup-configuration" [
   subscription_id: string
   resource_group_name: string
@@ -1149,22 +1214,23 @@ export def "web-apps-update-backup-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>> {
+]: any -> oneof<record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1196,17 +1262,18 @@ export def "web-apps-get-backup-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/backup/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1238,22 +1305,23 @@ export def "web-apps-update-connection-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Connection strings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1285,17 +1353,18 @@ export def "web-apps-list-connection-strings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/connectionstrings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1327,17 +1396,18 @@ export def "web-apps-get-diagnostic-logs-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1356,7 +1426,6 @@ export def "web-apps-get-diagnostic-logs-configuration" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/logs
 # operationId: WebApps_UpdateDiagnosticLogsConfig
-# --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
 export def "web-apps-update-diagnostic-logs-config" [
   subscription_id: string
   resource_group_name: string
@@ -1370,22 +1439,23 @@ export def "web-apps-update-diagnostic-logs-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteLogsConfig resource specific properties — shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>> {
+]: any -> oneof<record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/logs") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1417,22 +1487,23 @@ export def "web-apps-update-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Settings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1464,17 +1535,18 @@ export def "web-apps-list-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/metadata/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1506,17 +1578,18 @@ export def "web-apps-list-publishing-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<publishingPassword: string, publishingPasswordHash: string, publishingPasswordHashSalt: string, publishingUserName: string, scmUri: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<publishingPassword: string, publishingPasswordHash: string, publishingPasswordHashSalt: string, publishingUserName: string, scmUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/publishingcredentials/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1535,7 +1608,6 @@ export def "web-apps-list-publishing-credentials" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/pushsettings
 # operationId: WebApps_UpdateSitePushSettings
-# --properties shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
 export def "web-apps-update-site-push-settings" [
   subscription_id: string
   resource_group_name: string
@@ -1549,22 +1621,23 @@ export def "web-apps-update-site-push-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PushSettings resource specific properties — shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>> {
+]: any -> oneof<record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1596,17 +1669,18 @@ export def "web-apps-list-site-push-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/pushsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1638,17 +1712,18 @@ export def "web-apps-list-slot-configuration-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<appSettingNames: list<string>, azureStorageConfigNames: list<string>, connectionStringNames: list<string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<appSettingNames: list<string>, azureStorageConfigNames: list<string>, connectionStringNames: list<string>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1667,7 +1742,6 @@ export def "web-apps-list-slot-configuration-names" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames
 # operationId: WebApps_UpdateSlotConfigurationNames
-# --properties shape: {appSettingNames?: list<string>, azureStorageConfigNames?: list<string>, connectionStringNames?: list<string>}
 export def "web-apps-update-slot-configuration-names" [
   subscription_id: string
   resource_group_name: string
@@ -1681,22 +1755,23 @@ export def "web-apps-update-slot-configuration-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Names for connection strings, application settings, and external Azure storage account configuration identifiers to be marked as sticky to the deployment slot and not moved during a swap operation. This is valid for all deployment slots in an app. — shape: {appSettingNames?: list<string>, azureStorageConfigNames?: list<string>, connectionStringNames?: list<string>}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<appSettingNames: list<string>, azureStorageConfigNames: list<string>, connectionStringNames: list<string>>> {
+]: any -> oneof<record<properties: record<appSettingNames: list<string>, azureStorageConfigNames: list<string>, connectionStringNames: list<string>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/slotConfigNames") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1728,17 +1803,18 @@ export def "web-apps-get-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1757,7 +1833,6 @@ export def "web-apps-get-configuration" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: WebApps_UpdateConfiguration
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
 export def "web-apps-update-configuration" [
   subscription_id: string
   resource_group_name: string
@@ -1771,22 +1846,23 @@ export def "web-apps-update-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+]: any -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1805,7 +1881,6 @@ export def "web-apps-update-configuration" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/config/web
 # operationId: WebApps_CreateOrUpdateConfiguration
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
 export def "web-apps-create-or-update-configuration" [
   subscription_id: string
   resource_group_name: string
@@ -1819,22 +1894,23 @@ export def "web-apps-create-or-update-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+]: any -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1866,17 +1942,18 @@ export def "web-apps-list-configuration-snapshot-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1909,18 +1986,19 @@ export def "web-apps-get-configuration-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1953,7 +2031,7 @@ export def "web-apps-recover-site-configuration-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1961,10 +2039,11 @@ export def "web-apps-recover-site-configuration-snapshot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/config/web/snapshots/{snapshot_id}/recover") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1996,17 +2075,18 @@ export def "web-apps-get-web-site-container-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs") $qp $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2038,17 +2118,18 @@ export def "web-apps-get-container-logs-zip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/containerlogs/zip/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2080,17 +2161,18 @@ export def "web-apps-list-continuous-web-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2123,7 +2205,7 @@ export def "web-apps-delete-continuous-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2131,10 +2213,11 @@ export def "web-apps-delete-continuous-web-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2167,18 +2250,19 @@ export def "web-apps-get-continuous-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<detailed_status: string, error: string, extra_info_url: string, log_url: string, run_command: string, settings: record, status: string, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<detailed_status: string, error: string, extra_info_url: string, log_url: string, run_command: string, settings: record, status: string, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2211,7 +2295,7 @@ export def "web-apps-start-continuous-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2219,10 +2303,11 @@ export def "web-apps-start-continuous-web-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2255,7 +2340,7 @@ export def "web-apps-stop-continuous-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2263,10 +2348,11 @@ export def "web-apps-stop-continuous-web-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/continuouswebjobs/{web_job_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2298,17 +2384,18 @@ export def "web-apps-list-deployments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2341,7 +2428,7 @@ export def "web-apps-delete-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2349,10 +2436,11 @@ export def "web-apps-delete-deployment" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2385,18 +2473,19 @@ export def "web-apps-get-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2415,7 +2504,6 @@ export def "web-apps-get-deployment" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/deployments/{id}
 # operationId: WebApps_CreateDeployment
-# --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
 export def "web-apps-create-deployment" [
   subscription_id: string
   resource_group_name: string
@@ -2430,10 +2518,10 @@ export def "web-apps-create-deployment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Deployment resource specific properties — shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+]: any -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2441,12 +2529,13 @@ export def "web-apps-create-deployment" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2479,18 +2568,19 @@ export def "web-apps-list-deployment-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/deployments/{id}/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2509,7 +2599,6 @@ export def "web-apps-list-deployment-log" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/discoverbackup
 # operationId: WebApps_DiscoverBackup
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-discover-backup" [
   subscription_id: string
   resource_group_name: string
@@ -2523,22 +2612,23 @@ export def "web-apps-discover-backup" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<adjustConnectionStrings: bool, appServicePlan: string, blobName: string, databases: list<record>, hostingEnvironment: string, ignoreConflictingHostNames: bool, ignoreDatabases: bool, operationType: string, overwrite: bool, siteName: string, storageAccountUrl: string>> {
+]: any -> oneof<record<properties: record<adjustConnectionStrings: bool, appServicePlan: string, blobName: string, databases: list<record>, hostingEnvironment: string, ignoreConflictingHostNames: bool, ignoreDatabases: bool, operationType: string, overwrite: bool, siteName: string, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/discoverbackup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2570,17 +2660,18 @@ export def "web-apps-list-domain-ownership-identifiers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2613,7 +2704,7 @@ export def "web-apps-delete-domain-ownership-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2621,10 +2712,11 @@ export def "web-apps-delete-domain-ownership-identifier" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2657,18 +2749,19 @@ export def "web-apps-get-domain-ownership-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<id: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2687,7 +2780,6 @@ export def "web-apps-get-domain-ownership-identifier" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_UpdateDomainOwnershipIdentifier
-# --properties shape: {id?: string}
 export def "web-apps-update-domain-ownership-identifier" [
   subscription_id: string
   resource_group_name: string
@@ -2702,10 +2794,10 @@ export def "web-apps-update-domain-ownership-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Identifier resource specific properties — shape: {id?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<id: string>> {
+]: any -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2713,12 +2805,13 @@ export def "web-apps-update-domain-ownership-identifier" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2737,7 +2830,6 @@ export def "web-apps-update-domain-ownership-identifier" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_CreateOrUpdateDomainOwnershipIdentifier
-# --properties shape: {id?: string}
 export def "web-apps-create-or-update-domain-ownership-identifier" [
   subscription_id: string
   resource_group_name: string
@@ -2752,10 +2844,10 @@ export def "web-apps-create-or-update-domain-ownership-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Identifier resource specific properties — shape: {id?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<id: string>> {
+]: any -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2763,12 +2855,13 @@ export def "web-apps-create-or-update-domain-ownership-identifier" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2800,17 +2893,18 @@ export def "web-apps-get-ms-deploy-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2829,7 +2923,6 @@ export def "web-apps-get-ms-deploy-status" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy
 # operationId: WebApps_CreateMSDeployOperation
-# --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
 export def "web-apps-create-ms-deploy-operation" [
   subscription_id: string
   resource_group_name: string
@@ -2843,22 +2936,23 @@ export def "web-apps-create-ms-deploy-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # MSDeploy ARM PUT core information — shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+]: any -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2890,17 +2984,18 @@ export def "web-apps-get-ms-deploy-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<entries: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<entries: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/extensions/MSDeploy/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2932,17 +3027,18 @@ export def "web-apps-list-functions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2974,17 +3070,18 @@ export def "web-apps-get-functions-admin-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/admin/token") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3017,7 +3114,7 @@ export def "web-apps-delete-function" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3025,10 +3122,11 @@ export def "web-apps-delete-function" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3061,18 +3159,19 @@ export def "web-apps-get-function" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3091,7 +3190,6 @@ export def "web-apps-get-function" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}
 # operationId: WebApps_CreateFunction
-# --properties shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
 export def "web-apps-create-function" [
   subscription_id: string
   resource_group_name: string
@@ -3106,10 +3204,10 @@ export def "web-apps-create-function" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # FunctionEnvelope resource specific properties — shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>> {
+]: any -> oneof<record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3117,12 +3215,13 @@ export def "web-apps-create-function" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3155,18 +3254,19 @@ export def "web-apps-list-function-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<key: string, trigger_url: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<key: string, trigger_url: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/functions/{function_name}/listsecrets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3198,17 +3298,18 @@ export def "web-apps-list-host-name-bindings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3241,7 +3342,7 @@ export def "web-apps-delete-host-name-binding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3249,10 +3350,11 @@ export def "web-apps-delete-host-name-binding" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3285,18 +3387,19 @@ export def "web-apps-get-host-name-binding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3315,7 +3418,6 @@ export def "web-apps-get-host-name-binding" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{hostName}
 # operationId: WebApps_CreateOrUpdateHostNameBinding
-# --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
 export def "web-apps-create-or-update-host-name-binding" [
   subscription_id: string
   resource_group_name: string
@@ -3330,10 +3432,10 @@ export def "web-apps-create-or-update-host-name-binding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HostNameBinding resource specific properties — shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>> {
+]: any -> oneof<record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3341,12 +3443,13 @@ export def "web-apps-create-or-update-host-name-binding" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hostNameBindings/{host_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3380,7 +3483,7 @@ export def "web-apps-delete-hybrid-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3389,10 +3492,11 @@ export def "web-apps-delete-hybrid-connection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3426,8 +3530,8 @@ export def "web-apps-get-hybrid-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3435,10 +3539,11 @@ export def "web-apps-get-hybrid-connection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3457,7 +3562,6 @@ export def "web-apps-get-hybrid-connection" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_UpdateHybridConnection
-# --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
 export def "web-apps-update-hybrid-connection" [
   subscription_id: string
   resource_group_name: string
@@ -3473,10 +3577,10 @@ export def "web-apps-update-hybrid-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HybridConnection resource specific properties — shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+]: any -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3485,12 +3589,13 @@ export def "web-apps-update-hybrid-connection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3509,7 +3614,6 @@ export def "web-apps-update-hybrid-connection" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_CreateOrUpdateHybridConnection
-# --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
 export def "web-apps-create-or-update-hybrid-connection" [
   subscription_id: string
   resource_group_name: string
@@ -3525,10 +3629,10 @@ export def "web-apps-create-or-update-hybrid-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HybridConnection resource specific properties — shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+]: any -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3537,12 +3641,13 @@ export def "web-apps-create-or-update-hybrid-connection" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3576,8 +3681,8 @@ export def "web-apps-list-hybrid-connection-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<sendKeyName: string, sendKeyValue: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<sendKeyName: string, sendKeyValue: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3585,10 +3690,11 @@ export def "web-apps-list-hybrid-connection-keys" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3620,17 +3726,18 @@ export def "web-apps-list-hybrid-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridConnectionRelays") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3662,17 +3769,18 @@ export def "web-apps-list-relay-service-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3705,7 +3813,7 @@ export def "web-apps-delete-relay-service-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3713,10 +3821,11 @@ export def "web-apps-delete-relay-service-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3749,18 +3858,19 @@ export def "web-apps-get-relay-service-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3779,7 +3889,6 @@ export def "web-apps-get-relay-service-connection" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_UpdateRelayServiceConnection
-# --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
 export def "web-apps-update-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
@@ -3794,10 +3903,10 @@ export def "web-apps-update-relay-service-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RelayServiceConnectionEntity resource specific properties — shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+]: any -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3805,12 +3914,13 @@ export def "web-apps-update-relay-service-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3829,7 +3939,6 @@ export def "web-apps-update-relay-service-connection" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entityName}
 # operationId: WebApps_CreateOrUpdateRelayServiceConnection
-# --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
 export def "web-apps-create-or-update-relay-service-connection" [
   subscription_id: string
   resource_group_name: string
@@ -3844,10 +3953,10 @@ export def "web-apps-create-or-update-relay-service-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RelayServiceConnectionEntity resource specific properties — shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+]: any -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3855,12 +3964,13 @@ export def "web-apps-create-or-update-relay-service-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/hybridconnection/{entity_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3892,17 +4002,18 @@ export def "web-apps-list-instance-identifiers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3935,18 +4046,19 @@ export def "web-apps-get-instance-ms-deploy-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3965,7 +4077,6 @@ export def "web-apps-get-instance-ms-deploy-status" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_CreateInstanceMSDeployOperation
-# --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
 export def "web-apps-create-instance-ms-deploy-operation" [
   subscription_id: string
   resource_group_name: string
@@ -3980,10 +4091,10 @@ export def "web-apps-create-instance-ms-deploy-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # MSDeploy ARM PUT core information — shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+]: any -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3991,12 +4102,13 @@ export def "web-apps-create-instance-ms-deploy-operation" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4029,18 +4141,19 @@ export def "web-apps-get-instance-ms-deploy-log" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<entries: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<entries: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/extensions/MSDeploy/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4073,18 +4186,19 @@ export def "web-apps-list-instance-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4118,7 +4232,7 @@ export def "web-apps-delete-instance-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4127,10 +4241,11 @@ export def "web-apps-delete-instance-process" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4164,8 +4279,8 @@ export def "web-apps-get-instance-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4173,10 +4288,11 @@ export def "web-apps-get-instance-process" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4210,7 +4326,7 @@ export def "web-apps-get-instance-process-dump" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4219,10 +4335,11 @@ export def "web-apps-get-instance-process-dump" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/dump") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4256,8 +4373,8 @@ export def "web-apps-list-instance-process-modules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4265,10 +4382,11 @@ export def "web-apps-list-instance-process-modules" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4303,8 +4421,8 @@ export def "web-apps-get-instance-process-module" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4313,10 +4431,11 @@ export def "web-apps-get-instance-process-module" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($base_address | is-empty) { error make --unspanned { msg: "path parameter 'baseAddress' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4350,8 +4469,8 @@ export def "web-apps-list-instance-process-threads" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4359,10 +4478,11 @@ export def "web-apps-list-instance-process-threads" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4397,8 +4517,8 @@ export def "web-apps-get-instance-process-thread" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4407,10 +4527,11 @@ export def "web-apps-get-instance-process-thread" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4442,17 +4563,18 @@ export def "web-apps-is-cloneable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<blockingCharacteristics: table<description: string, name: string>, blockingFeatures: table<description: string, name: string>, result: string, unsupportedFeatures: table<description: string, name: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<blockingCharacteristics: table<description: string, name: string>, blockingFeatures: table<description: string, name: string>, result: string, unsupportedFeatures: table<description: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/iscloneable") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4484,17 +4606,18 @@ export def "web-apps-list-sync-function-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<key: string, trigger_url: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<key: string, trigger_url: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/listsyncfunctiontriggerstatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4526,17 +4649,18 @@ export def "web-apps-list-metric-definitions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metricdefinitions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4570,17 +4694,18 @@ export def "web-apps-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --details: oneof<nothing, bool> # Specify "true" to include metric details in the response. It is "false" by default.
   --filter: string # Return only metrics specified in the filter (using OData syntax). For example: $filter=(name.value eq 'Metric1' or name.value eq 'Metric2') and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<endTime: string, id: string, metricValues: list, name: record, properties: list, resourceId: string, startTime: string, timeGrain: string, unit: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<endTime: string, id: string, metricValues: list, name: record, properties: list, resourceId: string, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "details" $details "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/metrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4599,7 +4724,6 @@ export def "web-apps-list-metrics" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/migrate
 # operationId: WebApps_MigrateStorage
-# --properties shape: {azurefilesConnectionString: string, azurefilesShare: string, blockWriteAccessToSite?: bool, switchSiteAfterMigration?: bool}
 export def "web-apps-migrate-storage" [
   subscription_id: string
   resource_group_name: string
@@ -4613,23 +4737,25 @@ export def "web-apps-migrate-storage" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --subscription-name: string # Azure subscription.
-  --api-version: string # API Version
+  --subscription-name: string # Azure subscription. (required)
+  --api-version: string # API Version (required)
   --properties: any # StorageMigrationOptions resource specific properties — shape: {azurefilesConnectionString: string, azurefilesShare: string, blockWriteAccessToSite?: bool, switchSiteAfterMigration?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<operationId: string>> {
+]: any -> oneof<record<properties: record<operationId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'subscriptionName' missing: pass --subscription-name" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "subscriptionName" $subscription_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migrate") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4648,7 +4774,6 @@ export def "web-apps-migrate-storage" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/migratemysql
 # operationId: WebApps_MigrateMySql
-# --properties shape: {connectionString: string, migrationType: "LocalToRemote"|"RemoteToLocal"}
 export def "web-apps-migrate-my-sql" [
   subscription_id: string
   resource_group_name: string
@@ -4662,22 +4787,23 @@ export def "web-apps-migrate-my-sql" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # MigrateMySqlRequest resource specific properties — shape: {connectionString: string, migrationType: "LocalToRemote"|"RemoteToLocal"}
   --kind: string # Kind of resource.
-]: any -> record<createdTime: string, errors: table<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, expirationTime: string, geoMasterOperationId: string, id: string, modifiedTime: string, name: string, status: string> {
+]: any -> oneof<record<createdTime: string, errors: table<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, expirationTime: string, geoMasterOperationId: string, id: string, modifiedTime: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4709,17 +4835,18 @@ export def "web-apps-get-migrate-my-sql-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<localMySqlEnabled: bool, migrationOperationStatus: string, operationId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<localMySqlEnabled: bool, migrationOperationStatus: string, operationId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/migratemysql/status") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4751,17 +4878,18 @@ export def "web-apps-delete-swift-virtual-network" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4793,17 +4921,18 @@ export def "web-apps-get-swift-virtual-network-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4822,7 +4951,6 @@ export def "web-apps-get-swift-virtual-network-connection" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_UpdateSwiftVirtualNetworkConnection
-# --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
 export def "web-apps-update-swift-virtual-network-connection" [
   subscription_id: string
   resource_group_name: string
@@ -4836,22 +4964,23 @@ export def "web-apps-update-swift-virtual-network-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SwiftVirtualNetwork resource specific properties — shape: {subnetResourceId?: string, swiftSupported?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+]: any -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4870,7 +4999,6 @@ export def "web-apps-update-swift-virtual-network-connection" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork
 # operationId: WebApps_CreateOrUpdateSwiftVirtualNetworkConnection
-# --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
 export def "web-apps-create-or-update-swift-virtual-network-connection" [
   subscription_id: string
   resource_group_name: string
@@ -4884,22 +5012,23 @@ export def "web-apps-create-or-update-swift-virtual-network-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SwiftVirtualNetwork resource specific properties — shape: {subnetResourceId?: string, swiftSupported?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+]: any -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkConfig/virtualNetwork") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4932,18 +5061,19 @@ export def "web-apps-list-network-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hybridConnections: list<record>, hybridConnectionsV2: list<record>, virtualNetworkConnection: record<properties: record>, virtualNetworkName: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hybridConnections: list<record>, hybridConnectionsV2: list<record>, virtualNetworkConnection: record<properties: record, id: string, kind: string, name: string, type: string>, virtualNetworkName: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($view | is-empty) { error make --unspanned { msg: "path parameter 'view' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), view: (encode-path-segment $view)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkFeatures/{view}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4976,18 +5106,19 @@ export def "web-apps-get-network-trace-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5022,17 +5153,18 @@ export def "web-apps-start-web-site-network-trace" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5067,17 +5199,18 @@ export def "web-apps-start-web-site-network-trace-operation" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/startOperation") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5109,17 +5242,18 @@ export def "web-apps-stop-web-site-network-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5152,18 +5286,19 @@ export def "web-apps-get-network-traces" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTrace/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5196,18 +5331,19 @@ export def "web-apps-get-network-trace-operation-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/current/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5240,18 +5376,19 @@ export def "web-apps-get-network-traces-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/networkTraces/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5283,17 +5420,18 @@ export def "web-apps-generate-new-site-publishing-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/newpassword") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5326,17 +5464,18 @@ export def "web-apps-list-perf-mon-counters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Return only usages/metrics specified in the filter. Filter conforms to odata syntax. Example: $filter=(startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<code: string, data: record, message: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<code: string, data: record, message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/perfcounters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5368,17 +5507,18 @@ export def "web-apps-get-site-php-error-log-flag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<localLogErrors: string, localLogErrorsMaxLength: string, masterLogErrors: string, masterLogErrorsMaxLength: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<localLogErrors: string, localLogErrorsMaxLength: string, masterLogErrors: string, masterLogErrorsMaxLength: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/phplogging") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5410,17 +5550,18 @@ export def "web-apps-list-premier-add-ons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5453,7 +5594,7 @@ export def "web-apps-delete-premier-add-on" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5461,10 +5602,11 @@ export def "web-apps-delete-premier-add-on" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5497,18 +5639,19 @@ export def "web-apps-get-premier-add-on" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5527,7 +5670,6 @@ export def "web-apps-get-premier-add-on" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_UpdatePremierAddOn
-# --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
 export def "web-apps-update-premier-add-on" [
   subscription_id: string
   resource_group_name: string
@@ -5542,10 +5684,10 @@ export def "web-apps-update-premier-add-on" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PremierAddOnPatchResource resource specific properties — shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+]: any -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5553,12 +5695,13 @@ export def "web-apps-update-premier-add-on" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5577,7 +5720,6 @@ export def "web-apps-update-premier-add-on" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/premieraddons/{premierAddOnName}
 # operationId: WebApps_AddPremierAddOn
-# --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
 export def "web-apps-add-premier-add-on" [
   subscription_id: string
   resource_group_name: string
@@ -5592,12 +5734,12 @@ export def "web-apps-add-premier-add-on" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PremierAddOn resource specific properties — shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+]: any -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5605,12 +5747,13 @@ export def "web-apps-add-premier-add-on" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5642,17 +5785,18 @@ export def "web-apps-get-private-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<enabled: bool, virtualNetworks: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<enabled: bool, virtualNetworks: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5671,7 +5815,6 @@ export def "web-apps-get-private-access" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks
 # operationId: WebApps_PutPrivateAccessVnet
-# --properties shape: {enabled?: bool, virtualNetworks?: list}
 export def "web-apps-put-private-access-vnet" [
   subscription_id: string
   resource_group_name: string
@@ -5685,22 +5828,23 @@ export def "web-apps-put-private-access-vnet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PrivateAccess resource specific properties — shape: {enabled?: bool, virtualNetworks?: list}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<enabled: bool, virtualNetworks: list<record>>> {
+]: any -> oneof<record<properties: record<enabled: bool, virtualNetworks: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/privateAccess/virtualNetworks") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5732,17 +5876,18 @@ export def "web-apps-list-processes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5775,7 +5920,7 @@ export def "web-apps-delete-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5783,10 +5928,11 @@ export def "web-apps-delete-process" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5819,18 +5965,19 @@ export def "web-apps-get-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5863,7 +6010,7 @@ export def "web-apps-get-process-dump" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5871,10 +6018,11 @@ export def "web-apps-get-process-dump" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/dump") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5907,18 +6055,19 @@ export def "web-apps-list-process-modules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5952,8 +6101,8 @@ export def "web-apps-get-process-module" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -5961,10 +6110,11 @@ export def "web-apps-get-process-module" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($base_address | is-empty) { error make --unspanned { msg: "path parameter 'baseAddress' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/modules/{base_address}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5997,18 +6147,19 @@ export def "web-apps-list-process-threads" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6042,8 +6193,8 @@ export def "web-apps-get-process-thread" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -6051,10 +6202,11 @@ export def "web-apps-get-process-thread" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/processes/{process_id}/threads/{thread_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6086,17 +6238,18 @@ export def "web-apps-list-public-certificates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6129,7 +6282,7 @@ export def "web-apps-delete-public-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6137,10 +6290,11 @@ export def "web-apps-delete-public-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6173,18 +6327,19 @@ export def "web-apps-get-public-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6203,7 +6358,6 @@ export def "web-apps-get-public-certificate" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_CreateOrUpdatePublicCertificate
-# --properties shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
 export def "web-apps-create-or-update-public-certificate" [
   subscription_id: string
   resource_group_name: string
@@ -6218,10 +6372,10 @@ export def "web-apps-create-or-update-public-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PublicCertificate resource specific properties — shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>> {
+]: any -> oneof<record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6229,12 +6383,13 @@ export def "web-apps-create-or-update-public-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6266,7 +6421,7 @@ export def "web-apps-list-publishing-profile-xml-with-secrets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --format: string@format-completer # Name of the format. Valid values are: FileZilla3 WebDeploy -- default Ftp
   --include-disaster-recovery-endpoints: oneof<nothing, bool> # Include the DisasterRecover endpoint if true
 ]: any -> any {
@@ -6276,12 +6431,13 @@ export def "web-apps-list-publishing-profile-xml-with-secrets" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/publishxml") $qp $auth.query)
   let req_body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6313,17 +6469,18 @@ export def "web-apps-reset-production-slot-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/resetSlotConfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6357,17 +6514,18 @@ export def "web-apps-restart" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --soft-restart: oneof<nothing, bool> # Specify true to apply the configuration settings and restarts the app only if necessary. By default, the API always restarts and reprovisions the app.
   --synchronous: oneof<nothing, bool> # Specify true to block until the app is restarted. By default, it is set to false, and the API responds immediately (asynchronous).
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "softRestart" $soft_restart "scalar") (serialize-qp "synchronous" $synchronous "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restart") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6386,7 +6544,6 @@ export def "web-apps-restart" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreFromBackupBlob
 # operationId: WebApps_RestoreFromBackupBlob
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-restore-from-backup-blob" [
   subscription_id: string
   resource_group_name: string
@@ -6400,7 +6557,7 @@ export def "web-apps-restore-from-backup-blob" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -6410,12 +6567,13 @@ export def "web-apps-restore-from-backup-blob" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromBackupBlob") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6434,7 +6592,6 @@ export def "web-apps-restore-from-backup-blob" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreFromDeletedApp
 # operationId: WebApps_RestoreFromDeletedApp
-# --properties shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
 export def "web-apps-restore-from-deleted-app" [
   subscription_id: string
   resource_group_name: string
@@ -6448,7 +6605,7 @@ export def "web-apps-restore-from-deleted-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # DeletedAppRestoreRequest resource specific properties — shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -6458,12 +6615,13 @@ export def "web-apps-restore-from-deleted-app" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreFromDeletedApp") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6482,7 +6640,6 @@ export def "web-apps-restore-from-deleted-app" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/restoreSnapshot
 # operationId: WebApps_RestoreSnapshot
-# --properties shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
 export def "web-apps-restore-snapshot" [
   subscription_id: string
   resource_group_name: string
@@ -6496,7 +6653,7 @@ export def "web-apps-restore-snapshot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SnapshotRestoreRequest resource specific properties — shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -6506,12 +6663,13 @@ export def "web-apps-restore-snapshot" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/restoreSnapshot") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6543,17 +6701,18 @@ export def "web-apps-list-site-extensions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6586,7 +6745,7 @@ export def "web-apps-delete-site-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6594,10 +6753,11 @@ export def "web-apps-delete-site-extension" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6630,18 +6790,19 @@ export def "web-apps-get-site-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6674,18 +6835,19 @@ export def "web-apps-install-site-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6717,17 +6879,18 @@ export def "web-apps-list-slots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6762,7 +6925,7 @@ export def "web-apps-delete-slot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-metrics: oneof<nothing, bool> # If true, web app metrics are also deleted.
   --delete-empty-server-farm: oneof<nothing, bool> # Specify true if the App Service plan will be empty after app deletion and you want to delete the empty App Service plan. By default, the empty App Service plan is not deleted.
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6770,10 +6933,11 @@ export def "web-apps-delete-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "deleteMetrics" $delete_metrics "scalar") (serialize-qp "deleteEmptyServerFarm" $delete_empty_server_farm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6806,18 +6970,19 @@ export def "web-apps-get-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6836,8 +7001,6 @@ export def "web-apps-get-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_UpdateSlot
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
 export def "web-apps-update-slot" [
   subscription_id: string
   resource_group_name: string
@@ -6852,11 +7015,11 @@ export def "web-apps-update-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # SitePatchResource resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6864,12 +7027,13 @@ export def "web-apps-update-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6888,8 +7052,6 @@ export def "web-apps-update-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}
 # operationId: WebApps_CreateOrUpdateSlot
-# --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
-# --properties shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
 export def "web-apps-create-or-update-slot" [
   subscription_id: string
   resource_group_name: string
@@ -6904,13 +7066,13 @@ export def "web-apps-create-or-update-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --identity: record # Managed service identity. — shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
   --properties: any # Site resource specific properties — shape: {clientAffinityEnabled?: bool, clientCertEnabled?: bool, clientCertExclusionPaths?: string, cloningInfo?: record, containerSize?: int, dailyMemoryTimeQuota?: int, enabled?: bool, geoDistributions?: list, hostNameSslStates?: list, hostNamesDisabled?: bool, hostingEnvironmentProfile?: record, httpsOnly?: bool, hyperV?: bool, isXenon?: bool, redundancyMode?: "None"|"Manual"|"Failover"|"ActiveActive"|"GeoRedundant", reserved?: bool, scmSiteAlsoStopped?: bool, serverFarmId?: string, ... (2 more fields)}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string, userAssignedIdentities: record>, properties: record<availabilityState: string, clientAffinityEnabled: bool, clientCertEnabled: bool, clientCertExclusionPaths: string, cloningInfo: record<appSettingsOverrides: record, cloneCustomHostNames: bool, cloneSourceControl: bool, configureLoadBalancing: bool, correlationId: string, hostingEnvironment: string, overwrite: bool, sourceWebAppId: string, sourceWebAppLocation: string, trafficManagerProfileId: string, trafficManagerProfileName: string>, containerSize: int, dailyMemoryTimeQuota: int, defaultHostName: string, enabled: bool, enabledHostNames: list<string>, geoDistributions: list<record>, hostNameSslStates: list<record>, hostNames: list<string>, hostNamesDisabled: bool, hostingEnvironmentProfile: record<id: string, name: string, type: string>, httpsOnly: bool, hyperV: bool, inProgressOperationId: string, isDefaultContainer: bool, isXenon: bool, lastModifiedTimeUtc: string, maxNumberOfWorkers: int, outboundIpAddresses: string, possibleOutboundIpAddresses: string, redundancyMode: string, repositorySiteName: string, reserved: bool, resourceGroup: string, scmSiteAlsoStopped: bool, serverFarmId: string, siteConfig: record<alwaysOn: bool, apiDefinition: record, appCommandLine: string, appSettings: list, autoHealEnabled: bool, autoHealRules: record, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list, cors: record, defaultDocuments: list, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record, ftpsState: string, handlerMappings: list, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, slotSwapStatus: record<destinationSlotName: string, sourceSlotName: string, timestampUtc: string>, state: string, suspendedTill: string, targetSwapSlot: string, trafficManagerHostNames: list<string>, usageState: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6918,12 +7080,13 @@ export def "web-apps-create-or-update-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}") $qp $auth.query)
   let req_body = {"identity": $identity, "properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6957,18 +7120,19 @@ export def "web-apps-analyze-custom-hostname-slot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --host-name: string # Custom hostname.
-  --api-version: string # API Version
-]: nothing -> record<properties: record<aRecords: list<string>, alternateCNameRecords: list<string>, alternateTxtRecords: list<string>, cNameRecords: list<string>, conflictingAppResourceId: string, customDomainVerificationFailureInfo: record<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, customDomainVerificationTest: string, hasConflictAcrossSubscription: bool, hasConflictOnScaleUnit: bool, isHostnameAlreadyVerified: bool, txtRecords: list<string>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<aRecords: list<string>, alternateCNameRecords: list<string>, alternateTxtRecords: list<string>, cNameRecords: list<string>, conflictingAppResourceId: string, customDomainVerificationFailureInfo: record<code: string, extendedCode: string, innerErrors: list, message: string, messageTemplate: string, parameters: list>, customDomainVerificationTest: string, hasConflictAcrossSubscription: bool, hasConflictOnScaleUnit: bool, isHostnameAlreadyVerified: bool, txtRecords: list<string>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "hostName" $host_name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/analyzeCustomHostname") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7001,7 +7165,7 @@ export def "web-apps-apply-slot-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
@@ -7012,12 +7176,14 @@ export def "web-apps-apply-slot-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/applySlotConfig") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7036,7 +7202,6 @@ export def "web-apps-apply-slot-configuration-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup
 # operationId: WebApps_BackupSlot
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-backup-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7051,10 +7216,10 @@ export def "web-apps-backup-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+]: any -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7062,12 +7227,13 @@ export def "web-apps-backup-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7100,18 +7266,19 @@ export def "web-apps-list-backups-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7145,7 +7312,7 @@ export def "web-apps-delete-backup-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7154,10 +7321,11 @@ export def "web-apps-delete-backup-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7191,8 +7359,8 @@ export def "web-apps-get-backup-status-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -7200,10 +7368,11 @@ export def "web-apps-get-backup-status-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7222,7 +7391,6 @@ export def "web-apps-get-backup-status-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/list
 # operationId: WebApps_ListBackupStatusSecretsSlot
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-list-backup-status-secrets-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7238,10 +7406,10 @@ export def "web-apps-list-backup-status-secrets-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>> {
+]: any -> oneof<record<properties: record<blobName: string, correlationId: string, created: string, databases: list<record>, finishedTimeStamp: string, id: int, lastRestoreTimeStamp: string, log: string, name: string, scheduled: bool, sizeInBytes: int, status: string, storageAccountUrl: string, websiteSizeInBytes: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7250,12 +7418,13 @@ export def "web-apps-list-backup-status-secrets-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/list") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7274,7 +7443,6 @@ export def "web-apps-list-backup-status-secrets-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backupId}/restore
 # operationId: WebApps_RestoreSlot
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-restore-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7290,7 +7458,7 @@ export def "web-apps-restore-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -7302,12 +7470,13 @@ export def "web-apps-restore-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), backup_id: (encode-path-segment $backup_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/backups/{backup_id}/restore") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7340,18 +7509,19 @@ export def "web-apps-list-configurations-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7384,10 +7554,10 @@ export def "web-apps-update-application-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Settings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7395,12 +7565,13 @@ export def "web-apps-update-application-settings-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7433,18 +7604,19 @@ export def "web-apps-list-application-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/appsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7463,7 +7635,6 @@ export def "web-apps-list-application-settings-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings
 # operationId: WebApps_UpdateAuthSettingsSlot
-# --properties shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
 export def "web-apps-update-auth-settings-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7478,10 +7649,10 @@ export def "web-apps-update-auth-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteAuthSettings resource specific properties — shape: {additionalLoginParams?: list<string>, allowedAudiences?: list<string>, allowedExternalRedirectUrls?: list<string>, clientId?: string, clientSecret?: string, clientSecretCertificateThumbprint?: string, defaultProvider?: "AzureActiveDirectory"|"Facebook"|"Google"|"MicrosoftAccount"|"Twitter", enabled?: bool, facebookAppId?: string, facebookAppSecret?: string, facebookOAuthScopes?: list<string>, googleClientId?: string, googleClientSecret?: string, googleOAuthScopes?: list<string>, issuer?: string, ... (10 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
+]: any -> oneof<record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7489,12 +7660,13 @@ export def "web-apps-update-auth-settings-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7527,18 +7699,19 @@ export def "web-apps-get-auth-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<additionalLoginParams: list<string>, allowedAudiences: list<string>, allowedExternalRedirectUrls: list<string>, clientId: string, clientSecret: string, clientSecretCertificateThumbprint: string, defaultProvider: string, enabled: bool, facebookAppId: string, facebookAppSecret: string, facebookOAuthScopes: list<string>, googleClientId: string, googleClientSecret: string, googleOAuthScopes: list<string>, issuer: string, microsoftAccountClientId: string, microsoftAccountClientSecret: string, microsoftAccountOAuthScopes: list<string>, runtimeVersion: string, tokenRefreshExtensionHours: float, tokenStoreEnabled: bool, twitterConsumerKey: string, twitterConsumerSecret: string, unauthenticatedClientAction: string, validateIssuer: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/authsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7571,10 +7744,10 @@ export def "web-apps-update-azure-storage-accounts-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Azure storage accounts.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7582,12 +7755,13 @@ export def "web-apps-update-azure-storage-accounts-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7620,18 +7794,19 @@ export def "web-apps-list-azure-storage-accounts-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/azurestorageaccounts/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7664,7 +7839,7 @@ export def "web-apps-delete-backup-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7672,10 +7847,11 @@ export def "web-apps-delete-backup-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7694,7 +7870,6 @@ export def "web-apps-delete-backup-configuration-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup
 # operationId: WebApps_UpdateBackupConfigurationSlot
-# --properties shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
 export def "web-apps-update-backup-configuration-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7709,10 +7884,10 @@ export def "web-apps-update-backup-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # BackupRequest resource specific properties — shape: {backupName?: string, backupSchedule?: record, databases?: list, enabled?: bool, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>> {
+]: any -> oneof<record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7720,12 +7895,13 @@ export def "web-apps-update-backup-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7758,18 +7934,19 @@ export def "web-apps-get-backup-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<backupName: string, backupSchedule: record<frequencyInterval: int, frequencyUnit: string, keepAtLeastOneBackup: bool, lastExecutionTime: string, retentionPeriodInDays: int, startTime: string>, databases: list<record>, enabled: bool, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/backup/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7802,10 +7979,10 @@ export def "web-apps-update-connection-strings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Connection strings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7813,12 +7990,13 @@ export def "web-apps-update-connection-strings-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7851,18 +8029,19 @@ export def "web-apps-list-connection-strings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/connectionstrings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7895,18 +8074,19 @@ export def "web-apps-get-diagnostic-logs-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7925,7 +8105,6 @@ export def "web-apps-get-diagnostic-logs-configuration-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs
 # operationId: WebApps_UpdateDiagnosticLogsConfigSlot
-# --properties shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
 export def "web-apps-update-diagnostic-logs-config-slot" [
   subscription_id: string
   resource_group_name: string
@@ -7940,10 +8119,10 @@ export def "web-apps-update-diagnostic-logs-config-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteLogsConfig resource specific properties — shape: {applicationLogs?: record, detailedErrorMessages?: record, failedRequestsTracing?: record, httpLogs?: record}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>> {
+]: any -> oneof<record<properties: record<applicationLogs: record<azureBlobStorage: record, azureTableStorage: record, fileSystem: record>, detailedErrorMessages: record<enabled: bool>, failedRequestsTracing: record<enabled: bool>, httpLogs: record<azureBlobStorage: record, fileSystem: record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7951,12 +8130,13 @@ export def "web-apps-update-diagnostic-logs-config-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/logs") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7989,10 +8169,10 @@ export def "web-apps-update-metadata-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Settings.
   --kind: string # Kind of resource.
-]: any -> record<properties: record> {
+]: any -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8000,12 +8180,13 @@ export def "web-apps-update-metadata-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8038,18 +8219,19 @@ export def "web-apps-list-metadata-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/metadata/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8082,18 +8264,19 @@ export def "web-apps-list-publishing-credentials-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<publishingPassword: string, publishingPasswordHash: string, publishingPasswordHashSalt: string, publishingUserName: string, scmUri: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<publishingPassword: string, publishingPasswordHash: string, publishingPasswordHashSalt: string, publishingUserName: string, scmUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/publishingcredentials/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8112,7 +8295,6 @@ export def "web-apps-list-publishing-credentials-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings
 # operationId: WebApps_UpdateSitePushSettingsSlot
-# --properties shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
 export def "web-apps-update-site-push-settings-slot" [
   subscription_id: string
   resource_group_name: string
@@ -8127,10 +8309,10 @@ export def "web-apps-update-site-push-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PushSettings resource specific properties — shape: {dynamicTagsJson?: string, isPushEnabled: bool, tagWhitelistJson?: string, tagsRequiringAuth?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>> {
+]: any -> oneof<record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8138,12 +8320,13 @@ export def "web-apps-update-site-push-settings-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8176,18 +8359,19 @@ export def "web-apps-list-site-push-settings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<dynamicTagsJson: string, isPushEnabled: bool, tagWhitelistJson: string, tagsRequiringAuth: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/pushsettings/list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8220,18 +8404,19 @@ export def "web-apps-get-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8250,7 +8435,6 @@ export def "web-apps-get-configuration-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: WebApps_UpdateConfigurationSlot
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
 export def "web-apps-update-configuration-slot" [
   subscription_id: string
   resource_group_name: string
@@ -8265,10 +8449,10 @@ export def "web-apps-update-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+]: any -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8276,12 +8460,13 @@ export def "web-apps-update-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -8300,7 +8485,6 @@ export def "web-apps-update-configuration-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web
 # operationId: WebApps_CreateOrUpdateConfigurationSlot
-# --properties shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
 export def "web-apps-create-or-update-configuration-slot" [
   subscription_id: string
   resource_group_name: string
@@ -8315,10 +8499,10 @@ export def "web-apps-create-or-update-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # Configuration of an App Service app. — shape: {alwaysOn?: bool, apiDefinition?: record, appCommandLine?: string, appSettings?: list, autoHealEnabled?: bool, autoHealRules?: record, autoSwapSlotName?: string, azureStorageAccounts?: record, connectionStrings?: list, cors?: record, defaultDocuments?: list<string>, detailedErrorLoggingEnabled?: bool, documentRoot?: string, experiments?: record, ftpsState?: "AllAllowed"|"FtpsOnly"|"Disabled", handlerMappings?: list, http20Enabled?: bool, httpLoggingEnabled?: bool, ipSecurityRestrictions?: list, ... (34 more fields)}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+]: any -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8326,12 +8510,13 @@ export def "web-apps-create-or-update-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8364,18 +8549,19 @@ export def "web-apps-list-configuration-snapshot-info-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8409,8 +8595,8 @@ export def "web-apps-get-configuration-snapshot-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<alwaysOn: bool, apiDefinition: record<url: string>, appCommandLine: string, appSettings: list<record>, autoHealEnabled: bool, autoHealRules: record<actions: record, triggers: record>, autoSwapSlotName: string, azureStorageAccounts: record, connectionStrings: list<record>, cors: record<allowedOrigins: list, supportCredentials: bool>, defaultDocuments: list<string>, detailedErrorLoggingEnabled: bool, documentRoot: string, experiments: record<rampUpRules: list>, ftpsState: string, handlerMappings: list<record>, http20Enabled: bool, httpLoggingEnabled: bool, ipSecurityRestrictions: list<record>, javaContainer: string, javaContainerVersion: string, javaVersion: string, limits: record<maxDiskSizeInMb: int, maxMemoryInMb: int, maxPercentageCpu: float>, linuxFxVersion: string, loadBalancing: string, localMySqlEnabled: bool, logsDirectorySizeLimit: int, machineKey: record<decryption: string, decryptionKey: string, validation: string, validationKey: string>, managedPipelineMode: string, managedServiceIdentityId: int, minTlsVersion: string, netFrameworkVersion: string, nodeVersion: string, numberOfWorkers: int, phpVersion: string, publishingUsername: string, push: record<properties: record, id: string, kind: string, name: string, type: string>, pythonVersion: string, remoteDebuggingEnabled: bool, remoteDebuggingVersion: string, requestTracingEnabled: bool, requestTracingExpirationTime: string, reservedInstanceCount: int, scmIpSecurityRestrictions: list<record>, scmIpSecurityRestrictionsUseMain: bool, scmType: string, tracingOptions: string, use32BitWorkerProcess: bool, virtualApplications: list<record>, vnetName: string, webSocketsEnabled: bool, windowsFxVersion: string, xManagedServiceIdentityId: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -8418,10 +8604,11 @@ export def "web-apps-get-configuration-snapshot-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8455,7 +8642,7 @@ export def "web-apps-recover-site-configuration-snapshot-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8464,10 +8651,11 @@ export def "web-apps-recover-site-configuration-snapshot-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/config/web/snapshots/{snapshot_id}/recover") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8500,7 +8688,7 @@ export def "web-apps-get-web-site-container-logs-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8508,10 +8696,11 @@ export def "web-apps-get-web-site-container-logs-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs") $qp $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8544,7 +8733,7 @@ export def "web-apps-get-container-logs-zip-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8552,10 +8741,11 @@ export def "web-apps-get-container-logs-zip-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/containerlogs/zip/download") $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8588,18 +8778,19 @@ export def "web-apps-list-continuous-web-jobs-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8633,7 +8824,7 @@ export def "web-apps-delete-continuous-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8642,10 +8833,11 @@ export def "web-apps-delete-continuous-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8679,8 +8871,8 @@ export def "web-apps-get-continuous-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<detailed_status: string, error: string, extra_info_url: string, log_url: string, run_command: string, settings: record, status: string, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<detailed_status: string, error: string, extra_info_url: string, log_url: string, run_command: string, settings: record, status: string, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -8688,10 +8880,11 @@ export def "web-apps-get-continuous-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8725,7 +8918,7 @@ export def "web-apps-start-continuous-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8734,10 +8927,11 @@ export def "web-apps-start-continuous-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8771,7 +8965,7 @@ export def "web-apps-stop-continuous-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8780,10 +8974,11 @@ export def "web-apps-stop-continuous-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/continuouswebjobs/{web_job_name}/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8816,18 +9011,19 @@ export def "web-apps-list-deployments-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8861,7 +9057,7 @@ export def "web-apps-delete-deployment-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8870,10 +9066,11 @@ export def "web-apps-delete-deployment-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8907,8 +9104,8 @@ export def "web-apps-get-deployment-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -8916,10 +9113,11 @@ export def "web-apps-get-deployment-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8938,7 +9136,6 @@ export def "web-apps-get-deployment-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}
 # operationId: WebApps_CreateDeploymentSlot
-# --properties shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
 export def "web-apps-create-deployment-slot" [
   subscription_id: string
   resource_group_name: string
@@ -8954,10 +9151,10 @@ export def "web-apps-create-deployment-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Deployment resource specific properties — shape: {active?: bool, author?: string, author_email?: string, deployer?: string, details?: string, end_time?: string, message?: string, start_time?: string, status?: int}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+]: any -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8966,12 +9163,13 @@ export def "web-apps-create-deployment-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9005,8 +9203,8 @@ export def "web-apps-list-deployment-log-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<active: bool, author: string, author_email: string, deployer: string, details: string, end_time: string, message: string, start_time: string, status: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -9014,10 +9212,11 @@ export def "web-apps-list-deployment-log-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/deployments/{id}/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9036,7 +9235,6 @@ export def "web-apps-list-deployment-log-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/discoverbackup
 # operationId: WebApps_DiscoverBackupSlot
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-discover-backup-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9051,10 +9249,10 @@ export def "web-apps-discover-backup-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<adjustConnectionStrings: bool, appServicePlan: string, blobName: string, databases: list<record>, hostingEnvironment: string, ignoreConflictingHostNames: bool, ignoreDatabases: bool, operationType: string, overwrite: bool, siteName: string, storageAccountUrl: string>> {
+]: any -> oneof<record<properties: record<adjustConnectionStrings: bool, appServicePlan: string, blobName: string, databases: list<record>, hostingEnvironment: string, ignoreConflictingHostNames: bool, ignoreDatabases: bool, operationType: string, overwrite: bool, siteName: string, storageAccountUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9062,12 +9260,13 @@ export def "web-apps-discover-backup-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/discoverbackup") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9100,18 +9299,19 @@ export def "web-apps-list-domain-ownership-identifiers-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9145,7 +9345,7 @@ export def "web-apps-delete-domain-ownership-identifier-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9154,10 +9354,11 @@ export def "web-apps-delete-domain-ownership-identifier-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9191,8 +9392,8 @@ export def "web-apps-get-domain-ownership-identifier-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<id: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -9200,10 +9401,11 @@ export def "web-apps-get-domain-ownership-identifier-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9222,7 +9424,6 @@ export def "web-apps-get-domain-ownership-identifier-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_UpdateDomainOwnershipIdentifierSlot
-# --properties shape: {id?: string}
 export def "web-apps-update-domain-ownership-identifier-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9238,10 +9439,10 @@ export def "web-apps-update-domain-ownership-identifier-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Identifier resource specific properties — shape: {id?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<id: string>> {
+]: any -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9250,12 +9451,13 @@ export def "web-apps-update-domain-ownership-identifier-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9274,7 +9476,6 @@ export def "web-apps-update-domain-ownership-identifier-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domainOwnershipIdentifierName}
 # operationId: WebApps_CreateOrUpdateDomainOwnershipIdentifierSlot
-# --properties shape: {id?: string}
 export def "web-apps-create-or-update-domain-ownership-identifier-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9290,10 +9491,10 @@ export def "web-apps-create-or-update-domain-ownership-identifier-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # Identifier resource specific properties — shape: {id?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<id: string>> {
+]: any -> oneof<record<properties: record<id: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9302,12 +9503,13 @@ export def "web-apps-create-or-update-domain-ownership-identifier-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($domain_ownership_identifier_name | is-empty) { error make --unspanned { msg: "path parameter 'domainOwnershipIdentifierName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), domain_ownership_identifier_name: (encode-path-segment $domain_ownership_identifier_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/domainOwnershipIdentifiers/{domain_ownership_identifier_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9340,18 +9542,19 @@ export def "web-apps-get-ms-deploy-status-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9370,7 +9573,6 @@ export def "web-apps-get-ms-deploy-status-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy
 # operationId: WebApps_CreateMSDeployOperationSlot
-# --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
 export def "web-apps-create-ms-deploy-operation-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9385,10 +9587,10 @@ export def "web-apps-create-ms-deploy-operation-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # MSDeploy ARM PUT core information — shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+]: any -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9396,12 +9598,13 @@ export def "web-apps-create-ms-deploy-operation-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9434,18 +9637,19 @@ export def "web-apps-get-ms-deploy-log-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<entries: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<entries: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/extensions/MSDeploy/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9478,18 +9682,19 @@ export def "web-apps-list-instance-functions-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9522,7 +9727,7 @@ export def "web-apps-get-functions-admin-token-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9530,10 +9735,11 @@ export def "web-apps-get-functions-admin-token-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/admin/token") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9567,7 +9773,7 @@ export def "web-apps-delete-instance-function-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9576,10 +9782,11 @@ export def "web-apps-delete-instance-function-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9613,8 +9820,8 @@ export def "web-apps-get-instance-function-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -9622,10 +9829,11 @@ export def "web-apps-get-instance-function-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9644,7 +9852,6 @@ export def "web-apps-get-instance-function-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}
 # operationId: WebApps_CreateInstanceFunctionSlot
-# --properties shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
 export def "web-apps-create-instance-function-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9660,10 +9867,10 @@ export def "web-apps-create-instance-function-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # FunctionEnvelope resource specific properties — shape: {config?: record, config_href?: string, files?: record, function_app_id?: string, href?: string, script_href?: string, script_root_path_href?: string, secrets_file_href?: string, test_data?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>> {
+]: any -> oneof<record<properties: record<config: record, config_href: string, files: record, function_app_id: string, href: string, script_href: string, script_root_path_href: string, secrets_file_href: string, test_data: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9672,12 +9879,13 @@ export def "web-apps-create-instance-function-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9711,8 +9919,8 @@ export def "web-apps-list-function-secrets-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<key: string, trigger_url: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<key: string, trigger_url: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -9720,10 +9928,11 @@ export def "web-apps-list-function-secrets-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($function_name | is-empty) { error make --unspanned { msg: "path parameter 'functionName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), function_name: (encode-path-segment $function_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{function_name}/listsecrets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9756,18 +9965,19 @@ export def "web-apps-list-host-name-bindings-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9801,7 +10011,7 @@ export def "web-apps-delete-host-name-binding-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9810,10 +10020,11 @@ export def "web-apps-delete-host-name-binding-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9847,8 +10058,8 @@ export def "web-apps-get-host-name-binding-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -9856,10 +10067,11 @@ export def "web-apps-get-host-name-binding-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9878,7 +10090,6 @@ export def "web-apps-get-host-name-binding-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{hostName}
 # operationId: WebApps_CreateOrUpdateHostNameBindingSlot
-# --properties shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
 export def "web-apps-create-or-update-host-name-binding-slot" [
   subscription_id: string
   resource_group_name: string
@@ -9894,10 +10105,10 @@ export def "web-apps-create-or-update-host-name-binding-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HostNameBinding resource specific properties — shape: {azureResourceName?: string, azureResourceType?: "Website"|"TrafficManager", customHostNameDnsRecordType?: "CName"|"A", domainId?: string, hostNameType?: "Verified"|"Managed", siteName?: string, sslState?: "Disabled"|"SniEnabled"|"IpBasedEnabled", thumbprint?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>> {
+]: any -> oneof<record<properties: record<azureResourceName: string, azureResourceType: string, customHostNameDnsRecordType: string, domainId: string, hostNameType: string, siteName: string, sslState: string, thumbprint: string, virtualIP: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9906,12 +10117,13 @@ export def "web-apps-create-or-update-host-name-binding-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($host_name | is-empty) { error make --unspanned { msg: "path parameter 'hostName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), host_name: (encode-path-segment $host_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hostNameBindings/{host_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9946,7 +10158,7 @@ export def "web-apps-delete-hybrid-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9956,10 +10168,11 @@ export def "web-apps-delete-hybrid-connection-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9994,8 +10207,8 @@ export def "web-apps-get-hybrid-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10004,10 +10217,11 @@ export def "web-apps-get-hybrid-connection-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10026,7 +10240,6 @@ export def "web-apps-get-hybrid-connection-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_UpdateHybridConnectionSlot
-# --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
 export def "web-apps-update-hybrid-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -10043,10 +10256,10 @@ export def "web-apps-update-hybrid-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HybridConnection resource specific properties — shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+]: any -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10056,12 +10269,13 @@ export def "web-apps-update-hybrid-connection-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -10080,7 +10294,6 @@ export def "web-apps-update-hybrid-connection-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespaceName}/relays/{relayName}
 # operationId: WebApps_CreateOrUpdateHybridConnectionSlot
-# --properties shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
 export def "web-apps-create-or-update-hybrid-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -10097,10 +10310,10 @@ export def "web-apps-create-or-update-hybrid-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # HybridConnection resource specific properties — shape: {hostname?: string, port?: int, relayArmUri?: string, relayName?: string, sendKeyName?: string, sendKeyValue?: string, serviceBusNamespace?: string, serviceBusSuffix?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+]: any -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10110,12 +10323,13 @@ export def "web-apps-create-or-update-hybrid-connection-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10150,8 +10364,8 @@ export def "web-apps-list-hybrid-connection-keys-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<sendKeyName: string, sendKeyValue: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<sendKeyName: string, sendKeyValue: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10160,10 +10374,11 @@ export def "web-apps-list-hybrid-connection-keys-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($namespace_name | is-empty) { error make --unspanned { msg: "path parameter 'namespaceName' must be non-empty" } }
   if ($relay_name | is-empty) { error make --unspanned { msg: "path parameter 'relayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), namespace_name: (encode-path-segment $namespace_name), relay_name: (encode-path-segment $relay_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionNamespaces/{namespace_name}/relays/{relay_name}/listKeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10196,18 +10411,19 @@ export def "web-apps-list-hybrid-connections-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hostname: string, port: int, relayArmUri: string, relayName: string, sendKeyName: string, sendKeyValue: string, serviceBusNamespace: string, serviceBusSuffix: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridConnectionRelays") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10240,18 +10456,19 @@ export def "web-apps-list-relay-service-connections-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10285,7 +10502,7 @@ export def "web-apps-delete-relay-service-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10294,10 +10511,11 @@ export def "web-apps-delete-relay-service-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10331,8 +10549,8 @@ export def "web-apps-get-relay-service-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10340,10 +10558,11 @@ export def "web-apps-get-relay-service-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10362,7 +10581,6 @@ export def "web-apps-get-relay-service-connection-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_UpdateRelayServiceConnectionSlot
-# --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
 export def "web-apps-update-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -10378,10 +10596,10 @@ export def "web-apps-update-relay-service-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RelayServiceConnectionEntity resource specific properties — shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+]: any -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10390,12 +10608,13 @@ export def "web-apps-update-relay-service-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -10414,7 +10633,6 @@ export def "web-apps-update-relay-service-connection-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entityName}
 # operationId: WebApps_CreateOrUpdateRelayServiceConnectionSlot
-# --properties shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
 export def "web-apps-create-or-update-relay-service-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -10430,10 +10648,10 @@ export def "web-apps-create-or-update-relay-service-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RelayServiceConnectionEntity resource specific properties — shape: {biztalkUri?: string, entityConnectionString?: string, entityName?: string, hostname?: string, port?: int, resourceConnectionString?: string, resourceType?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>> {
+]: any -> oneof<record<properties: record<biztalkUri: string, entityConnectionString: string, entityName: string, hostname: string, port: int, resourceConnectionString: string, resourceType: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10442,12 +10660,13 @@ export def "web-apps-create-or-update-relay-service-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($entity_name | is-empty) { error make --unspanned { msg: "path parameter 'entityName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), entity_name: (encode-path-segment $entity_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/hybridconnection/{entity_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10480,18 +10699,19 @@ export def "web-apps-list-instance-identifiers-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10525,8 +10745,8 @@ export def "web-apps-get-instance-ms-deploy-status-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10534,10 +10754,11 @@ export def "web-apps-get-instance-ms-deploy-status-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10556,7 +10777,6 @@ export def "web-apps-get-instance-ms-deploy-status-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instanceId}/extensions/MSDeploy
 # operationId: WebApps_CreateInstanceMSDeployOperationSlot
-# --properties shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
 export def "web-apps-create-instance-ms-deploy-operation-slot" [
   subscription_id: string
   resource_group_name: string
@@ -10572,10 +10792,10 @@ export def "web-apps-create-instance-ms-deploy-operation-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: record # MSDeploy ARM PUT core information — shape: {appOffline?: bool, connectionString?: string, dbType?: string, packageUri?: string, setParameters?: record, setParametersXmlFileUri?: string, skipAppData?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>> {
+]: any -> oneof<record<properties: record<complete: bool, deployer: string, endTime: string, provisioningState: string, startTime: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10584,12 +10804,13 @@ export def "web-apps-create-instance-ms-deploy-operation-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10623,8 +10844,8 @@ export def "web-apps-get-instance-ms-deploy-log-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<entries: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<entries: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10632,10 +10853,11 @@ export def "web-apps-get-instance-ms-deploy-log-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/extensions/MSDeploy/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10669,8 +10891,8 @@ export def "web-apps-list-instance-processes-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10678,10 +10900,11 @@ export def "web-apps-list-instance-processes-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10716,7 +10939,7 @@ export def "web-apps-delete-instance-process-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10726,10 +10949,11 @@ export def "web-apps-delete-instance-process-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10764,8 +10988,8 @@ export def "web-apps-get-instance-process-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10774,10 +10998,11 @@ export def "web-apps-get-instance-process-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10812,7 +11037,7 @@ export def "web-apps-get-instance-process-dump-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10822,10 +11047,11 @@ export def "web-apps-get-instance-process-dump-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/dump") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10860,8 +11086,8 @@ export def "web-apps-list-instance-process-modules-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10870,10 +11096,11 @@ export def "web-apps-list-instance-process-modules-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10909,8 +11136,8 @@ export def "web-apps-get-instance-process-module-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10920,10 +11147,11 @@ export def "web-apps-get-instance-process-module-slot" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($base_address | is-empty) { error make --unspanned { msg: "path parameter 'baseAddress' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/modules/{base_address}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10958,8 +11186,8 @@ export def "web-apps-list-instance-process-threads-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -10968,10 +11196,11 @@ export def "web-apps-list-instance-process-threads-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11007,8 +11236,8 @@ export def "web-apps-get-instance-process-thread-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11018,10 +11247,11 @@ export def "web-apps-get-instance-process-thread-slot" [
   if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), instance_id: (encode-path-segment $instance_id), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/instances/{instance_id}/processes/{process_id}/threads/{thread_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11054,18 +11284,19 @@ export def "web-apps-is-cloneable-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<blockingCharacteristics: table<description: string, name: string>, blockingFeatures: table<description: string, name: string>, result: string, unsupportedFeatures: table<description: string, name: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<blockingCharacteristics: table<description: string, name: string>, blockingFeatures: table<description: string, name: string>, result: string, unsupportedFeatures: table<description: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/iscloneable") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11098,18 +11329,19 @@ export def "web-apps-list-sync-function-triggers-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<key: string, trigger_url: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<key: string, trigger_url: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/listsyncfunctiontriggerstatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11142,18 +11374,19 @@ export def "web-apps-list-metric-definitions-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metricdefinitions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11188,18 +11421,19 @@ export def "web-apps-list-metrics-slot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --details: oneof<nothing, bool> # Specify "true" to include metric details in the response. It is "false" by default.
   --filter: string # Return only metrics specified in the filter (using OData syntax). For example: $filter=(name.value eq 'Metric1' or name.value eq 'Metric2') and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<endTime: string, id: string, metricValues: list, name: record, properties: list, resourceId: string, startTime: string, timeGrain: string, unit: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<endTime: string, id: string, metricValues: list, name: record, properties: list, resourceId: string, startTime: string, timeGrain: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "details" $details "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/metrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11232,18 +11466,19 @@ export def "web-apps-get-migrate-my-sql-status-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<localMySqlEnabled: bool, migrationOperationStatus: string, operationId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<localMySqlEnabled: bool, migrationOperationStatus: string, operationId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/migratemysql/status") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11276,7 +11511,7 @@ export def "web-apps-delete-swift-virtual-network-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11284,10 +11519,11 @@ export def "web-apps-delete-swift-virtual-network-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11320,18 +11556,19 @@ export def "web-apps-get-swift-virtual-network-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11350,7 +11587,6 @@ export def "web-apps-get-swift-virtual-network-connection-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_UpdateSwiftVirtualNetworkConnectionSlot
-# --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
 export def "web-apps-update-swift-virtual-network-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -11365,10 +11601,10 @@ export def "web-apps-update-swift-virtual-network-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SwiftVirtualNetwork resource specific properties — shape: {subnetResourceId?: string, swiftSupported?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+]: any -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11376,12 +11612,13 @@ export def "web-apps-update-swift-virtual-network-connection-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11400,7 +11637,6 @@ export def "web-apps-update-swift-virtual-network-connection-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork
 # operationId: WebApps_CreateOrUpdateSwiftVirtualNetworkConnectionSlot
-# --properties shape: {subnetResourceId?: string, swiftSupported?: bool}
 export def "web-apps-create-or-update-swift-virtual-network-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -11415,10 +11651,10 @@ export def "web-apps-create-or-update-swift-virtual-network-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SwiftVirtualNetwork resource specific properties — shape: {subnetResourceId?: string, swiftSupported?: bool}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<subnetResourceId: string, swiftSupported: bool>> {
+]: any -> oneof<record<properties: record<subnetResourceId: string, swiftSupported: bool>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11426,12 +11662,13 @@ export def "web-apps-create-or-update-swift-virtual-network-connection-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkConfig/virtualNetwork") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11465,8 +11702,8 @@ export def "web-apps-list-network-features-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<hybridConnections: list<record>, hybridConnectionsV2: list<record>, virtualNetworkConnection: record<properties: record>, virtualNetworkName: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<hybridConnections: list<record>, hybridConnectionsV2: list<record>, virtualNetworkConnection: record<properties: record, id: string, kind: string, name: string, type: string>, virtualNetworkName: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11474,10 +11711,11 @@ export def "web-apps-list-network-features-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($view | is-empty) { error make --unspanned { msg: "path parameter 'view' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), view: (encode-path-segment $view)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkFeatures/{view}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11511,8 +11749,8 @@ export def "web-apps-get-network-trace-operation-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11520,10 +11758,11 @@ export def "web-apps-get-network-trace-operation-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11559,7 +11798,7 @@ export def "web-apps-start-web-site-network-trace-slot" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11567,10 +11806,11 @@ export def "web-apps-start-web-site-network-trace-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11606,18 +11846,19 @@ export def "web-apps-start-web-site-network-trace-operation-slot" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/startOperation") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11650,7 +11891,7 @@ export def "web-apps-stop-web-site-network-trace-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11658,10 +11899,11 @@ export def "web-apps-stop-web-site-network-trace-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11695,8 +11937,8 @@ export def "web-apps-get-network-traces-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11704,10 +11946,11 @@ export def "web-apps-get-network-traces-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTrace/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11741,8 +11984,8 @@ export def "web-apps-get-network-trace-operation-slot-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11750,10 +11993,11 @@ export def "web-apps-get-network-trace-operation-slot-v2" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/current/operationresults/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11787,8 +12031,8 @@ export def "web-apps-get-network-traces-slot-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -11796,10 +12040,11 @@ export def "web-apps-get-network-traces-slot-v2" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), operation_id: (encode-path-segment $operation_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/networkTraces/{operation_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11832,7 +12077,7 @@ export def "web-apps-generate-new-site-publishing-password-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11840,10 +12085,11 @@ export def "web-apps-generate-new-site-publishing-password-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/newpassword") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11877,18 +12123,19 @@ export def "web-apps-list-perf-mon-counters-slot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Return only usages/metrics specified in the filter. Filter conforms to odata syntax. Example: $filter=(startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<code: string, data: record, message: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<code: string, data: record, message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/perfcounters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11921,18 +12168,19 @@ export def "web-apps-get-site-php-error-log-flag-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<localLogErrors: string, localLogErrorsMaxLength: string, masterLogErrors: string, masterLogErrorsMaxLength: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<localLogErrors: string, localLogErrorsMaxLength: string, masterLogErrors: string, masterLogErrorsMaxLength: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/phplogging") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11965,18 +12213,19 @@ export def "web-apps-list-premier-add-ons-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12010,7 +12259,7 @@ export def "web-apps-delete-premier-add-on-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12019,10 +12268,11 @@ export def "web-apps-delete-premier-add-on-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12056,8 +12306,8 @@ export def "web-apps-get-premier-add-on-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12065,10 +12315,11 @@ export def "web-apps-get-premier-add-on-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12087,7 +12338,6 @@ export def "web-apps-get-premier-add-on-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_UpdatePremierAddOnSlot
-# --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
 export def "web-apps-update-premier-add-on-slot" [
   subscription_id: string
   resource_group_name: string
@@ -12103,10 +12353,10 @@ export def "web-apps-update-premier-add-on-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PremierAddOnPatchResource resource specific properties — shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+]: any -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12115,12 +12365,13 @@ export def "web-apps-update-premier-add-on-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12139,7 +12390,6 @@ export def "web-apps-update-premier-add-on-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premierAddOnName}
 # operationId: WebApps_AddPremierAddOnSlot
-# --properties shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
 export def "web-apps-add-premier-add-on-slot" [
   subscription_id: string
   resource_group_name: string
@@ -12155,12 +12405,12 @@ export def "web-apps-add-premier-add-on-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PremierAddOn resource specific properties — shape: {marketplaceOffer?: string, marketplacePublisher?: string, product?: string, sku?: string, vendor?: string}
   --kind: string # Kind of resource.
   location: string # Resource Location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>> {
+]: any -> oneof<record<properties: record<marketplaceOffer: string, marketplacePublisher: string, product: string, sku: string, vendor: string>, id: string, kind: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12169,12 +12419,13 @@ export def "web-apps-add-premier-add-on-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($premier_add_on_name | is-empty) { error make --unspanned { msg: "path parameter 'premierAddOnName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), premier_add_on_name: (encode-path-segment $premier_add_on_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/premieraddons/{premier_add_on_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12207,18 +12458,19 @@ export def "web-apps-get-private-access-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<enabled: bool, virtualNetworks: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<enabled: bool, virtualNetworks: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12237,7 +12489,6 @@ export def "web-apps-get-private-access-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks
 # operationId: WebApps_PutPrivateAccessVnetSlot
-# --properties shape: {enabled?: bool, virtualNetworks?: list}
 export def "web-apps-put-private-access-vnet-slot" [
   subscription_id: string
   resource_group_name: string
@@ -12252,10 +12503,10 @@ export def "web-apps-put-private-access-vnet-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PrivateAccess resource specific properties — shape: {enabled?: bool, virtualNetworks?: list}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<enabled: bool, virtualNetworks: list<record>>> {
+]: any -> oneof<record<properties: record<enabled: bool, virtualNetworks: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12263,12 +12514,13 @@ export def "web-apps-put-private-access-vnet-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/privateAccess/virtualNetworks") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12301,18 +12553,19 @@ export def "web-apps-list-processes-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12346,7 +12599,7 @@ export def "web-apps-delete-process-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12355,10 +12608,11 @@ export def "web-apps-delete-process-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12392,8 +12646,8 @@ export def "web-apps-get-process-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<children: list<string>, command_line: string, deployment_name: string, description: string, environment_variables: record, file_name: string, handle_count: int, href: string, identifier: int, iis_profile_timeout_in_seconds: float, is_iis_profile_running: bool, is_profile_running: bool, is_scm_site: bool, is_webjob: bool, minidump: string, module_count: int, modules: list<record>, non_paged_system_memory: int, open_file_handles: list<string>, paged_memory: int, paged_system_memory: int, parent: string, peak_paged_memory: int, peak_virtual_memory: int, peak_working_set: int, private_memory: int, privileged_cpu_time: string, start_time: string, thread_count: int, threads: list<record>, time_stamp: string, total_cpu_time: string, user_cpu_time: string, user_name: string, virtual_memory: int, working_set: int>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12401,10 +12655,11 @@ export def "web-apps-get-process-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12438,7 +12693,7 @@ export def "web-apps-get-process-dump-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12447,10 +12702,11 @@ export def "web-apps-get-process-dump-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/dump") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12484,8 +12740,8 @@ export def "web-apps-list-process-modules-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12493,10 +12749,11 @@ export def "web-apps-list-process-modules-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12531,8 +12788,8 @@ export def "web-apps-get-process-module-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_address: string, file_description: string, file_name: string, file_path: string, file_version: string, href: string, is_debug: bool, language: string, module_memory_size: int, product: string, product_version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12541,10 +12798,11 @@ export def "web-apps-get-process-module-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($base_address | is-empty) { error make --unspanned { msg: "path parameter 'baseAddress' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id), base_address: (encode-path-segment $base_address)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/modules/{base_address}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12578,8 +12836,8 @@ export def "web-apps-list-process-threads-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12587,10 +12845,11 @@ export def "web-apps-list-process-threads-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12625,8 +12884,8 @@ export def "web-apps-get-process-thread-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<base_priority: int, current_priority: int, href: string, identifier: int, priority_level: string, priviledged_processor_time: string, process: string, start_address: string, start_time: string, state: string, total_processor_time: string, user_processor_time: string, wait_reason: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12635,10 +12894,11 @@ export def "web-apps-get-process-thread-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($process_id | is-empty) { error make --unspanned { msg: "path parameter 'processId' must be non-empty" } }
   if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), process_id: (encode-path-segment $process_id), thread_id: (encode-path-segment $thread_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/processes/{process_id}/threads/{thread_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12671,18 +12931,19 @@ export def "web-apps-list-public-certificates-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12716,7 +12977,7 @@ export def "web-apps-delete-public-certificate-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12725,10 +12986,11 @@ export def "web-apps-delete-public-certificate-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12762,8 +13024,8 @@ export def "web-apps-get-public-certificate-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -12771,10 +13033,11 @@ export def "web-apps-get-public-certificate-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12793,7 +13056,6 @@ export def "web-apps-get-public-certificate-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{publicCertificateName}
 # operationId: WebApps_CreateOrUpdatePublicCertificateSlot
-# --properties shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
 export def "web-apps-create-or-update-public-certificate-slot" [
   subscription_id: string
   resource_group_name: string
@@ -12809,10 +13071,10 @@ export def "web-apps-create-or-update-public-certificate-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # PublicCertificate resource specific properties — shape: {blob?: string, publicCertificateLocation?: "CurrentUserMy"|"LocalMachineMy"|"Unknown"}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>> {
+]: any -> oneof<record<properties: record<blob: string, publicCertificateLocation: string, thumbprint: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12821,12 +13083,13 @@ export def "web-apps-create-or-update-public-certificate-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($public_certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'publicCertificateName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), public_certificate_name: (encode-path-segment $public_certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publicCertificates/{public_certificate_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12859,7 +13122,7 @@ export def "web-apps-list-publishing-profile-xml-with-secrets-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --format: string@format-completer # Name of the format. Valid values are: FileZilla3 WebDeploy -- default Ftp
   --include-disaster-recovery-endpoints: oneof<nothing, bool> # Include the DisasterRecover endpoint if true
 ]: any -> any {
@@ -12870,12 +13133,13 @@ export def "web-apps-list-publishing-profile-xml-with-secrets-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/publishxml") $qp $auth.query)
   let req_body = {"format": $format, "includeDisasterRecoveryEndpoints": $include_disaster_recovery_endpoints} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12908,7 +13172,7 @@ export def "web-apps-reset-slot-configuration-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12916,10 +13180,11 @@ export def "web-apps-reset-slot-configuration-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/resetSlotConfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12954,7 +13219,7 @@ export def "web-apps-restart-slot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --soft-restart: oneof<nothing, bool> # Specify true to apply the configuration settings and restarts the app only if necessary. By default, the API always restarts and reprovisions the app.
   --synchronous: oneof<nothing, bool> # Specify true to block until the app is restarted. By default, it is set to false, and the API responds immediately (asynchronous).
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12962,10 +13227,11 @@ export def "web-apps-restart-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "softRestart" $soft_restart "scalar") (serialize-qp "synchronous" $synchronous "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restart") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12984,7 +13250,6 @@ export def "web-apps-restart-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromBackupBlob
 # operationId: WebApps_RestoreFromBackupBlobSlot
-# --properties shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
 export def "web-apps-restore-from-backup-blob-slot" [
   subscription_id: string
   resource_group_name: string
@@ -12999,7 +13264,7 @@ export def "web-apps-restore-from-backup-blob-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # RestoreRequest resource specific properties — shape: {adjustConnectionStrings?: bool, appServicePlan?: string, blobName?: string, databases?: list, hostingEnvironment?: string, ignoreConflictingHostNames?: bool, ignoreDatabases?: bool, operationType?: "Default"|"Clone"|"Relocation"|"Snapshot"|"CloudFS", overwrite: bool, siteName?: string, storageAccountUrl: string}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -13010,12 +13275,13 @@ export def "web-apps-restore-from-backup-blob-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromBackupBlob") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13034,7 +13300,6 @@ export def "web-apps-restore-from-backup-blob-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromDeletedApp
 # operationId: WebApps_RestoreFromDeletedAppSlot
-# --properties shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
 export def "web-apps-restore-from-deleted-app-slot" [
   subscription_id: string
   resource_group_name: string
@@ -13049,7 +13314,7 @@ export def "web-apps-restore-from-deleted-app-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # DeletedAppRestoreRequest resource specific properties — shape: {deletedSiteId?: string, recoverConfiguration?: bool, snapshotTime?: string, useDRSecondary?: bool}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -13060,12 +13325,13 @@ export def "web-apps-restore-from-deleted-app-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreFromDeletedApp") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13084,7 +13350,6 @@ export def "web-apps-restore-from-deleted-app-slot" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreSnapshot
 # operationId: WebApps_RestoreSnapshotSlot
-# --properties shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
 export def "web-apps-restore-snapshot-slot" [
   subscription_id: string
   resource_group_name: string
@@ -13099,7 +13364,7 @@ export def "web-apps-restore-snapshot-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SnapshotRestoreRequest resource specific properties — shape: {ignoreConflictingHostNames?: bool, overwrite: bool, recoverConfiguration?: bool, recoverySource?: record, snapshotTime?: string, useDRSecondary?: bool}
   --kind: string # Kind of resource.
 ]: any -> any {
@@ -13110,12 +13375,13 @@ export def "web-apps-restore-snapshot-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/restoreSnapshot") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13148,18 +13414,19 @@ export def "web-apps-list-site-extensions-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13193,7 +13460,7 @@ export def "web-apps-delete-site-extension-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13202,10 +13469,11 @@ export def "web-apps-delete-site-extension-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13239,8 +13507,8 @@ export def "web-apps-get-site-extension-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -13248,10 +13516,11 @@ export def "web-apps-get-site-extension-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13285,8 +13554,8 @@ export def "web-apps-install-site-extension-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<authors: list<string>, comment: string, description: string, download_count: int, extension_id: string, extension_type: string, extension_url: string, feed_url: string, icon_url: string, installed_date_time: string, installer_command_line_params: string, license_url: string, local_is_latest_version: bool, local_path: string, project_url: string, provisioningState: string, published_date_time: string, summary: string, title: string, version: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -13294,10 +13563,11 @@ export def "web-apps-install-site-extension-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($site_extension_id | is-empty) { error make --unspanned { msg: "path parameter 'siteExtensionId' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), site_extension_id: (encode-path-segment $site_extension_id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/siteextensions/{site_extension_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13330,10 +13600,10 @@ export def "web-apps-list-slot-differences-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
-]: any -> record<nextLink: string, value: table<properties: record>> {
+]: any -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13341,12 +13611,14 @@ export def "web-apps-list-slot-differences-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsdiffs") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13379,7 +13651,7 @@ export def "web-apps-swap-slot-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
@@ -13390,12 +13662,14 @@ export def "web-apps-swap-slot-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/slotsswap") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13428,18 +13702,19 @@ export def "web-apps-list-snapshots-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13472,18 +13747,19 @@ export def "web-apps-list-snapshots-from-dr-secondary-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/snapshotsdr") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13516,7 +13792,7 @@ export def "web-apps-delete-source-control-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13524,10 +13800,11 @@ export def "web-apps-delete-source-control-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13560,18 +13837,19 @@ export def "web-apps-get-source-control-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13590,7 +13868,6 @@ export def "web-apps-get-source-control-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_UpdateSourceControlSlot
-# --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
 export def "web-apps-update-source-control-slot" [
   subscription_id: string
   resource_group_name: string
@@ -13605,10 +13882,10 @@ export def "web-apps-update-source-control-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteSourceControl resource specific properties — shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+]: any -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13616,12 +13893,13 @@ export def "web-apps-update-source-control-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -13640,7 +13918,6 @@ export def "web-apps-update-source-control-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web
 # operationId: WebApps_CreateOrUpdateSourceControlSlot
-# --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
 export def "web-apps-create-or-update-source-control-slot" [
   subscription_id: string
   resource_group_name: string
@@ -13655,10 +13932,10 @@ export def "web-apps-create-or-update-source-control-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteSourceControl resource specific properties — shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+]: any -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13666,12 +13943,13 @@ export def "web-apps-create-or-update-source-control-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sourcecontrols/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13704,7 +13982,7 @@ export def "web-apps-start-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13712,10 +13990,11 @@ export def "web-apps-start-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13751,18 +14030,19 @@ export def "web-apps-start-network-trace-slot" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/startNetworkTrace") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13795,7 +14075,7 @@ export def "web-apps-stop-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13803,10 +14083,11 @@ export def "web-apps-stop-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13839,7 +14120,7 @@ export def "web-apps-stop-network-trace-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13847,10 +14128,11 @@ export def "web-apps-stop-network-trace-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/stopNetworkTrace") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13883,7 +14165,7 @@ export def "web-apps-sync-repository-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13891,10 +14173,11 @@ export def "web-apps-sync-repository-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/sync") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13927,7 +14210,7 @@ export def "web-apps-sync-function-triggers-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13935,10 +14218,11 @@ export def "web-apps-sync-function-triggers-slot" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/syncfunctiontriggers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13971,18 +14255,19 @@ export def "web-apps-list-triggered-web-jobs-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14016,7 +14301,7 @@ export def "web-apps-delete-triggered-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14025,10 +14310,11 @@ export def "web-apps-delete-triggered-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14062,8 +14348,8 @@ export def "web-apps-get-triggered-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<error: string, extra_info_url: string, history_url: string, latest_run: record<properties: record>, run_command: string, scheduler_logs_url: string, settings: record, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<error: string, extra_info_url: string, history_url: string, latest_run: record<properties: record, id: string, kind: string, name: string, type: string>, run_command: string, scheduler_logs_url: string, settings: record, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14071,10 +14357,11 @@ export def "web-apps-get-triggered-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14108,8 +14395,8 @@ export def "web-apps-list-triggered-web-job-history-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14117,10 +14404,11 @@ export def "web-apps-list-triggered-web-job-history-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14155,8 +14443,8 @@ export def "web-apps-get-triggered-web-job-history-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<runs: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<runs: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14165,10 +14453,11 @@ export def "web-apps-get-triggered-web-job-history-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/history/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14202,7 +14491,7 @@ export def "web-apps-run-triggered-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14211,10 +14500,11 @@ export def "web-apps-run-triggered-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/triggeredwebjobs/{web_job_name}/run") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14248,18 +14538,19 @@ export def "web-apps-list-usages-slot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Return only information specified in the filter (using OData syntax). For example: $filter=(name.value eq 'Metric1' or name.value eq 'Metric2') and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, nextResetTime: string, unit: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, name: record, nextResetTime: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/usages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14292,18 +14583,19 @@ export def "web-apps-list-vnet-connections-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list, vnetResourceId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14337,7 +14629,7 @@ export def "web-apps-delete-vnet-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14346,10 +14638,11 @@ export def "web-apps-delete-vnet-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14383,8 +14676,8 @@ export def "web-apps-get-vnet-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14392,10 +14685,11 @@ export def "web-apps-get-vnet-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14414,7 +14708,6 @@ export def "web-apps-get-vnet-connection-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_UpdateVnetConnectionSlot
-# --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
 export def "web-apps-update-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -14430,10 +14723,10 @@ export def "web-apps-update-vnet-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetInfo resource specific properties — shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+]: any -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14442,12 +14735,13 @@ export def "web-apps-update-vnet-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -14466,7 +14760,6 @@ export def "web-apps-update-vnet-connection-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionSlot
-# --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
 export def "web-apps-create-or-update-vnet-connection-slot" [
   subscription_id: string
   resource_group_name: string
@@ -14482,10 +14775,10 @@ export def "web-apps-create-or-update-vnet-connection-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetInfo resource specific properties — shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+]: any -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14494,12 +14787,13 @@ export def "web-apps-create-or-update-vnet-connection-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14534,8 +14828,8 @@ export def "web-apps-get-vnet-connection-gateway-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14544,10 +14838,11 @@ export def "web-apps-get-vnet-connection-gateway-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14566,7 +14861,6 @@ export def "web-apps-get-vnet-connection-gateway-slot" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_UpdateVnetConnectionGatewaySlot
-# --properties shape: {vnetName?: string, vpnPackageUri: string}
 export def "web-apps-update-vnet-connection-gateway-slot" [
   subscription_id: string
   resource_group_name: string
@@ -14583,10 +14877,10 @@ export def "web-apps-update-vnet-connection-gateway-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetGateway resource specific properties — shape: {vnetName?: string, vpnPackageUri: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+]: any -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14596,12 +14890,13 @@ export def "web-apps-update-vnet-connection-gateway-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -14620,7 +14915,6 @@ export def "web-apps-update-vnet-connection-gateway-slot" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionGatewaySlot
-# --properties shape: {vnetName?: string, vpnPackageUri: string}
 export def "web-apps-create-or-update-vnet-connection-gateway-slot" [
   subscription_id: string
   resource_group_name: string
@@ -14637,10 +14931,10 @@ export def "web-apps-create-or-update-vnet-connection-gateway-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetGateway resource specific properties — shape: {vnetName?: string, vpnPackageUri: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+]: any -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14650,12 +14944,13 @@ export def "web-apps-create-or-update-vnet-connection-gateway-slot" [
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14688,18 +14983,19 @@ export def "web-apps-list-web-jobs-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14733,8 +15029,8 @@ export def "web-apps-get-web-job-slot" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<error: string, extra_info_url: string, run_command: string, settings: record, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<error: string, extra_info_url: string, run_command: string, settings: record, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -14742,10 +15038,11 @@ export def "web-apps-get-web-job-slot" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($slot | is-empty) { error make --unspanned { msg: "path parameter 'slot' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), slot: (encode-path-segment $slot), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slots/{slot}/webjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14777,22 +15074,24 @@ export def "web-apps-list-slot-differences-from-production" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
-]: any -> record<nextLink: string, value: table<properties: record>> {
+]: any -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsdiffs") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14824,7 +15123,7 @@ export def "web-apps-swap-slot-with-production" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --preserve-vnet: oneof<nothing, bool> # true to preserve Virtual Network to the slot during swap; otherwise, false.
   target_slot: string # Destination deployment slot during swap operation.
 ]: any -> any {
@@ -14834,12 +15133,14 @@ export def "web-apps-swap-slot-with-production" [
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/slotsswap") $qp $auth.query)
   let req_body = {"preserveVnet": $preserve_vnet, "targetSlot": $target_slot} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "preserveVnet") == null) { error make --unspanned { msg: "required body field 'preserveVnet' missing: pass --preserve-vnet or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14871,17 +15172,18 @@ export def "web-apps-list-snapshots" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshots") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14913,17 +15215,18 @@ export def "web-apps-list-snapshots-from-dr-secondary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/snapshotsdr") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14955,17 +15258,18 @@ export def "web-apps-delete-source-control" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14997,17 +15301,18 @@ export def "web-apps-get-source-control" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15026,7 +15331,6 @@ export def "web-apps-get-source-control" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_UpdateSourceControl
-# --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
 export def "web-apps-update-source-control" [
   subscription_id: string
   resource_group_name: string
@@ -15040,22 +15344,23 @@ export def "web-apps-update-source-control" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteSourceControl resource specific properties — shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+]: any -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15074,7 +15379,6 @@ export def "web-apps-update-source-control" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web
 # operationId: WebApps_CreateOrUpdateSourceControl
-# --properties shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
 export def "web-apps-create-or-update-source-control" [
   subscription_id: string
   resource_group_name: string
@@ -15088,22 +15392,23 @@ export def "web-apps-create-or-update-source-control" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # SiteSourceControl resource specific properties — shape: {branch?: string, deploymentRollbackEnabled?: bool, isManualIntegration?: bool, isMercurial?: bool, repoUrl?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>> {
+]: any -> oneof<record<properties: record<branch: string, deploymentRollbackEnabled: bool, isManualIntegration: bool, isMercurial: bool, repoUrl: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sourcecontrols/web") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -15135,17 +15440,18 @@ export def "web-apps-start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/start") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15180,17 +15486,18 @@ export def "web-apps-start-network-trace" [
   --duration-in-seconds: int # The duration to keep capturing in seconds. (format: int32)
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
-  --api-version: string # API Version
-]: nothing -> table<message: string, path: string, status: string> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<message: string, path: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "durationInSeconds" $duration_in_seconds "scalar") (serialize-qp "maxFrameLength" $max_frame_length "scalar") (serialize-qp "sasUrl" $sas_url "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/startNetworkTrace") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15222,17 +15529,18 @@ export def "web-apps-stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15264,17 +15572,18 @@ export def "web-apps-stop-network-trace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/stopNetworkTrace") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15306,17 +15615,18 @@ export def "web-apps-sync-repository" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/sync") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15348,17 +15658,18 @@ export def "web-apps-sync-function-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/syncfunctiontriggers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15390,17 +15701,18 @@ export def "web-apps-list-triggered-web-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15433,7 +15745,7 @@ export def "web-apps-delete-triggered-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15441,10 +15753,11 @@ export def "web-apps-delete-triggered-web-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -15477,18 +15790,19 @@ export def "web-apps-get-triggered-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<error: string, extra_info_url: string, history_url: string, latest_run: record<properties: record>, run_command: string, scheduler_logs_url: string, settings: record, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<error: string, extra_info_url: string, history_url: string, latest_run: record<properties: record, id: string, kind: string, name: string, type: string>, run_command: string, scheduler_logs_url: string, settings: record, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15521,18 +15835,19 @@ export def "web-apps-list-triggered-web-job-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15566,8 +15881,8 @@ export def "web-apps-get-triggered-web-job-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<runs: list<record>>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<runs: list<record>>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -15575,10 +15890,11 @@ export def "web-apps-get-triggered-web-job-history" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name), id: (encode-path-segment $id)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/history/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15611,7 +15927,7 @@ export def "web-apps-run-triggered-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15619,10 +15935,11 @@ export def "web-apps-run-triggered-web-job" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/triggeredwebjobs/{web_job_name}/run") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15655,17 +15972,18 @@ export def "web-apps-list-usages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Return only information specified in the filter (using OData syntax). For example: $filter=(name.value eq 'Metric1' or name.value eq 'Metric2') and startTime eq 2014-01-01T00:00:00Z and endTime eq 2014-12-31T23:59:59Z and timeGrain eq duration'[Hour|Minute|Day]'.
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, name: record, nextResetTime: string, unit: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, name: record, nextResetTime: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/usages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15697,17 +16015,18 @@ export def "web-apps-list-vnet-connections" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> table<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list, vnetResourceId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<table<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15740,7 +16059,7 @@ export def "web-apps-delete-vnet-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15748,10 +16067,11 @@ export def "web-apps-delete-vnet-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -15784,18 +16104,19 @@ export def "web-apps-get-vnet-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15814,7 +16135,6 @@ export def "web-apps-get-vnet-connection" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_UpdateVnetConnection
-# --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
 export def "web-apps-update-vnet-connection" [
   subscription_id: string
   resource_group_name: string
@@ -15829,10 +16149,10 @@ export def "web-apps-update-vnet-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetInfo resource specific properties — shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+]: any -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15840,12 +16160,13 @@ export def "web-apps-update-vnet-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15864,7 +16185,6 @@ export def "web-apps-update-vnet-connection" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}
 # operationId: WebApps_CreateOrUpdateVnetConnection
-# --properties shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
 export def "web-apps-create-or-update-vnet-connection" [
   subscription_id: string
   resource_group_name: string
@@ -15879,10 +16199,10 @@ export def "web-apps-create-or-update-vnet-connection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetInfo resource specific properties — shape: {certBlob?: string, dnsServers?: string, isSwift?: bool, vnetResourceId?: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>> {
+]: any -> oneof<record<properties: record<certBlob: string, certThumbprint: string, dnsServers: string, isSwift: bool, resyncRequired: bool, routes: list<record>, vnetResourceId: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15890,12 +16210,13 @@ export def "web-apps-create-or-update-vnet-connection" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -15929,8 +16250,8 @@ export def "web-apps-get-vnet-connection-gateway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -15938,10 +16259,11 @@ export def "web-apps-get-vnet-connection-gateway" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15960,7 +16282,6 @@ export def "web-apps-get-vnet-connection-gateway" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_UpdateVnetConnectionGateway
-# --properties shape: {vnetName?: string, vpnPackageUri: string}
 export def "web-apps-update-vnet-connection-gateway" [
   subscription_id: string
   resource_group_name: string
@@ -15976,10 +16297,10 @@ export def "web-apps-update-vnet-connection-gateway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetGateway resource specific properties — shape: {vnetName?: string, vpnPackageUri: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+]: any -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15988,12 +16309,13 @@ export def "web-apps-update-vnet-connection-gateway" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -16012,7 +16334,6 @@ export def "web-apps-update-vnet-connection-gateway" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnetName}/gateways/{gatewayName}
 # operationId: WebApps_CreateOrUpdateVnetConnectionGateway
-# --properties shape: {vnetName?: string, vpnPackageUri: string}
 export def "web-apps-create-or-update-vnet-connection-gateway" [
   subscription_id: string
   resource_group_name: string
@@ -16028,10 +16349,10 @@ export def "web-apps-create-or-update-vnet-connection-gateway" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
+  --api-version: string # API Version (required)
   --properties: any # VnetGateway resource specific properties — shape: {vnetName?: string, vpnPackageUri: string}
   --kind: string # Kind of resource.
-]: any -> record<properties: record<vnetName: string, vpnPackageUri: string>> {
+]: any -> oneof<record<properties: record<vnetName: string, vpnPackageUri: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16040,12 +16361,13 @@ export def "web-apps-create-or-update-vnet-connection-gateway" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($vnet_name | is-empty) { error make --unspanned { msg: "path parameter 'vnetName' must be non-empty" } }
   if ($gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), vnet_name: (encode-path-segment $vnet_name), gateway_name: (encode-path-segment $gateway_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/virtualNetworkConnections/{vnet_name}/gateways/{gateway_name}") $qp $auth.query)
   let req_body = {"properties": $properties, "kind": $kind} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -16077,17 +16399,18 @@ export def "web-apps-list-web-jobs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<nextLink: string, value: table<properties: record>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, kind: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16120,18 +16443,19 @@ export def "web-apps-get-web-job" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --api-version: string # API Version
-]: nothing -> record<properties: record<error: string, extra_info_url: string, run_command: string, settings: record, url: string, using_sdk: bool, web_job_type: string>> {
+  --api-version: string # API Version (required)
+]: nothing -> oneof<record<properties: record<error: string, extra_info_url: string, run_command: string, settings: record, url: string, using_sdk: bool, web_job_type: string>, id: string, kind: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   if ($web_job_name | is-empty) { error make --unspanned { msg: "path parameter 'webJobName' must be non-empty" } }
+  if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), name: (encode-path-segment $name), web_job_name: (encode-path-segment $web_job_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{name}/webjobs/{web_job_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

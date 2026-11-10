@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -204,7 +231,7 @@ export def "accounts-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "billable" $billable "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,9 +274,9 @@ export def "accounts-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts" $auth.query)
   let req_body = {"address": $address, "billing_information": $billing_information, "discoverable": $discoverable, "external_ref": $external_ref, "legal_name": $legal_name, "managing_account": $managing_account, "metro_area_network_presence": $metro_area_network_presence, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -285,7 +312,7 @@ export def "accounts-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -321,7 +348,7 @@ export def "accounts-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -351,17 +378,25 @@ export def "accounts-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --address: record # shape: {country: string, locality: string, post_office_box_number?: string, postal_code: string, region?: string, street_address: string}
+  --billing-information: record # Optional information required for issuing invoices. Only accounts with `billing_information` present can be used as a `billing_account`. — shape: {address: record, name: string, vat_number?: string}
+  --discoverable: oneof<nothing, bool> # The account will be included for all members of the ix in the list of accounts. Only `id`, `name` and `present_in_metro_area_networks` are provided to other members. (default: false)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --legal-name: string # Legal name of the organisation. Only required when it's different from the account name. (nullable, e.g. Moon Network Services LLS.)
+  --managing-account: string # The `id` of a managing account. Can be used for creating a customer hierachy. (nullable, e.g. IX:Account:231)
+  --metro-area-network-presence: list<string> # Informal list of `MetroAreaNetwork` ids, indicating the presence to other accounts. The list is maintained by the account and can be empty. (e.g. [14021, 12939])
+  --name: string # Name of the account, how it gets represented in e.g. a "customers list". (e.g. Moonpeer Inc.)
 ]: any -> oneof<record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, billing_information: record<address: record<country: string, locality: string, post_office_box_number: string, postal_code: string, region: string, street_address: string>, name: string, vat_number: string>, discoverable: bool, external_ref: string, id: string, legal_name: string, managing_account: string, metro_area_network_presence: list<string>, name: string, state: string, status: table<attrs: record, message: string, severity: int, tag: string, timestamp: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"address": $address, "billing_information": $billing_information, "discoverable": $discoverable, "external_ref": $external_ref, "legal_name": $legal_name, "managing_account": $managing_account, "metro_area_network_presence": $metro_area_network_presence, "name": $name} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -373,7 +408,7 @@ export def "accounts-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [202]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Update the entire account.
@@ -406,9 +441,9 @@ export def "accounts-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/accounts/{id}") $auth.query)
   let req_body = {"address": $address, "billing_information": $billing_information, "discoverable": $discoverable, "external_ref": $external_ref, "legal_name": $legal_name, "managing_account": $managing_account, "metro_area_network_presence": $metro_area_network_presence, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -444,9 +479,9 @@ export def "auth-token-refresh" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh" $auth.query)
   let req_body = {"refresh_token": $refresh_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -483,9 +518,9 @@ export def "auth-token-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token" $auth.query)
   let req_body = {"api_key": $api_key, "api_secret": $api_secret} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -530,7 +565,7 @@ export def "connections-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "mode__is_not" $mode_is_not "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "external_ref" $external_ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connections" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -566,7 +601,7 @@ export def "connections-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/connections/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -605,7 +640,7 @@ export def "contacts-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -646,9 +681,9 @@ export def "contacts-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contacts" $auth.query)
   let req_body = {"consuming_account": $consuming_account, "email": $email, "external_ref": $external_ref, "managing_account": $managing_account, "name": $name, "telephone": $telephone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -684,7 +719,7 @@ export def "contacts-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -720,7 +755,7 @@ export def "contacts-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -750,17 +785,23 @@ export def "contacts-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --consuming-account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --email: string # The email of the legal company entity. (nullable, e.g. info@moon-peer.net)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --name: string # A name of a person or an organisation (nullable, e.g. Some A. Name)
+  --telephone: string # The telephone number in E.164 Phone Number Formatting (nullable, e.g. +442071838750)
 ]: any -> oneof<record<consuming_account: string, email: string, external_ref: string, id: string, managing_account: string, name: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"consuming_account": $consuming_account, "email": $email, "external_ref": $external_ref, "managing_account": $managing_account, "name": $name, "telephone": $telephone} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -772,7 +813,7 @@ export def "contacts-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update a contact
@@ -803,9 +844,9 @@ export def "contacts-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/contacts/{id}") $auth.query)
   let req_body = {"consuming_account": $consuming_account, "email": $email, "external_ref": $external_ref, "managing_account": $managing_account, "name": $name, "telephone": $telephone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -851,7 +892,7 @@ export def "devices-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -887,7 +928,7 @@ export def "devices-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/devices/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -935,7 +976,7 @@ export def "facilities-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar") (serialize-qp "organisation_name" $organisation_name "scalar") (serialize-qp "metro_area" $metro_area "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "address_country" $address_country "scalar") (serialize-qp "address_locality" $address_locality "scalar") (serialize-qp "postal_code" $postal_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/facilities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -971,7 +1012,7 @@ export def "facilities-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/facilities/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1005,7 +1046,7 @@ export def "api-health-read" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1039,7 +1080,7 @@ export def "api-implementation-read" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/implementation" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1087,7 +1128,7 @@ export def "ips-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "network_service_config" $network_service_config "scalar") (serialize-qp "network_feature" $network_feature "scalar") (serialize-qp "network_feature_config" $network_feature_config "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "fqdn" $fqdn "scalar") (serialize-qp "prefix_length" $prefix_length "scalar") (serialize-qp "valid_not_before" $valid_not_before "scalar") (serialize-qp "valid_not_after" $valid_not_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ips" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1131,9 +1172,9 @@ export def "ips-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips" $auth.query)
   let req_body = {"address": $address, "consuming_account": $consuming_account, "external_ref": $external_ref, "fqdn": $fqdn, "managing_account": $managing_account, "prefix_length": $prefix_length, "valid_not_after": $valid_not_after, "valid_not_before": $valid_not_before, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1169,7 +1210,7 @@ export def "ips-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1199,17 +1240,26 @@ export def "ips-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --address: string # IPv4 or IPv6 Address in the following format: - IPv4: [dot-decimal notation](https://en.wikipedia.org/wiki/Dot-decimal_notation) - IPv6: hexadecimal colon separated notation (e.g. 23.142.52.0)
+  --consuming-account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --fqdn: string # nullable
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --prefix-length: int # The CIDR ip prefix length (format: int32, e.g. 23)
+  --valid-not-after: string # nullable, format: date-time
+  --valid-not-before: string # nullable, format: date-time
+  --version: int # The version of the internet protocol. (e.g. 4)
 ]: any -> oneof<record<address: string, consuming_account: string, external_ref: string, fqdn: string, id: string, managing_account: string, prefix_length: int, valid_not_after: string, valid_not_before: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"address": $address, "consuming_account": $consuming_account, "external_ref": $external_ref, "fqdn": $fqdn, "managing_account": $managing_account, "prefix_length": $prefix_length, "valid_not_after": $valid_not_after, "valid_not_before": $valid_not_before, "version": $version} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -1221,7 +1271,7 @@ export def "ips-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update an ip address object. You can only update IP addresses within your current scope. Not all addresses you can read you can update. If the ip address was allocated for you, you might not be able to change anything but the `fqdn`.
@@ -1255,9 +1305,9 @@ export def "ips-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}") $auth.query)
   let req_body = {"address": $address, "consuming_account": $consuming_account, "external_ref": $external_ref, "fqdn": $fqdn, "managing_account": $managing_account, "prefix_length": $prefix_length, "valid_not_after": $valid_not_after, "valid_not_before": $valid_not_before, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1301,7 +1351,7 @@ export def "macs-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "network_service_config" $network_service_config "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "assigned_at" $assigned_at "scalar") (serialize-qp "valid_not_before" $valid_not_before "scalar") (serialize-qp "valid_not_after" $valid_not_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/macs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1342,9 +1392,9 @@ export def "macs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/macs" $auth.query)
   let req_body = {"address": $address, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "valid_not_after": $valid_not_after, "valid_not_before": $valid_not_before} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1380,7 +1430,7 @@ export def "macs-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/macs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1416,7 +1466,7 @@ export def "macs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/macs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1453,7 +1503,7 @@ export def "member-joining-rules-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "network_service" $network_service "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/member-joining-rules" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1496,9 +1546,9 @@ export def "member-joining-rules-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/member-joining-rules" $auth.query)
   let req_body = {"capacity_max": $capacity_max, "capacity_min": $capacity_min, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "network_service": $network_service, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1535,7 +1585,7 @@ export def "member-joining-rules-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/member-joining-rules/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1572,7 +1622,7 @@ export def "member-joining-rules-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/member-joining-rules/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1603,17 +1653,23 @@ export def "member-joining-rules-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --capacity-max: int # An optional rate limit which has precedence over the capacity set in the network service config. (nullable)
+  --capacity-min: int # Require an optional minimum capacity to join the network service. (nullable)
+  --consuming-account: string # The `id` of the account to which access to the network service should be granted or denied. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  type: string@type-completer # e.g. allow
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/member-joining-rules/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"capacity_max": $capacity_max, "capacity_min": $capacity_min, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -1625,7 +1681,7 @@ export def "member-joining-rules-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Update a joining rule
@@ -1657,9 +1713,9 @@ export def "member-joining-rules-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/member-joining-rules/{id}") $auth.query)
   let req_body = {"capacity_max": $capacity_max, "capacity_min": $capacity_min, "consuming_account": $consuming_account, "external_ref": $external_ref, "managing_account": $managing_account, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1698,7 +1754,7 @@ export def "metro-area-networks-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "metro_area" $metro_area "scalar") (serialize-qp "service_provider" $service_provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metro-area-networks" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1734,7 +1790,7 @@ export def "metro-area-networks-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metro-area-networks/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1770,7 +1826,7 @@ export def "metro-areas-list" [
   let qp = [(serialize-qp "id" $id "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/metro-areas" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1806,7 +1862,7 @@ export def "metro-areas-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/metro-areas/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1850,7 +1906,7 @@ export def "network-feature-configs-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "service_config" $service_config "scalar") (serialize-qp "network_feature" $network_feature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/network-feature-configs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1906,9 +1962,9 @@ export def "network-feature-configs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-feature-configs" $auth.query)
   let req_body = {"as_set_v4": $as_set_v4, "as_set_v6": $as_set_v6, "asn": $asn, "bgp_session_type": $bgp_session_type, "billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "insert_ixp_asn": $insert_ixp_asn, "ip": $ip, "managing_account": $managing_account, "max_prefix_v4": $max_prefix_v4, "max_prefix_v6": $max_prefix_v6, "network_feature": $network_feature, "network_service_config": $network_service_config, "password": $password, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "session_mode": $session_mode, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1945,7 +2001,7 @@ export def "network-feature-configs-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-feature-configs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1982,7 +2038,7 @@ export def "network-feature-configs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-feature-configs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2013,17 +2069,31 @@ export def "network-feature-configs-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --as-set-v4: string # AS-SET of the customer for IPv4 prefix filtering. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet` address family. If multiple address families are supported, it is optional if the `as_set_v6` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  --as-set-v6: string # AS-SET of the customer for IPv6. This is used to generate filters on the router servers. Only valid referenced prefixes within the AS-SET are allowed inbound to the route server. All other routes are filtered. This field is *required* if the route server network feature only supports the `af_inet6` address family. If multiple address families are supported, it is optional if the `as_set_v4` is provided. Important: The format has to be: "AS-SET@IRR". IRR is the database where the AS-SET is registred. Typically used IRR's are RADB, RIPE, NTTCOM, APNIC, ALTDB, LEVEL3, ARIN, AFRINIC, LACNIC (nullable, e.g. MOON-AS@RIPE)
+  --asn: int # The ASN of the peer. (format: int64, e.g. 4200000023)
+  --bgp-session-type: string@bgp-session-type-completer # The session type describes which of the both parties will open the connection. If set to passive, the customer router needs to open the connection. If its set to active, the route server will open the connection. The standard behavior on most exchanges is passive. (e.g. passive)
+  --consuming-account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --insert-ixp-asn: oneof<nothing, bool> # Insert the ASN of the exchange into the AS path. This function is only used in special cases. In 99% of all cases, it should be false. (default: true)
+  --ip: string # The BGP session will be established from this IP address. Only IPs assigned to the corresponding network service config can be used.
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --max-prefix-v4: int # Announcing more than `max_prefix` IPv4 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  --max-prefix-v6: int # Announcing more than `max_prefix` IPv6 prefixes the bgp session will be droped. (nullable, e.g. 5000)
+  --password: string # The cleartext BGP session password (default: "", e.g. bgp-session-test-23)
+  --session-mode: string@session-mode-completer # Set the session mode with the routeserver. (e.g. public)
+  type: string@type-completer-1 # e.g. route_server
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-feature-configs/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"as_set_v4": $as_set_v4, "as_set_v6": $as_set_v6, "asn": $asn, "bgp_session_type": $bgp_session_type, "consuming_account": $consuming_account, "external_ref": $external_ref, "insert_ixp_asn": $insert_ixp_asn, "ip": $ip, "managing_account": $managing_account, "max_prefix_v4": $max_prefix_v4, "max_prefix_v6": $max_prefix_v6, "password": $password, "session_mode": $session_mode, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -2035,7 +2105,7 @@ export def "network-feature-configs-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [202]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Update a network feature configuration
@@ -2075,9 +2145,9 @@ export def "network-feature-configs-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-feature-configs/{id}") $auth.query)
   let req_body = {"as_set_v4": $as_set_v4, "as_set_v6": $as_set_v6, "asn": $asn, "bgp_session_type": $bgp_session_type, "consuming_account": $consuming_account, "external_ref": $external_ref, "insert_ixp_asn": $insert_ixp_asn, "ip": $ip, "managing_account": $managing_account, "max_prefix_v4": $max_prefix_v4, "max_prefix_v6": $max_prefix_v6, "password": $password, "session_mode": $session_mode, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2117,7 +2187,7 @@ export def "network-features-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "type" $type "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/network-features" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2154,7 +2224,7 @@ export def "network-features-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-features/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2202,7 +2272,7 @@ export def "network-service-configs-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "inner_vlan" $inner_vlan "scalar") (serialize-qp "outer_vlan" $outer_vlan "scalar") (serialize-qp "capacity" $capacity "scalar") (serialize-qp "network_service" $network_service "scalar") (serialize-qp "connection" $connection "scalar") (serialize-qp "product_offering" $product_offering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/network-service-configs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2257,9 +2327,9 @@ export def "network-service-configs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-service-configs" $auth.query)
   let req_body = {"asns": $asns, "billing_account": $billing_account, "capacity": $capacity, "connection": $connection, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "listed": $listed, "macs": $macs, "managing_account": $managing_account, "network_service": $network_service, "product_offering": $product_offering, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "type": $type, "vlan_config": $vlan_config, "role": $role, "cloud_vlan": $cloud_vlan, "handover": $handover} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2298,9 +2368,9 @@ export def "network-service-configs-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}") $auth.query)
   let req_body = {"decommission_at": $decommission_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2337,7 +2407,7 @@ export def "network-service-configs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2368,17 +2438,35 @@ export def "network-service-configs-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --asns: list<int>
+  --billing-account: string # An account requires billing_information to be used as a `billing_account`.
+  --capacity: int # The capacity of the service in Mbps. If set to Null, the maximum capacity will be used, i.e. the virtual circuit is not rate-limited. An exchange may choose to constrain the available capacity range of a `ProductOffering`. That means, the service can consume up to the total bandwidth of the `Connection`. Typically the service is charged based on the capacity. (nullable)
+  --connection: string # The id of the connection to use for this `NetworkServiceConfig`.
+  --consuming-account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --listed: oneof<nothing, bool> # The customer wants to be featured on the member list
+  --macs: list<string> # A list of mac-address IDs.
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  --role-assignments: list<string> # A set of `RoleAssignment`s. See the documentation on the specific `required_contact_roles`, `nfc_required_contact_roles` or `nsc_required_contact_roles` on what `RoleAssignment`s to provide. (e.g. [c-impl:123, c-noc:331])
+  type: string@type-completer-2 # e.g. exchange_lan
+  --vlan-config: any # The vlan configuration defines how the service is made available on the connection.
+  --network-service: string # The id of the `NetworkService` to configure.
+  --role: string@role-completer # A `leaf` can only reach roots and is isolated from other leafs. A `root` can reach any other point in the virtual circuit including other roots. (default: leaf)
+  --cloud-vlan: int # If the `provider_vlans` property of the `ProductOffering` is `multi`, a numeric value refers to a specific vlan on the service provider side. Otherwise, if set to `null`, it refers to all unmatched vlan ids on the service provider side. (All vlan ids from the service provider side are presented as tags within any vlans specified in `vlan_config`.) If the `provider_vlans` property of the `ProductOffering` is `single`, the `cloud_vlan` MUST be `null` or MUST NOT be provided. (nullable, format: int32)
+  --handover: int # The handover enumerates the connection and is required for checking diversity constraints. It must be within `1 <= x <= network_service.diversity`. (e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"asns": $asns, "billing_account": $billing_account, "capacity": $capacity, "connection": $connection, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "listed": $listed, "macs": $macs, "managing_account": $managing_account, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "type": $type, "vlan_config": $vlan_config, "network_service": $network_service, "role": $role, "cloud_vlan": $cloud_vlan, "handover": $handover} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -2390,7 +2478,7 @@ export def "network-service-configs-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [202]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Update an exisiting `network-service-config`
@@ -2434,9 +2522,9 @@ export def "network-service-configs-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}") $auth.query)
   let req_body = {"asns": $asns, "billing_account": $billing_account, "capacity": $capacity, "connection": $connection, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "listed": $listed, "macs": $macs, "managing_account": $managing_account, "purchase_order": $purchase_order, "role_assignments": $role_assignments, "type": $type, "vlan_config": $vlan_config, "network_service": $network_service, "role": $role, "cloud_vlan": $cloud_vlan, "handover": $handover} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2474,7 +2562,7 @@ export def "network-service-config-cancellation-policy-read" [
   let qp = [(serialize-qp "decommission_at" $decommission_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-service-configs/{id}/cancellation-policy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2518,7 +2606,7 @@ export def "network-services-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "managing_account" $managing_account "scalar") (serialize-qp "consuming_account" $consuming_account "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "product_offering" $product_offering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/network-services" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2567,9 +2655,9 @@ export def "network-services-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/network-services" $auth.query)
   let req_body = {"billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "joining_member_account": $joining_member_account, "managing_account": $managing_account, "product_offering": $product_offering, "purchase_order": $purchase_order, "type": $type, "name": $name, "public": $public, "capacity": $capacity, "cloud_key": $cloud_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2608,9 +2696,9 @@ export def "network-services-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}") $auth.query)
   let req_body = {"decommission_at": $decommission_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2647,7 +2735,7 @@ export def "network-services-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2678,17 +2766,30 @@ export def "network-services-partial-update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --billing-account: string # An account requires billing_information to be used as a `billing_account`.
+  --consuming-account: string # The `id` of the account consuming a service. Used to be `owning_customer`. (e.g. 2381982)
+  --contract-ref: string # A reference to a contract. If no specific contract is used, a default MAY be chosen by the implementer. (nullable, e.g. contract:31824)
+  --external-ref: string # Reference field, free to use for the API user. (nullable, e.g. IX:Service:23042)
+  --joining-member-account: string # The account of the B-side member joining the virtual circuit. (e.g. 231829)
+  --managing-account: string # The `id` of the account responsible for managing the service via the API. A manager can read and update the state of entities. (e.g. 238189294)
+  --product-offering: string
+  --purchase-order: string # Purchase Order ID which will be displayed on the invoice. (default: "", e.g. Project: DC Moon)
+  type: string@type-completer-3 # e.g. p2p_vc
+  --name: string # Name of the point to multi-point virtual circuit.
+  --public: oneof<nothing, bool> # A public p2mp network service can be joined by everyone on the exchange unless denied by a member-joining-rule. Public network services are visible to other members of the IXP, however only `name`, `type`, `product_offering`, `consuming_account` and `managing_account` are made available. Other required fields are redacted. (default: false)
+  --capacity: int # The capacity of the service in Mbps. When null, the maximum capacity will be used. (nullable)
+  --cloud-key: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "joining_member_account": $joining_member_account, "managing_account": $managing_account, "product_offering": $product_offering, "purchase_order": $purchase_order, "type": $type, "name": $name, "public": $public, "capacity": $capacity, "cloud_key": $cloud_key} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -2700,7 +2801,7 @@ export def "network-services-partial-update" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [202]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [202]
 }
 
 # Update a network service
@@ -2739,9 +2840,9 @@ export def "network-services-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}") $auth.query)
   let req_body = {"billing_account": $billing_account, "consuming_account": $consuming_account, "contract_ref": $contract_ref, "external_ref": $external_ref, "joining_member_account": $joining_member_account, "managing_account": $managing_account, "product_offering": $product_offering, "purchase_order": $purchase_order, "type": $type, "name": $name, "public": $public, "capacity": $capacity, "cloud_key": $cloud_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2779,7 +2880,7 @@ export def "network-service-cancellation-policy-read" [
   let qp = [(serialize-qp "decommission_at" $decommission_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}/cancellation-policy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2815,7 +2916,7 @@ export def "network-service-change-request-destroy" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}/change-request") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2851,7 +2952,7 @@ export def "network-service-change-request-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}/change-request") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2890,9 +2991,9 @@ export def "network-service-change-request-create" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/network-services/{id}/change-request") $auth.query)
   let req_body = {"capacity": $capacity, "product_offering": $product_offering} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2936,7 +3037,7 @@ export def "pops-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "facility" $facility "scalar") (serialize-qp "metro_area_network" $metro_area_network "scalar") (serialize-qp "capability_media_type" $capability_media_type "scalar") (serialize-qp "capability_speed" $capability_speed "scalar") (serialize-qp "capability_speed__lt" $capability_speed_lt "scalar") (serialize-qp "capability_speed__lte" $capability_speed_lte "scalar") (serialize-qp "capability_speed__gt" $capability_speed_gt "scalar") (serialize-qp "capability_speed__gte" $capability_speed_gte "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pops" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2972,7 +3073,7 @@ export def "pops-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pops/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3017,7 +3118,7 @@ export def "ports-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "state" $state "scalar") (serialize-qp "state__is_not" $state_is_not "scalar") (serialize-qp "media_type" $media_type "scalar") (serialize-qp "pop" $pop "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "external_ref" $external_ref "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "connection" $connection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ports" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3053,7 +3154,7 @@ export def "ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ports/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3105,7 +3206,7 @@ export def "product-offerings-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "handover_metro_area" $handover_metro_area "scalar") (serialize-qp "handover_metro_area_network" $handover_metro_area_network "scalar") (serialize-qp "service_metro_area" $service_metro_area "scalar") (serialize-qp "service_metro_area_network" $service_metro_area_network "scalar") (serialize-qp "service_provider" $service_provider "scalar") (serialize-qp "downgrade_allowed" $downgrade_allowed "scalar") (serialize-qp "upgrade_allowed" $upgrade_allowed "scalar") (serialize-qp "bandwidth" $bandwidth "scalar") (serialize-qp "physical_port_speed" $physical_port_speed "scalar") (serialize-qp "service_provider_region" $service_provider_region "scalar") (serialize-qp "service_provider_pop" $service_provider_pop "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "cloud_key" $cloud_key "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product-offerings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3142,7 +3243,7 @@ export def "product-offerings-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/product-offerings/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3180,7 +3281,7 @@ export def "role-assignments-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "contact" $contact "scalar") (serialize-qp "role" $role "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/role-assignments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3217,9 +3318,9 @@ export def "role-assignments-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/role-assignments" $auth.query)
   let req_body = {"contact": $contact, "role": $role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3255,7 +3356,7 @@ export def "role-assignments-destroy" [
   if ($assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'assignment_id' must be non-empty" } }
   let full_url = (build-url $base ({assignment_id: (encode-path-segment $assignment_id)} | format pattern "/role-assignments/{assignment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3291,7 +3392,7 @@ export def "role-assignments-read" [
   if ($assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'assignment_id' must be non-empty" } }
   let full_url = (build-url $base ({assignment_id: (encode-path-segment $assignment_id)} | format pattern "/role-assignments/{assignment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3329,7 +3430,7 @@ export def "roles-list" [
   let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar") (serialize-qp "contact" $contact "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/roles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3359,7 +3460,7 @@ export def "roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-id: list<string> # Filter by id (e.g. id1,id2,id3)
+  --qp-id: list<string> # Filter by id (e.g. id1,id2,id3) (spec name: id)
   --name: string # Filter by name
 ]: nothing -> oneof<record<id: string, name: string, required_fields: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3368,7 +3469,7 @@ export def "roles-read" [
   let qp = [(serialize-qp "id" $qp_id "csv") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/roles/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

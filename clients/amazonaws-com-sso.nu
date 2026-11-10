@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,9 +208,9 @@ export def "get-role-credentials" [
   let qp = [(serialize-qp "role_name" $role_name "scalar") (serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/federation/credentials" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-sso_bearer_token": $x_amz_sso_bearer_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -216,7 +243,7 @@ export def "list-account-roles" [
   --max-result: int # The number of items that clients can request per page.
   --account-id: string # The identifier for the AWS account that is assigned to the user. (required)
   --max-results: string # Pagination limit
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-next-token: string # Pagination token (spec name: nextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -230,16 +257,16 @@ export def "list-account-roles" [
   let base = ($base_url | default $BASE_URL)
   if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
   if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
-  let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignment/roles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-sso_bearer_token": $x_amz_sso_bearer_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next_token": $next_token, "max_result": $max_result, "account_id": $account_id, "maxResults": $max_results, "nextToken": $next_token_2} | compact)
+    query: ({"next_token": $next_token, "max_result": $max_result, "account_id": $account_id, "maxResults": $max_results, "nextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -267,7 +294,7 @@ export def "list-accounts" [
   --next-token: string # (Optional) When requesting subsequent pages, this is the page token from the previous response output.
   --max-result: int # This is the number of items clients can request per page.
   --max-results: string # Pagination limit
-  --next-token-2: string # Pagination token (disambiguated-2)
+  --qp-next-token: string # Pagination token (spec name: nextToken)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -280,16 +307,16 @@ export def "list-accounts" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
-  let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token_2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "next_token" $next_token "scalar") (serialize-qp "max_result" $max_result "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $qp_next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/assignment/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-sso_bearer_token": $x_amz_sso_bearer_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"next_token": $next_token, "max_result": $max_result, "maxResults": $max_results, "nextToken": $next_token_2} | compact)
+    query: ({"next_token": $next_token, "max_result": $max_result, "maxResults": $max_results, "nextToken": $qp_next_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -328,9 +355,9 @@ export def "logout" [
   if ($x_amz_sso_bearer_token == null) { error make --unspanned { msg: "required header parameter 'x-amz-sso_bearer_token' missing: pass --x-amz-sso-bearer-token" } }
   let full_url = (build-url $base "/logout" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-sso_bearer_token": $x_amz_sso_bearer_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

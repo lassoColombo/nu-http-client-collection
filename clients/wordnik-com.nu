@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,7 +207,7 @@ export def "get-audio" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/audio") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -223,7 +250,7 @@ export def "get-definitions" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "partOfSpeech" $part_of_speech "scalar") (serialize-qp "includeRelated" $include_related "scalar") (serialize-qp "sourceDictionaries" $source_dictionaries "csv") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "includeTags" $include_tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/definitions") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -261,7 +288,7 @@ export def "get-etymologies" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/etymologies") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -302,7 +329,7 @@ export def "get-examples" [
   let qp = [(serialize-qp "includeDuplicates" $include_duplicates "scalar") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/examples") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -342,7 +369,7 @@ export def "get-word-frequency" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/frequency") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -382,7 +409,7 @@ export def "get-hyphenation" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/hyphenation") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -422,7 +449,7 @@ export def "get-phrases" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "wlmi" $wlmi "scalar") (serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/phrases") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "get-text-pronunciations" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "typeFormat" $type_format "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/pronunciations") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -503,7 +530,7 @@ export def "get-related-words" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "relationshipTypes" $relationship_types "scalar") (serialize-qp "limitPerRelationshipType" $limit_per_relationship_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/relatedWords") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -539,7 +566,7 @@ export def "get-scrabble-score" [
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/scrabbleScore") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -577,7 +604,7 @@ export def "get-top-example" [
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/topExample") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -621,7 +648,7 @@ export def "get-random-word" [
   let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/randomWord" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -668,7 +695,7 @@ export def "get-random-words" [
   let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/randomWords" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -720,7 +747,7 @@ export def "reverse-dictionary" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $find_sense_for_word "scalar") (serialize-qp "includeSourceDictionaries" $include_source_dictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $exclude_source_dictionaries "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "expandTerms" $expand_terms "scalar") (serialize-qp "includeTags" $include_tags "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/reverseDictionary" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -769,7 +796,7 @@ export def "search-words" [
   let qp = [(serialize-qp "allowRegex" $allow_regex "scalar") (serialize-qp "caseSensitive" $case_sensitive "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/words.json/search/{query}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -805,7 +832,7 @@ export def "get-word-of-the-day" [
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/wordOfTheDay" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

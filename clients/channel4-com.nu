@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -172,7 +199,7 @@ export def "4o-d-browse-by-date-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/4od/episode-list/date/{yyyy}/{mm}/{dd}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -208,7 +235,7 @@ export def "4o-d-most-popular-episodes-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/4od/episode-list/popular.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -244,7 +271,7 @@ export def "4o-d-clips-catch-up-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/4od/recently-added/videos.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -280,7 +307,7 @@ export def "a-to-z-landing-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/atoz.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -318,7 +345,7 @@ export def "a-to-z-letter-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter)} | format pattern "/atoz/{start_letter}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -358,7 +385,7 @@ export def "a-to-z-letter-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter), pageno: (encode-path-segment $pageno)} | format pattern "/atoz/{start_letter}/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -394,7 +421,7 @@ export def "4o-d-title-all-brands-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/brands/4od.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -432,7 +459,7 @@ export def "4o-d-title-all-brands-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,7 +495,7 @@ export def "4o-d-popular-all-brands-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/brands/4od/popular.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -506,7 +533,7 @@ export def "4o-d-popular-all-brands-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -542,7 +569,7 @@ export def "popular-brands-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/brands/popular.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -580,7 +607,7 @@ export def "popular-brands-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -616,7 +643,7 @@ export def "categories-landing-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -654,7 +681,7 @@ export def "all-programmes-by-tx-date" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -692,7 +719,7 @@ export def "4o-d-programmes-by-tx-date" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -732,7 +759,7 @@ export def "4o-d-programmes-by-tx-date4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -770,7 +797,7 @@ export def "most-popular-brands-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/popular.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -810,7 +837,7 @@ export def "most-popular-brands-feed5" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -848,7 +875,7 @@ export def "4o-d-programmes-by-title" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -888,7 +915,7 @@ export def "4o-d-programmes-by-title4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -928,7 +955,7 @@ export def "all-programmes-by-tx-date2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,7 +995,7 @@ export def "4o-d-programmes-by-tx-date2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1010,7 +1037,7 @@ export def "4o-d-programmes-by-tx-date5" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1050,7 +1077,7 @@ export def "most-popular-brands-feed3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/popular.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1092,7 +1119,7 @@ export def "most-popular-brands-feed7" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1132,7 +1159,7 @@ export def "4o-d-programmes-by-title2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1174,7 +1201,7 @@ export def "4o-d-programmes-by-title5" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1216,7 +1243,7 @@ export def "all-programmes-by-tx-date5" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1256,7 +1283,7 @@ export def "all-programmes-by-title2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1298,7 +1325,7 @@ export def "all-programmes-by-title5" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1336,7 +1363,7 @@ export def "all-programmes-by-tx-date3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1374,7 +1401,7 @@ export def "4o-d-programmes-by-tx-date3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1414,7 +1441,7 @@ export def "4o-d-programmes-by-tx-date6" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1452,7 +1479,7 @@ export def "most-popular-brands-feed4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/popular.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1492,7 +1519,7 @@ export def "most-popular-brands-feed8" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1530,7 +1557,7 @@ export def "4o-d-programmes-by-title3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1570,7 +1597,7 @@ export def "4o-d-programmes-by-title6" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1610,7 +1637,7 @@ export def "all-programmes-by-tx-date6" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1648,7 +1675,7 @@ export def "all-programmes-by-title3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1688,7 +1715,7 @@ export def "all-programmes-by-title6" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1728,7 +1755,7 @@ export def "all-programmes-by-tx-date4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1766,7 +1793,7 @@ export def "most-popular-brands-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/popular.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1806,7 +1833,7 @@ export def "most-popular-brands-feed6" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/popular/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1844,7 +1871,7 @@ export def "all-programmes-by-title" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/title.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1884,7 +1911,7 @@ export def "all-programmes-by-title4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/title/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1922,7 +1949,7 @@ export def "collections-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1960,7 +1987,7 @@ export def "collections-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1998,7 +2025,7 @@ export def "flattened-collection-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2036,7 +2063,7 @@ export def "flattened-collection-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2072,7 +2099,7 @@ export def "coming-soon-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/coming-soon.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2110,7 +2137,7 @@ export def "coming-soon-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/coming-soon/{category}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2148,7 +2175,7 @@ export def "programme-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({programme_id: (encode-path-segment $programme_id)} | format pattern "/programme/{programme_id}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2186,7 +2213,7 @@ export def "search-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search.atom" $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2226,7 +2253,7 @@ export def "search-feed3" [
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/search/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2264,7 +2291,7 @@ export def "search-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({q: (encode-path-segment $q)} | format pattern "/search/{q}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2304,7 +2331,7 @@ export def "search-feed4" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({q: (encode-path-segment $q), pageno: (encode-path-segment $pageno)} | format pattern "/search/{q}/page-{pageno}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2346,7 +2373,7 @@ export def "tv-listings-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2390,7 +2417,7 @@ export def "tv-listings-feed2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd), channel: (encode-path-segment $channel)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2428,7 +2455,7 @@ export def "hub-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2466,7 +2493,7 @@ export def "4o-d-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/4od.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2504,7 +2531,7 @@ export def "brand-epg-atom-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/epg.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2542,7 +2569,7 @@ export def "episode-guide-feed-series-landing" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/episode-guide.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2582,7 +2609,7 @@ export def "episode-guide-feed-series-detail" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2624,7 +2651,7 @@ export def "episode-guide-feed-episode-detail" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}/episode-{episode_number}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2662,7 +2689,7 @@ export def "clips-landing-feed-brand-series-and-episode-levels" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/videos/all.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2702,7 +2729,7 @@ export def "clips-landing-feed-brand-series-and-episode-levels2" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2744,7 +2771,7 @@ export def "clips-landing-feed-brand-series-and-episode-levels3" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}/episode-{episode_number}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2784,7 +2811,7 @@ export def "clip-detail-atom-feed" [
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), clip_asset_id: (encode-path-segment $clip_asset_id)} | format pattern "/{brand_web_safe_title}/videos/{clip_asset_id}.atom") $qp $auth.query)
   let accept_val = "application/xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

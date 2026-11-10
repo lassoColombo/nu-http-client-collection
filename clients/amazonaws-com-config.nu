@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -274,11 +301,11 @@ export def "batch-get-aggregate-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.BatchGetAggregateResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifiers": $resource_identifiers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -323,11 +350,11 @@ export def "batch-get-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.BatchGetResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"resourceKeys": $resource_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -373,11 +400,11 @@ export def "delete-aggregation-authorization" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteAggregationAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -422,11 +449,11 @@ export def "delete-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -471,11 +498,11 @@ export def "delete-configuration-aggregator" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigurationAggregator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -520,11 +547,11 @@ export def "delete-configuration-recorder" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -569,11 +596,11 @@ export def "delete-conformance-pack" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -618,11 +645,11 @@ export def "delete-delivery-channel" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteDeliveryChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelName": $delivery_channel_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -667,11 +694,11 @@ export def "delete-evaluation-results" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteEvaluationResults")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -716,11 +743,11 @@ export def "delete-organization-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteOrganizationConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -765,11 +792,11 @@ export def "delete-organization-conformance-pack" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteOrganizationConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -815,11 +842,11 @@ export def "delete-pending-aggregation-request" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeletePendingAggregationRequest")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RequesterAccountId": $requester_account_id, "RequesterAwsRegion": $requester_aws_region} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -865,11 +892,11 @@ export def "delete-remediation-configuration" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRemediationConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceType": $resource_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -915,11 +942,11 @@ export def "delete-remediation-exceptions" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRemediationExceptions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -965,11 +992,11 @@ export def "delete-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1014,11 +1041,11 @@ export def "delete-retention-configuration" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteRetentionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RetentionConfigurationName": $retention_configuration_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1063,11 +1090,11 @@ export def "delete-stored-query" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeleteStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryName": $query_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1112,11 +1139,11 @@ export def "deliver-config-snapshot" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DeliverConfigSnapshot")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"deliveryChannelName": $delivery_channel_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1157,8 +1184,8 @@ export def "describe-aggregate-compliance-by-config-rules" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --filters: record # Filters the compliance results based on account ID, region, compliance type, and rule name. — shape: {ConfigRuleName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"NOT_APPLICABLE"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<AggregateComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,12 +1193,12 @@ export def "describe-aggregate-compliance-by-config-rules" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregateComplianceByConfigRules")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1212,8 +1239,8 @@ export def "describe-aggregate-compliance-by-conformance-packs" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --filters: record # Filters the conformance packs based on an account ID, region, compliance type, and the name of the conformance pack. — shape: {ConformancePackName?: string, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", AccountId?: string, AwsRegion?: string}
-  --limit-body: int # The maximum number of conformance packs compliance details returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of conformance packs compliance details returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<AggregateComplianceByConformancePacks: table<ConformancePackName: string, Compliance: record, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1221,12 +1248,12 @@ export def "describe-aggregate-compliance-by-conformance-packs" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregateComplianceByConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1265,8 +1292,8 @@ export def "describe-aggregation-authorizations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
-  --limit-body: int # The maximum number of AggregationAuthorizations returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of AggregationAuthorizations returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<AggregationAuthorizations: table<AggregationAuthorizationArn: string, AuthorizedAccountId: string, AuthorizedAwsRegion: string, CreationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1274,12 +1301,12 @@ export def "describe-aggregation-authorizations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeAggregationAuthorizations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1319,7 +1346,7 @@ export def "describe-compliance-by-config-rule" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   --config-rule-names: list<string> # Specify one or more Config rule names to filter the results by rule.
   --compliance-types: list<string> # Filters the results by compliance.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ComplianceByConfigRules: table<ConfigRuleName: string, Compliance: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1327,12 +1354,12 @@ export def "describe-compliance-by-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeComplianceByConfigRule")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleNames": $config_rule_names, "ComplianceTypes": $compliance_types, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleNames": $config_rule_names, "ComplianceTypes": $compliance_types, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1374,8 +1401,8 @@ export def "describe-compliance-by-resource" [
   --resource-type: string # The types of Amazon Web Services resources for which you want compliance information (for example, AWS::EC2::Instance). For this action, you can specify that the resource type is an Amazon Web Services account by specifying AWS::::Account.
   --resource-id: string # The ID of the Amazon Web Services resource for which you want compliance information. You can specify only one resource ID. If you specify a resource ID, you must also specify a type for ResourceType.
   --compliance-types: list<string> # Filters the results by compliance.
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ComplianceByResources: table<ResourceType: string, ResourceId: string, Compliance: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1383,12 +1410,12 @@ export def "describe-compliance-by-resource" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeComplianceByResource")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1428,8 +1455,8 @@ export def "describe-config-rule-evaluation-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   --config-rule-names: list<string> # The name of the Config managed rules for which you want status information. If you do not specify any names, Config returns status information for all Config managed rules that you use.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-  --limit-body: int # The number of rule evaluation results that you want returned. This parameter is required if the rule limit for your account is more than the default of 150 rules. For information about requesting a rule limit increase, see Config Limits (http://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html#limits_config) in the Amazon Web Services General Reference Guide. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
+  --body-limit: int # The number of rule evaluation results that you want returned. This parameter is required if the rule limit for your account is more than the default of 150 rules. For information about requesting a rule limit increase, see Config Limits (http://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html#limits_config) in the Amazon Web Services General Reference Guide. (spec name: Limit)
 ]: any -> oneof<record<ConfigRulesEvaluationStatus: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, LastSuccessfulInvocationTime: string, LastFailedInvocationTime: string, LastSuccessfulEvaluationTime: string, LastFailedEvaluationTime: string, FirstActivatedTime: string, LastDeactivatedTime: string, LastErrorCode: string, LastErrorMessage: string, FirstEvaluationStarted: bool, LastDebugLogDeliveryStatus: string, LastDebugLogDeliveryStatusReason: string, LastDebugLogDeliveryTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1437,12 +1464,12 @@ export def "describe-config-rule-evaluation-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigRuleEvaluationStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1481,7 +1508,7 @@ export def "describe-config-rules" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   --config-rule-names: list<string> # The names of the Config rules for which you want details. If you do not specify any names, Config returns details for all your rules.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
   --filters: record # Returns a filtered list of Detective or Proactive Config rules. By default, if the filter is not defined, this API returns an unfiltered list. For more information on Detective or Proactive Config rules, see Evaluation Mode (https://docs.aws.amazon.com/config/latest/developerguide/evaluate-config-rules.html) in the Config Developer Guide. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE"}
 ]: any -> oneof<record<ConfigRules: table<ConfigRuleName: string, ConfigRuleArn: string, ConfigRuleId: string, Description: string, Scope: record, Source: record, InputParameters: string, MaximumExecutionFrequency: string, ConfigRuleState: string, CreatedBy: string, EvaluationModes: list>, NextToken: string>, string, nothing> {
   let input = $in
@@ -1490,12 +1517,12 @@ export def "describe-config-rules" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigRules")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $next_token_body, "Filters": $filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleNames": $config_rule_names, "NextToken": $body_next_token, "Filters": $filters} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1536,8 +1563,8 @@ export def "describe-configuration-aggregator-sources-status" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --update-status: list<string> # Filters the status type. Valid value FAILED indicates errors while moving data. Valid value SUCCEEDED indicates the data was successfully moved. Valid value OUTDATED indicates the data is not the most recent.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-  --limit-body: int # The maximum number of AggregatorSourceStatus returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
+  --body-limit: int # The maximum number of AggregatorSourceStatus returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
 ]: any -> oneof<record<AggregatedSourceStatusList: table<SourceId: string, SourceType: string, AwsRegion: string, LastUpdateStatus: string, LastUpdateTime: string, LastErrorCode: string, LastErrorMessage: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1545,12 +1572,12 @@ export def "describe-configuration-aggregator-sources-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationAggregatorSourcesStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "UpdateStatus": $update_status, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "UpdateStatus": $update_status, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1590,8 +1617,8 @@ export def "describe-configuration-aggregators" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   --configuration-aggregator-names: list<string> # The name of the configuration aggregators.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
-  --limit-body: int # The maximum number of configuration aggregators returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
+  --body-limit: int # The maximum number of configuration aggregators returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
 ]: any -> oneof<record<ConfigurationAggregators: table<ConfigurationAggregatorName: string, ConfigurationAggregatorArn: string, AccountAggregationSources: list, OrganizationAggregationSource: record, CreationTime: string, LastUpdatedTime: string, CreatedBy: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1599,12 +1626,12 @@ export def "describe-configuration-aggregators" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationAggregators")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorNames": $configuration_aggregator_names, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorNames": $configuration_aggregator_names, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1649,11 +1676,11 @@ export def "describe-configuration-recorder-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationRecorderStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1698,11 +1725,11 @@ export def "describe-configuration-recorders" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConfigurationRecorders")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderNames": $configuration_recorder_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1743,8 +1770,8 @@ export def "describe-conformance-pack-compliance" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   conformance_pack_name: string # Name of the conformance pack.
   --filters: record # Filters the conformance pack by compliance types and Config rule names. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA"}
-  --limit-body: int # The maximum number of Config rules within a conformance pack are returned on each page. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of Config rules within a conformance pack are returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ConformancePackName: string, ConformancePackRuleComplianceList: table<ConfigRuleName: string, ComplianceType: string, Controls: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1752,12 +1779,12 @@ export def "describe-conformance-pack-compliance" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePackCompliance")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1797,8 +1824,8 @@ export def "describe-conformance-pack-status" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   --conformance-pack-names: list<string> # Comma-separated list of conformance pack names.
-  --limit-body: int # The maximum number of conformance packs status returned on each page. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of conformance packs status returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ConformancePackStatusDetails: table<ConformancePackName: string, ConformancePackId: string, ConformancePackArn: string, ConformancePackState: string, StackArn: string, ConformancePackStatusReason: string, LastUpdateRequestedTime: string, LastUpdateCompletedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1806,12 +1833,12 @@ export def "describe-conformance-pack-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePackStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1851,8 +1878,8 @@ export def "describe-conformance-packs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   --conformance-pack-names: list<string> # Comma-separated list of conformance pack names for which you want details. If you do not specify any names, Config returns details for all your conformance packs.
-  --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of conformance packs returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ConformancePackDetails: table<ConformancePackName: string, ConformancePackArn: string, ConformancePackId: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, LastUpdateRequestedTime: string, CreatedBy: string, TemplateSSMDocumentDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1860,12 +1887,12 @@ export def "describe-conformance-packs" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1910,11 +1937,11 @@ export def "describe-delivery-channel-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeDeliveryChannelStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelNames": $delivery_channel_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1959,11 +1986,11 @@ export def "describe-delivery-channels" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeDeliveryChannels")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannelNames": $delivery_channel_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2003,8 +2030,8 @@ export def "describe-organization-config-rule-statuses" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   --organization-config-rule-names: list<string> # The names of organization Config rules for which you want status details. If you do not specify any names, Config returns details for all your organization Config rules.
-  --limit-body: int # The maximum number of OrganizationConfigRuleStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of OrganizationConfigRuleStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConfigRuleStatuses: table<OrganizationConfigRuleName: string, OrganizationRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2012,12 +2039,12 @@ export def "describe-organization-config-rule-statuses" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConfigRuleStatuses")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2057,8 +2084,8 @@ export def "describe-organization-config-rules" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   --organization-config-rule-names: list<string> # The names of organization Config rules for which you want details. If you do not specify any names, Config returns details for all your organization Config rules.
-  --limit-body: int # The maximum number of organization Config rules returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of organization Config rules returned on each page. If you do no specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConfigRules: table<OrganizationConfigRuleName: string, OrganizationConfigRuleArn: string, OrganizationManagedRuleMetadata: record, OrganizationCustomRuleMetadata: record, ExcludedAccounts: list, LastUpdateTime: string, OrganizationCustomPolicyRuleMetadata: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2066,12 +2093,12 @@ export def "describe-organization-config-rules" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConfigRules")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConfigRuleNames": $organization_config_rule_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2111,8 +2138,8 @@ export def "describe-organization-conformance-pack-statuses" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   --organization-conformance-pack-names: list<string> # The names of organization conformance packs for which you want status details. If you do not specify any names, Config returns details for all your organization conformance packs.
-  --limit-body: int # The maximum number of OrganizationConformancePackStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of OrganizationConformancePackStatuses returned on each page. If you do no specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConformancePackStatuses: table<OrganizationConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2120,12 +2147,12 @@ export def "describe-organization-conformance-pack-statuses" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConformancePackStatuses")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2165,8 +2192,8 @@ export def "describe-organization-conformance-packs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   --organization-conformance-pack-names: list<string> # The name that you assign to an organization conformance pack.
-  --limit-body: int # The maximum number of organization config packs returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of organization config packs returned on each page. If you do no specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConformancePacks: table<OrganizationConformancePackName: string, OrganizationConformancePackArn: string, DeliveryS3Bucket: string, DeliveryS3KeyPrefix: string, ConformancePackInputParameters: list, ExcludedAccounts: list, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2174,12 +2201,12 @@ export def "describe-organization-conformance-packs" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeOrganizationConformancePacks")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConformancePackNames": $organization_conformance_pack_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2218,8 +2245,8 @@ export def "describe-pending-aggregation-requests" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<PendingAggregationRequests: table<RequesterAccountId: string, RequesterAwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2227,12 +2254,12 @@ export def "describe-pending-aggregation-requests" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribePendingAggregationRequests")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2277,11 +2304,11 @@ export def "describe-remediation-configurations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2322,8 +2349,8 @@ export def "describe-remediation-exceptions" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   config_rule_name: string # The name of the Config rule.
   --resource-keys: list # An exception list of resource exception keys to be processed with the current request. Config adds exception for each resource key. For example, Config adds 3 exceptions for 3 resource keys. — item shape: {ResourceType?: string, ResourceId?: string}
-  --limit-body: int # The maximum number of RemediationExceptionResourceKey returned on each page. The default is 25. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of RemediationExceptionResourceKey returned on each page. The default is 25. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<RemediationExceptions: table<ConfigRuleName: string, ResourceType: string, ResourceId: string, Message: string, ExpirationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2331,12 +2358,12 @@ export def "describe-remediation-exceptions" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationExceptions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2377,8 +2404,8 @@ export def "describe-remediation-execution-status" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   config_rule_name: string # A list of Config rule names.
   --resource-keys: list # A list of resource keys to be processed with the current request. Each element in the list consists of the resource type and resource ID. — item shape: {resourceType: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (1 more fields)}
-  --limit-body: int # The maximum number of RemediationExecutionStatuses returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of RemediationExecutionStatuses returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<RemediationExecutionStatuses: table<ResourceKey: record, State: string, StepDetails: list, InvocationTime: string, LastUpdatedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2386,12 +2413,12 @@ export def "describe-remediation-execution-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRemediationExecutionStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2430,7 +2457,7 @@ export def "describe-retention-configurations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   --retention-configuration-names: list<string> # A list of names of retention configurations for which you want details. If you do not specify a name, Config returns details for all the retention configurations for that account. Currently, Config supports only one retention configuration per region in your account.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<RetentionConfigurations: table<Name: string, RetentionPeriodInDays: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2438,12 +2465,12 @@ export def "describe-retention-configurations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.DescribeRetentionConfigurations")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"RetentionConfigurationNames": $retention_configuration_names, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"RetentionConfigurationNames": $retention_configuration_names, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2487,8 +2514,8 @@ export def "get-aggregate-compliance-details-by-config-rule" [
   account_id: string # The 12-digit account ID of the source account.
   aws_region: string # The source region from where the data is aggregated.
   --compliance-type: string@compliance-type-completer # The resource compliance status. For the GetAggregateComplianceDetailsByConfigRuleRequest data type, Config supports only the COMPLIANT and NON_COMPLIANT. Config does not support the NOT_APPLICABLE and INSUFFICIENT_DATA values.
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 50. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is 50. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<AggregateEvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, AccountId: string, AwsRegion: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2496,12 +2523,12 @@ export def "get-aggregate-compliance-details-by-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateComplianceDetailsByConfigRule")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ConfigRuleName": $config_rule_name, "AccountId": $account_id, "AwsRegion": $aws_region, "ComplianceType": $compliance_type, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ConfigRuleName": $config_rule_name, "AccountId": $account_id, "AwsRegion": $aws_region, "ComplianceType": $compliance_type, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2543,8 +2570,8 @@ export def "get-aggregate-config-rule-compliance-summary" [
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --filters: record # Filters the results based on the account IDs and regions. — shape: {AccountId?: string, AwsRegion?: string}
   --group-by-key: string@group-by-key-completer # Groups the result based on ACCOUNT_ID or AWS_REGION.
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<GroupByKey: string, AggregateComplianceCounts: table<GroupName: string, ComplianceSummary: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2552,12 +2579,12 @@ export def "get-aggregate-config-rule-compliance-summary" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateConfigRuleComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2599,8 +2626,8 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --filters: record # Filters the results based on account ID and region. — shape: {AccountId?: string, AwsRegion?: string}
   --group-by-key: string@group-by-key-completer # Groups the result based on Amazon Web Services account ID or Amazon Web Services Region.
-  --limit-body: int # The maximum number of results returned on each page. The default is maximum. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of results returned on each page. The default is maximum. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<AggregateConformancePackComplianceSummaries: table<ComplianceSummary: record, GroupName: string>, GroupByKey: string, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2608,12 +2635,12 @@ export def "get-aggregate-conformance-pack-compliance-summary" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateConformancePackComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2655,8 +2682,8 @@ export def "get-aggregate-discovered-resource-counts" [
   configuration_aggregator_name: string # The name of the configuration aggregator.
   --filters: record # Filters the resource count based on account ID, region, and resource type. — shape: {ResourceType?: "AWS::EC2::CustomerGateway"|"AWS::EC2::EIP"|"AWS::EC2::Host"|"AWS::EC2::Instance"|"AWS::EC2::InternetGateway"|"AWS::EC2::NetworkAcl"|"AWS::EC2::NetworkInterface"|"AWS::EC2::RouteTable"|"AWS::EC2::SecurityGroup"|"AWS::EC2::Subnet"|"AWS::CloudTrail::Trail"|"AWS::EC2::Volume"|"AWS::EC2::VPC"|"AWS::EC2::VPNConnection"|"AWS::EC2::VPNGateway"|"AWS::EC2::RegisteredHAInstance"|"AWS::EC2::NatGateway"|"AWS::EC2::EgressOnlyInternetGateway"|"AWS::EC2::VPCEndpoint"|"AWS::EC2::VPCEndpointService"|"AWS::EC2::FlowLog"|"AWS::EC2::VPCPeeringConnection"|"AWS::Elasticsearch::Domain"|"AWS::IAM::Group"|"AWS::IAM::Policy"|"AWS::IAM::Role"|"AWS::IAM::User"|"AWS::ElasticLoadBalancingV2::LoadBalancer"|"AWS::ACM::Certificate"|"AWS::RDS::DBInstance"|"AWS::RDS::DBSubnetGroup"|"AWS::RDS::DBSecurityGroup"|"AWS::RDS::DBSnapshot"|"AWS::RDS::DBCluster"|"AWS::RDS::DBClusterSnapshot"|"AWS::RDS::EventSubscription"|"AWS::S3::Bucket"|"AWS::S3::AccountPublicAccessBlock"|"AWS::Redshift::Cluster"|"AWS::Redshift::ClusterSnapshot"|"AWS::Redshift::ClusterParameterGroup"|"AWS::Redshift::ClusterSecurityGroup"|"AWS::Redshift::ClusterSubnetGroup"|"AWS::Redshift::EventSubscription"|"AWS::SSM::ManagedInstanceInventory"|"AWS::CloudWatch::Alarm"|"AWS::CloudFormation::Stack"|"AWS::ElasticLoadBalancing::LoadBalancer"|"AWS::AutoScaling::AutoScalingGroup"|"AWS::AutoScaling::LaunchConfiguration"|"AWS::AutoScaling::ScalingPolicy"|"AWS::AutoScaling::ScheduledAction"|"AWS::DynamoDB::Table"|"AWS::CodeBuild::Project"|"AWS::WAF::RateBasedRule"|"AWS::WAF::Rule"|"AWS::WAF::RuleGroup"|"AWS::WAF::WebACL"|"AWS::WAFRegional::RateBasedRule"|"AWS::WAFRegional::Rule"|"AWS::WAFRegional::RuleGroup"|"AWS::WAFRegional::WebACL"|"AWS::CloudFront::Distribution"|"AWS::CloudFront::StreamingDistribution"|"AWS::Lambda::Function"|"AWS::NetworkFirewall::Firewall"|"AWS::NetworkFirewall::FirewallPolicy"|"AWS::NetworkFirewall::RuleGroup"|"AWS::ElasticBeanstalk::Application"|"AWS::ElasticBeanstalk::ApplicationVersion"|"AWS::ElasticBeanstalk::Environment"|"AWS::WAFv2::WebACL"|"AWS::WAFv2::RuleGroup"|"AWS::WAFv2::IPSet"|"AWS::WAFv2::RegexPatternSet"|"AWS::WAFv2::ManagedRuleSet"|"AWS::XRay::EncryptionConfig"|"AWS::SSM::AssociationCompliance"|"AWS::SSM::PatchCompliance"|"AWS::Shield::Protection"|"AWS::ShieldRegional::Protection"|"AWS::Config::ConformancePackCompliance"|"AWS::Config::ResourceCompliance"|"AWS::ApiGateway::Stage"|"AWS::ApiGateway::RestApi"|"AWS::ApiGatewayV2::Stage"|"AWS::ApiGatewayV2::Api"|"AWS::CodePipeline::Pipeline"|"AWS::ServiceCatalog::CloudFormationProvisionedProduct"|"AWS::ServiceCatalog::CloudFormationProduct"|"AWS::ServiceCatalog::Portfolio"|"AWS::SQS::Queue"|"AWS::KMS::Key"|"AWS::QLDB::Ledger"|"AWS::SecretsManager::Secret"|"AWS::SNS::Topic"|"AWS::SSM::FileData"|"AWS::Backup::BackupPlan"|"AWS::Backup::BackupSelection"|"AWS::Backup::BackupVault"|"AWS::Backup::RecoveryPoint"|"AWS::ECR::Repository"|"AWS::ECS::Cluster"|"AWS::ECS::Service"|"AWS::ECS::TaskDefinition"|"AWS::EFS::AccessPoint"|"AWS::EFS::FileSystem"|"AWS::EKS::Cluster"|"AWS::OpenSearch::Domain"|"AWS::EC2::TransitGateway"|"AWS::Kinesis::Stream"|"AWS::Kinesis::StreamConsumer"|"AWS::CodeDeploy::Application"|"AWS::CodeDeploy::DeploymentConfig"|"AWS::CodeDeploy::DeploymentGroup"|"AWS::EC2::LaunchTemplate"|"AWS::ECR::PublicRepository"|"AWS::GuardDuty::Detector"|"AWS::EMR::SecurityConfiguration"|"AWS::SageMaker::CodeRepository"|"AWS::Route53Resolver::ResolverEndpoint"|"AWS::Route53Resolver::ResolverRule"|"AWS::Route53Resolver::ResolverRuleAssociation"|"AWS::DMS::ReplicationSubnetGroup"|"AWS::DMS::EventSubscription"|"AWS::MSK::Cluster"|"AWS::StepFunctions::Activity"|"AWS::WorkSpaces::Workspace"|"AWS::WorkSpaces::ConnectionAlias"|"AWS::SageMaker::Model"|"AWS::ElasticLoadBalancingV2::Listener"|"AWS::StepFunctions::StateMachine"|"AWS::Batch::JobQueue"|"AWS::Batch::ComputeEnvironment"|"AWS::AccessAnalyzer::Analyzer"|"AWS::Athena::WorkGroup"|"AWS::Athena::DataCatalog"|"AWS::Detective::Graph"|"AWS::GlobalAccelerator::Accelerator"|"AWS::GlobalAccelerator::EndpointGroup"|"AWS::GlobalAccelerator::Listener"|"AWS::EC2::TransitGatewayAttachment"|"AWS::EC2::TransitGatewayRouteTable"|"AWS::DMS::Certificate"|"AWS::AppConfig::Application"|"AWS::AppSync::GraphQLApi"|"AWS::DataSync::LocationSMB"|"AWS::DataSync::LocationFSxLustre"|"AWS::DataSync::LocationS3"|"AWS::DataSync::LocationEFS"|"AWS::DataSync::Task"|"AWS::DataSync::LocationNFS"|"AWS::EC2::NetworkInsightsAccessScopeAnalysis"|"AWS::EKS::FargateProfile"|"AWS::Glue::Job"|"AWS::GuardDuty::ThreatIntelSet"|"AWS::GuardDuty::IPSet"|"AWS::SageMaker::Workteam"|"AWS::SageMaker::NotebookInstanceLifecycleConfig"|"AWS::ServiceDiscovery::Service"|"AWS::ServiceDiscovery::PublicDnsNamespace"|"AWS::SES::ContactList"|"AWS::SES::ConfigurationSet"|"AWS::Route53::HostedZone"|"AWS::IoTEvents::Input"|"AWS::IoTEvents::DetectorModel"|"AWS::IoTEvents::AlarmModel"|"AWS::ServiceDiscovery::HttpNamespace"|"AWS::Events::EventBus"|"AWS::ImageBuilder::ContainerRecipe"|"AWS::ImageBuilder::DistributionConfiguration"|"AWS::ImageBuilder::InfrastructureConfiguration"|"AWS::DataSync::LocationObjectStorage"|"AWS::DataSync::LocationHDFS"|"AWS::Glue::Classifier"|"AWS::Route53RecoveryReadiness::Cell"|"AWS::Route53RecoveryReadiness::ReadinessCheck"|"AWS::ECR::RegistryPolicy"|"AWS::Backup::ReportPlan"|"AWS::Lightsail::Certificate"|"AWS::RUM::AppMonitor"|"AWS::Events::Endpoint"|"AWS::SES::ReceiptRuleSet"|"AWS::Events::Archive"|"AWS::Events::ApiDestination"|"AWS::Lightsail::Disk"|"AWS::FIS::ExperimentTemplate"|"AWS::DataSync::LocationFSxWindows"|"AWS::SES::ReceiptFilter"|"AWS::GuardDuty::Filter"|"AWS::SES::Template"|"AWS::AmazonMQ::Broker"|"AWS::AppConfig::Environment"|"AWS::AppConfig::ConfigurationProfile"|"AWS::Cloud9::EnvironmentEC2"|"AWS::EventSchemas::Registry"|"AWS::EventSchemas::RegistryPolicy"|"AWS::EventSchemas::Discoverer"|"AWS::FraudDetector::Label"|"AWS::FraudDetector::EntityType"|"AWS::FraudDetector::Variable"|"AWS::FraudDetector::Outcome"|"AWS::IoT::Authorizer"|"AWS::IoT::SecurityProfile"|"AWS::IoT::RoleAlias"|"AWS::IoT::Dimension"|"AWS::IoTAnalytics::Datastore"|"AWS::Lightsail::Bucket"|"AWS::Lightsail::StaticIp"|"AWS::MediaPackage::PackagingGroup"|"AWS::Route53RecoveryReadiness::RecoveryGroup"|"AWS::ResilienceHub::ResiliencyPolicy"|"AWS::Transfer::Workflow"|"AWS::EKS::IdentityProviderConfig"|"AWS::EKS::Addon"|"AWS::Glue::MLTransform"|"AWS::IoT::Policy"|"AWS::IoT::MitigationAction"|"AWS::IoTTwinMaker::Workspace"|"AWS::IoTTwinMaker::Entity"|"AWS::IoTAnalytics::Dataset"|"AWS::IoTAnalytics::Pipeline"|"AWS::IoTAnalytics::Channel"|"AWS::IoTSiteWise::Dashboard"|"AWS::IoTSiteWise::Project"|"AWS::IoTSiteWise::Portal"|"AWS::IoTSiteWise::AssetModel"|"AWS::IVS::Channel"|"AWS::IVS::RecordingConfiguration"|"AWS::IVS::PlaybackKeyPair"|"AWS::KinesisAnalyticsV2::Application"|"AWS::RDS::GlobalCluster"|"AWS::S3::MultiRegionAccessPoint"|"AWS::DeviceFarm::TestGridProject"|"AWS::Budgets::BudgetsAction"|"AWS::Lex::Bot"|"AWS::CodeGuruReviewer::RepositoryAssociation"|"AWS::IoT::CustomMetric"|"AWS::Route53Resolver::FirewallDomainList"|"AWS::RoboMaker::RobotApplicationVersion"|"AWS::EC2::TrafficMirrorSession"|"AWS::IoTSiteWise::Gateway"|"AWS::Lex::BotAlias"|"AWS::LookoutMetrics::Alert"|"AWS::IoT::AccountAuditConfiguration"|"AWS::EC2::TrafficMirrorTarget"|"AWS::S3::StorageLens"|"AWS::IoT::ScheduledAudit"|"AWS::Events::Connection"|"AWS::EventSchemas::Schema"|"AWS::MediaPackage::PackagingConfiguration"|"AWS::KinesisVideo::SignalingChannel"|"AWS::AppStream::DirectoryConfig"|"AWS::LookoutVision::Project"|"AWS::Route53RecoveryControl::Cluster"|"AWS::Route53RecoveryControl::SafetyRule"|"AWS::Route53RecoveryControl::ControlPanel"|"AWS::Route53RecoveryControl::RoutingControl"|"AWS::Route53RecoveryReadiness::ResourceSet"|"AWS::RoboMaker::SimulationApplication"|"AWS::RoboMaker::RobotApplication"|"AWS::HealthLake::FHIRDatastore"|"AWS::Pinpoint::Segment"|"AWS::Pinpoint::ApplicationSettings"|"AWS::Events::Rule"|"AWS::EC2::DHCPOptions"|"AWS::EC2::NetworkInsightsPath"|"AWS::EC2::TrafficMirrorFilter"|"AWS::EC2::IPAM"|"AWS::IoTTwinMaker::Scene"|"AWS::NetworkManager::TransitGatewayRegistration"|"AWS::CustomerProfiles::Domain"|"AWS::AutoScaling::WarmPool"|"AWS::Connect::PhoneNumber", ... (2 more fields)}
   --group-by-key: string@group-by-key-completer-1 # The key to group the resource counts.
-  --limit-body: int # The maximum number of GroupedResourceCount objects returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of GroupedResourceCount objects returned on each page. The default is 1000. You cannot specify a number greater than 1000. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<TotalDiscoveredResources: int, GroupByKey: string, GroupedResourceCounts: table<GroupName: string, ResourceCount: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2664,12 +2691,12 @@ export def "get-aggregate-discovered-resource-counts" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateDiscoveredResourceCounts")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "Filters": $filters, "GroupByKey": $group_by_key, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2715,11 +2742,11 @@ export def "get-aggregate-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetAggregateResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceIdentifier": $resource_identifier} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2760,8 +2787,8 @@ export def "get-compliance-details-by-config-rule" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   config_rule_name: string # The name of the Config rule for which you want compliance information.
   --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
-  --limit-body: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2769,12 +2796,12 @@ export def "get-compliance-details-by-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceDetailsByConfigRule")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigRuleName": $config_rule_name, "ComplianceTypes": $compliance_types, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigRuleName": $config_rule_name, "ComplianceTypes": $compliance_types, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2815,7 +2842,7 @@ export def "get-compliance-details-by-resource" [
   --resource-type: string # The type of the Amazon Web Services resource for which you want compliance information.
   --resource-id: string # The ID of the Amazon Web Services resource for which you want compliance information.
   --compliance-types: list<string> # Filters the results by compliance. INSUFFICIENT_DATA is a valid ComplianceType that is returned when an Config rule cannot be evaluated. However, INSUFFICIENT_DATA cannot be used as a ComplianceType for filtering results.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
   --resource-evaluation-id: string # The unique ID of Amazon Web Services resource execution for which you want to retrieve evaluation results. You need to only provide either a ResourceEvaluationID or a ResourceID and ResourceType.
 ]: any -> oneof<record<EvaluationResults: table<EvaluationResultIdentifier: record, ComplianceType: string, ResultRecordedTime: string, ConfigRuleInvokedTime: string, Annotation: string, ResultToken: string>, NextToken: string>, string, nothing> {
   let input = $in
@@ -2824,12 +2851,12 @@ export def "get-compliance-details-by-resource" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceDetailsByResource")
   let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "NextToken": $next_token_body, "ResourceEvaluationId": $resource_evaluation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ResourceType": $resource_type, "ResourceId": $resource_id, "ComplianceTypes": $compliance_types, "NextToken": $body_next_token, "ResourceEvaluationId": $resource_evaluation_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2872,9 +2899,9 @@ export def "get-compliance-summary-by-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceSummaryByConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2919,11 +2946,11 @@ export def "get-compliance-summary-by-resource-type" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetComplianceSummaryByResourceType")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceTypes": $resource_types} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2964,8 +2991,8 @@ export def "get-conformance-pack-compliance-details" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   conformance_pack_name: string # Name of the conformance pack.
   --filters: record # Filters a conformance pack by Config rule names, compliance types, Amazon Web Services resource types, and resource IDs. — shape: {ConfigRuleNames?: list<string>, ComplianceType?: "COMPLIANT"|"NON_COMPLIANT"|"INSUFFICIENT_DATA", ResourceType?: string, ResourceIds?: list<string>}
-  --limit-body: int # The maximum number of evaluation results returned on each page. If you do no specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluation results returned on each page. If you do no specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ConformancePackName: string, ConformancePackRuleEvaluationResults: table<ComplianceType: string, EvaluationResultIdentifier: record, ConfigRuleInvokedTime: string, ResultRecordedTime: string, Annotation: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2973,12 +3000,12 @@ export def "get-conformance-pack-compliance-details" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetConformancePackComplianceDetails")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConformancePackName": $conformance_pack_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3018,8 +3045,8 @@ export def "get-conformance-pack-compliance-summary" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   conformance_pack_names: list<string> # Names of conformance packs.
-  --limit-body: int # The maximum number of conformance packs returned on each page. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of conformance packs returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ConformancePackComplianceSummaryList: table<ConformancePackName: string, ConformancePackComplianceStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3027,12 +3054,12 @@ export def "get-conformance-pack-compliance-summary" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetConformancePackComplianceSummary")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConformancePackNames": $conformance_pack_names, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3077,11 +3104,11 @@ export def "get-custom-rule-policy" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetCustomRulePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3121,8 +3148,8 @@ export def "get-discovered-resource-counts" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-55 # required
   --resource-types: list<string> # The comma-separated list that specifies the resource types that you want Config to return (for example, "AWS::EC2::Instance", "AWS::IAM::User"). If a value for resourceTypes is not specified, Config returns all resource types that Config is recording in the region for your account. If the configuration recorder is turned off, Config returns an empty list of ResourceCount objects. If the configuration recorder is not recording a specific resource type (for example, S3 buckets), that resource type is not returned in the list of ResourceCount objects.
-  --limit-body: int # The maximum number of ResourceCount objects returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of ResourceCount objects returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: nextToken)
 ]: any -> oneof<record<totalDiscoveredResources: int, resourceCounts: table<resourceType: string, count: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3130,12 +3157,12 @@ export def "get-discovered-resource-counts" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetDiscoveredResourceCounts")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"resourceTypes": $resource_types, "limit": $limit_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"resourceTypes": $resource_types, "limit": $body_limit, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3176,8 +3203,8 @@ export def "get-organization-config-rule-detailed-status" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   organization_config_rule_name: string # The name of your organization Config rule for which you want status details for member accounts.
   --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization Config rule. — shape: {AccountId?: string, MemberAccountRuleStatus?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
-  --limit-body: int # The maximum number of OrganizationConfigRuleDetailedStatus returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of OrganizationConfigRuleDetailedStatus returned on each page. If you do not specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConfigRuleDetailedStatus: table<AccountId: string, ConfigRuleName: string, MemberAccountRuleStatus: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3185,12 +3212,12 @@ export def "get-organization-config-rule-detailed-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationConfigRuleDetailedStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3231,8 +3258,8 @@ export def "get-organization-conformance-pack-detailed-status" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   organization_conformance_pack_name: string # The name of organization conformance pack for which you want status details for member accounts.
   --filters: record # Status filter object to filter results based on specific member account ID or status type for an organization conformance pack. — shape: {AccountId?: string, Status?: "CREATE_SUCCESSFUL"|"CREATE_IN_PROGRESS"|"CREATE_FAILED"|"DELETE_SUCCESSFUL"|"DELETE_FAILED"|"DELETE_IN_PROGRESS"|"UPDATE_SUCCESSFUL"|"UPDATE_IN_PROGRESS"|"UPDATE_FAILED"}
-  --limit-body: int # The maximum number of OrganizationConformancePackDetailedStatuses returned on each page. If you do not specify a number, Config uses the default. The default is 100. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of OrganizationConformancePackDetailedStatuses returned on each page. If you do not specify a number, Config uses the default. The default is 100. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<OrganizationConformancePackDetailedStatuses: table<AccountId: string, ConformancePackName: string, Status: string, ErrorCode: string, ErrorMessage: string, LastUpdateTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3240,12 +3267,12 @@ export def "get-organization-conformance-pack-detailed-status" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationConformancePackDetailedStatus")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3290,11 +3317,11 @@ export def "get-organization-custom-rule-policy" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetOrganizationCustomRulePolicy")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3338,8 +3365,8 @@ export def "get-resource-config-history" [
   --later-time: string # The time stamp that indicates a later time. If not specified, current time is taken. (format: date-time)
   --earlier-time: string # The time stamp that indicates an earlier time. If not specified, the action returns paginated results that contain configuration items that start when the first configuration item was recorded. (format: date-time)
   --chronological-order: string@chronological-order-completer # The chronological order for configuration items listed. By default, the results are listed in reverse chronological order.
-  --limit-body: int # The maximum number of configuration items returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of configuration items returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: nextToken)
 ]: any -> oneof<record<configurationItems: table<version: string, accountId: string, configurationItemCaptureTime: string, configurationItemStatus: string, configurationStateId: string, configurationItemMD5Hash: string, arn: string, resourceType: string, resourceId: string, resourceName: string, awsRegion: string, availabilityZone: string, resourceCreationTime: string, tags: record, relatedEvents: list, relationships: list, configuration: string, supplementaryConfiguration: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3347,12 +3374,12 @@ export def "get-resource-config-history" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetResourceConfigHistory")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"resourceType": $resource_type, "resourceId": $resource_id, "laterTime": $later_time, "earlierTime": $earlier_time, "chronologicalOrder": $chronological_order, "limit": $limit_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"resourceType": $resource_type, "resourceId": $resource_id, "laterTime": $later_time, "earlierTime": $earlier_time, "chronologicalOrder": $chronological_order, "limit": $body_limit, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3397,11 +3424,11 @@ export def "get-resource-evaluation-summary" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetResourceEvaluationSummary")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceEvaluationId": $resource_evaluation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3446,11 +3473,11 @@ export def "get-stored-query" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.GetStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"QueryName": $query_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3492,8 +3519,8 @@ export def "list-aggregate-discovered-resources" [
   configuration_aggregator_name: string # The name of the configuration aggregator.
   resource_type: string@resource-type-completer # The type of resources that you want Config to list in the response.
   --filters: record # Filters the results by resource account ID, region, resource ID, and resource name. — shape: {AccountId?: string, ResourceId?: string, ResourceName?: string, Region?: string}
-  --limit-body: int # The maximum number of resource identifiers returned on each page. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of resource identifiers returned on each page. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ResourceIdentifiers: table<SourceAccountId: string, SourceRegion: string, ResourceId: string, ResourceType: string, ResourceName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3501,12 +3528,12 @@ export def "list-aggregate-discovered-resources" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListAggregateDiscoveredResources")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceType": $resource_type, "Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "ResourceType": $resource_type, "Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3548,8 +3575,8 @@ export def "list-conformance-pack-compliance-scores" [
   --filters: record # A list of filters to apply to the conformance pack compliance score result set. — shape: {ConformancePackNames: list<string>}
   --sort-order: string@sort-order-completer # Determines the order in which conformance pack compliance scores are sorted. Either in ascending or descending order. By default, conformance pack compliance scores are sorted in alphabetical order by name of the conformance pack. Conformance pack compliance scores are sorted in reverse alphabetical order if you enter DESCENDING. You can sort conformance pack compliance scores by the numerical value of the compliance score by entering SCORE in the SortBy action. When compliance scores are sorted by SCORE, conformance packs with a compliance score of INSUFFICIENT_DATA will be last when sorting by ascending order and first when sorting by descending order.
   --sort-by: string@sort-by-completer # Sorts your conformance pack compliance scores in either ascending or descending order, depending on SortOrder. By default, conformance pack compliance scores are sorted in alphabetical order by name of the conformance pack. Enter SCORE, to sort conformance pack compliance scores by the numerical value of the compliance score.
-  --limit-body: int # The maximum number of conformance pack compliance scores returned on each page. (body field)
-  --next-token-body: string # The nextToken string in a prior request that you can use to get the paginated response for the next set of conformance pack compliance scores. (body field)
+  --body-limit: int # The maximum number of conformance pack compliance scores returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string in a prior request that you can use to get the paginated response for the next set of conformance pack compliance scores. (spec name: NextToken)
 ]: any -> oneof<record<NextToken: string, ConformancePackComplianceScores: table<Score: string, ConformancePackName: string, LastUpdatedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3557,12 +3584,12 @@ export def "list-conformance-pack-compliance-scores" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListConformancePackComplianceScores")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "SortOrder": $sort_order, "SortBy": $sort_by, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "SortOrder": $sort_order, "SortBy": $sort_by, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3604,9 +3631,9 @@ export def "list-discovered-resources" [
   resource_type: string@resource-type-completer # The type of resources that you want Config to list in the response.
   --resource-ids: list<string> # The IDs of only those resources that you want Config to list in the response. If you do not specify this parameter, Config lists all resources of the specified type that it has discovered. You can list a minimum of 1 resourceID and a maximum of 20 resourceIds.
   --resource-name: string # The custom name of only those resources that you want Config to list in the response. If you do not specify this parameter, Config lists all resources of the specified type that it has discovered.
-  --limit-body: int # The maximum number of resource identifiers returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
+  --body-limit: int # The maximum number of resource identifiers returned on each page. The default is 100. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: limit)
   --include-deleted-resources: oneof<nothing, bool> # Specifies whether Config includes deleted resources in the results. By default, deleted resources are not included.
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: nextToken)
 ]: any -> oneof<record<resourceIdentifiers: table<resourceType: string, resourceId: string, resourceName: string, resourceDeletionTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3614,12 +3641,12 @@ export def "list-discovered-resources" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListDiscoveredResources")
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"resourceType": $resource_type, "resourceIds": $resource_ids, "resourceName": $resource_name, "limit": $limit_body, "includeDeletedResources": $include_deleted_resources, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"resourceType": $resource_type, "resourceIds": $resource_ids, "resourceName": $resource_name, "limit": $body_limit, "includeDeletedResources": $include_deleted_resources, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3659,8 +3686,8 @@ export def "list-resource-evaluations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-65 # required
   --filters: record # Returns details of a resource evaluation based on the selected filter. — shape: {EvaluationMode?: "DETECTIVE"|"PROACTIVE", TimeWindow?: record, EvaluationContextIdentifier?: string}
-  --limit-body: int # The maximum number of evaluations returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of evaluations returned on each page. The default is 10. You cannot specify a number greater than 100. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<ResourceEvaluations: table<ResourceEvaluationId: string, EvaluationMode: string, EvaluationStartTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3668,12 +3695,12 @@ export def "list-resource-evaluations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListResourceEvaluations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3712,8 +3739,8 @@ export def "list-stored-queries" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-66 # required
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
-  --max-results-body: int # The maximum number of results to be returned with a single call. (body field)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
+  --body-max-results: int # The maximum number of results to be returned with a single call. (spec name: MaxResults)
 ]: any -> oneof<record<StoredQueryMetadata: table<QueryId: string, QueryArn: string, QueryName: string, Description: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3721,12 +3748,12 @@ export def "list-stored-queries" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListStoredQueries")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"NextToken": $body_next_token, "MaxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3766,8 +3793,8 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-67 # required
   resource_arn: string # The Amazon Resource Name (ARN) that identifies the resource for which to list the tags. Currently, the supported resources are ConfigRule, ConfigurationAggregator and AggregatorAuthorization.
-  --limit-body: int # The maximum number of tags returned on each page. The limit maximum is 50. You cannot specify a number greater than 50. If you specify 0, Config uses the default. (body field)
-  --next-token-body: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of tags returned on each page. The limit maximum is 50. You cannot specify a number greater than 50. If you specify 0, Config uses the default. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned on a previous page that you use to get the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3775,12 +3802,12 @@ export def "list-tags-for-resource" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.ListTagsForResource")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ResourceArn": $resource_arn, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ResourceArn": $resource_arn, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3827,11 +3854,11 @@ export def "put-aggregation-authorization" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutAggregationAuthorization")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AuthorizedAccountId": $authorized_account_id, "AuthorizedAwsRegion": $authorized_aws_region, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3877,11 +3904,11 @@ export def "put-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRule": $config_rule, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3929,11 +3956,11 @@ export def "put-configuration-aggregator" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigurationAggregator")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationAggregatorName": $configuration_aggregator_name, "AccountAggregationSources": $account_aggregation_sources, "OrganizationAggregationSource": $organization_aggregation_source, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3978,11 +4005,11 @@ export def "put-configuration-recorder" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorder": $configuration_recorder} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4033,11 +4060,11 @@ export def "put-conformance-pack" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConformancePackName": $conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "TemplateSSMDocumentDetails": $template_ssm_document_details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4082,11 +4109,11 @@ export def "put-delivery-channel" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutDeliveryChannel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DeliveryChannel": $delivery_channel} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4133,11 +4160,11 @@ export def "put-evaluations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutEvaluations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Evaluations": $evaluations, "ResultToken": $result_token, "TestMode": $test_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4183,11 +4210,11 @@ export def "put-external-evaluation" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutExternalEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ExternalEvaluation": $external_evaluation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4236,11 +4263,11 @@ export def "put-organization-config-rule" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutOrganizationConfigRule")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConfigRuleName": $organization_config_rule_name, "OrganizationManagedRuleMetadata": $organization_managed_rule_metadata, "OrganizationCustomRuleMetadata": $organization_custom_rule_metadata, "ExcludedAccounts": $excluded_accounts, "OrganizationCustomPolicyRuleMetadata": $organization_custom_policy_rule_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4291,11 +4318,11 @@ export def "put-organization-conformance-pack" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutOrganizationConformancePack")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"OrganizationConformancePackName": $organization_conformance_pack_name, "TemplateS3Uri": $template_s3_uri, "TemplateBody": $template_body, "DeliveryS3Bucket": $delivery_s3_bucket, "DeliveryS3KeyPrefix": $delivery_s3_key_prefix, "ConformancePackInputParameters": $conformance_pack_input_parameters, "ExcludedAccounts": $excluded_accounts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4340,11 +4367,11 @@ export def "put-remediation-configurations" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRemediationConfigurations")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RemediationConfigurations": $remediation_configurations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4392,11 +4419,11 @@ export def "put-remediation-exceptions" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRemediationExceptions")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys, "Message": $message, "ExpirationTime": $expiration_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4446,11 +4473,11 @@ export def "put-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutResourceConfig")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceType": $resource_type, "SchemaVersionId": $schema_version_id, "ResourceId": $resource_id, "ResourceName": $resource_name, "Configuration": $configuration, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4495,11 +4522,11 @@ export def "put-retention-configuration" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutRetentionConfiguration")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"RetentionPeriodInDays": $retention_period_in_days} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4545,11 +4572,11 @@ export def "put-stored-query" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.PutStoredQuery")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"StoredQuery": $stored_query, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4590,9 +4617,9 @@ export def "select-aggregate-resource-config" [
   --x-amz-target: string@x-amz-target-completer-83 # required
   expression: string # The SQL query SELECT command.
   configuration_aggregator_name: string # The name of the configuration aggregator.
-  --limit-body: int # The maximum number of query results returned on each page. (body field)
+  --body-limit: int # The maximum number of query results returned on each page. (spec name: Limit)
   --max-results: int # The maximum number of query results returned on each page. Config also allows the Limit request parameter.
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4600,12 +4627,12 @@ export def "select-aggregate-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.SelectAggregateResourceConfig")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Expression": $expression, "ConfigurationAggregatorName": $configuration_aggregator_name, "Limit": $limit_body, "MaxResults": $max_results, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Expression": $expression, "ConfigurationAggregatorName": $configuration_aggregator_name, "Limit": $body_limit, "MaxResults": $max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4645,8 +4672,8 @@ export def "select-resource-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-84 # required
   expression: string # The SQL query SELECT command.
-  --limit-body: int # The maximum number of query results returned on each page. (body field)
-  --next-token-body: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (body field)
+  --body-limit: int # The maximum number of query results returned on each page. (spec name: Limit)
+  --body-next-token: string # The nextToken string returned in a previous request that you use to request the next page of results in a paginated response. (spec name: NextToken)
 ]: any -> oneof<record<Results: list<string>, QueryInfo: record<SelectFields: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4654,12 +4681,12 @@ export def "select-resource-config" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.SelectResourceConfig")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Expression": $expression, "Limit": $limit_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Expression": $expression, "Limit": $body_limit, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4704,11 +4731,11 @@ export def "start-config-rules-evaluation" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartConfigRulesEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleNames": $config_rule_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4753,11 +4780,11 @@ export def "start-configuration-recorder" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4803,11 +4830,11 @@ export def "start-remediation-execution" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartRemediationExecution")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigRuleName": $config_rule_name, "ResourceKeys": $resource_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4856,11 +4883,11 @@ export def "start-resource-evaluation" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.StartResourceEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceDetails": $resource_details, "EvaluationContext": $evaluation_context, "EvaluationMode": $evaluation_mode, "EvaluationTimeout": $evaluation_timeout, "ClientToken": $client_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4905,11 +4932,11 @@ export def "stop-configuration-recorder" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.StopConfigurationRecorder")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ConfigurationRecorderName": $configuration_recorder_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4955,11 +4982,11 @@ export def "tag-resource" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.TagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5005,11 +5032,11 @@ export def "untag-resource" [
   let x_amz_target = ($x_amz_target | default "StarlingDoveService.UntagResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

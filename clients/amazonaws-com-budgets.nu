@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -202,11 +229,11 @@ export def "create-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "Budget": $budget, "NotificationsWithSubscribers": $notifications_with_subscribers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -259,11 +286,11 @@ export def "create-budget-action" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "NotificationType": $notification_type, "ActionType": $action_type, "ActionThreshold": $action_threshold, "Definition": $definition, "ExecutionRoleArn": $execution_role_arn, "ApprovalModel": $approval_model, "Subscribers": $subscribers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -311,11 +338,11 @@ export def "create-notification" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscribers": $subscribers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -363,11 +390,11 @@ export def "create-subscriber" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.CreateSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscriber": $subscriber} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -413,11 +440,11 @@ export def "delete-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -464,11 +491,11 @@ export def "delete-budget-action" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -515,11 +542,11 @@ export def "delete-notification" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -567,11 +594,11 @@ export def "delete-subscriber" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DeleteSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "Subscriber": $subscriber} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -617,11 +644,11 @@ export def "describe-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -668,11 +695,11 @@ export def "describe-budget-action" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -715,8 +742,8 @@ export def "describe-budget-action-histories" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   action_id: string # A system-generated universally unique identifier (UUID) for the action.
   --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<ActionHistories: table<Timestamp: string, Status: string, EventType: string, ActionHistoryDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -724,12 +751,12 @@ export def "describe-budget-action-histories" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionHistories")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "TimePeriod": $time_period, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "TimePeriod": $time_period, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -769,8 +796,8 @@ export def "describe-budget-actions-for-account" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -778,12 +805,12 @@ export def "describe-budget-actions-for-account" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionsForAccount")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -824,8 +851,8 @@ export def "describe-budget-actions-for-budget" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -833,12 +860,12 @@ export def "describe-budget-actions-for-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetActionsForBudget")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -878,8 +905,8 @@ export def "describe-budget-notifications-for-account" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
-  --max-results-body: int # An integer that shows how many budget name entries a paginated response contains. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that shows how many budget name entries a paginated response contains. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<BudgetNotificationsForAccount: table<Notifications: list, BudgetName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -887,12 +914,12 @@ export def "describe-budget-notifications-for-account" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetNotificationsForAccount")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -934,8 +961,8 @@ export def "describe-budget-performance-history" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<BudgetPerformanceHistory: record<BudgetName: string, BudgetType: string, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, BudgetedAndActualAmountsList: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -943,12 +970,12 @@ export def "describe-budget-performance-history" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgetPerformanceHistory")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "TimePeriod": $time_period, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "TimePeriod": $time_period, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -988,8 +1015,8 @@ export def "describe-budgets" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<Budgets: table<BudgetName: string, BudgetLimit: record, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record, TimeUnit: string, TimePeriod: record, CalculatedSpend: record, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -997,12 +1024,12 @@ export def "describe-budgets" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeBudgets")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1043,8 +1070,8 @@ export def "describe-notifications-for-budget" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<Notifications: table<NotificationType: string, ComparisonOperator: string, Threshold: float, ThresholdType: string, NotificationState: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1052,12 +1079,12 @@ export def "describe-notifications-for-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeNotificationsForBudget")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1099,8 +1126,8 @@ export def "describe-subscribers-for-notification" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-  --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
-  --next-token-body: string # A generic string. (body field)
+  --body-max-results: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (spec name: MaxResults)
+  --body-next-token: string # A generic string. (spec name: NextToken)
 ]: any -> oneof<record<Subscribers: table<SubscriptionType: string, Address: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1108,12 +1135,12 @@ export def "describe-subscribers-for-notification" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.DescribeSubscribersForNotification")
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "MaxResults": $body_max_results, "NextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1161,11 +1188,11 @@ export def "execute-budget-action" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.ExecuteBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "ExecutionType": $execution_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1211,11 +1238,11 @@ export def "update-budget" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateBudget")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "NewBudget": $new_budget} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1268,11 +1295,11 @@ export def "update-budget-action" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateBudgetAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "ActionId": $action_id, "NotificationType": $notification_type, "ActionThreshold": $action_threshold, "Definition": $definition, "ExecutionRoleArn": $execution_role_arn, "ApprovalModel": $approval_model, "Subscribers": $subscribers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1320,11 +1347,11 @@ export def "update-notification" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateNotification")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "OldNotification": $old_notification, "NewNotification": $new_notification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1373,11 +1400,11 @@ export def "update-subscriber" [
   let x_amz_target = ($x_amz_target | default "AWSBudgetServiceGateway.UpdateSubscriber")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AccountId": $account_id, "BudgetName": $budget_name, "Notification": $notification, "OldSubscriber": $old_subscriber, "NewSubscriber": $new_subscriber} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

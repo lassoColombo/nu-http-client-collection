@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -183,9 +210,9 @@ export def "get-advertising-eligibility" [
   let qp = [(serialize-qp "program_types" $program_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/advertising_eligibility" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -223,9 +250,9 @@ export def "get-custom-policies" [
   let qp = [(serialize-qp "policy_types" $policy_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_policy/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -266,11 +293,11 @@ export def "create-custom-policy" [
   if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base "/custom_policy/" $auth.query)
   let req_body = {"description": $description, "label": $label, "name": $name, "policyType": $policy_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -308,9 +335,9 @@ export def "get-custom-policy" [
   if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({custom_policy_id: (encode-path-segment $custom_policy_id)} | format pattern "/custom_policy/{custom_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -352,11 +379,11 @@ export def "update-custom-policy" [
   if ($x_ebay_c_marketplace_id == null) { error make --unspanned { msg: "required header parameter 'X-EBAY-C-MARKETPLACE-ID' missing: pass --x-ebay-c-marketplace-id" } }
   let full_url = (build-url $base ({custom_policy_id: (encode-path-segment $custom_policy_id)} | format pattern "/custom_policy/{custom_policy_id}") $auth.query)
   let req_body = {"description": $description, "label": $label, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -393,7 +420,7 @@ export def "get-fulfillment-policies" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillment_policy" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -439,9 +466,9 @@ export def "create-fulfillment-policy" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fulfillment_policy/" $auth.query)
   let req_body = {"categoryTypes": $category_types, "description": $description, "freightShipping": $freight_shipping, "globalShipping": $global_shipping, "handlingTime": $handling_time, "localPickup": $local_pickup, "marketplaceId": $marketplace_id, "name": $name, "pickupDropOff": $pickup_drop_off, "shipToLocations": $ship_to_locations, "shippingOptions": $shipping_options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -480,7 +507,7 @@ export def "get-fulfillment-policy-by-name" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillment_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -516,7 +543,7 @@ export def "delete-fulfillment-policy" [
   if ($fulfillment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentPolicyId' must be non-empty" } }
   let full_url = (build-url $base ({fulfillment_policy_id: (encode-path-segment $fulfillment_policy_id)} | format pattern "/fulfillment_policy/{fulfillment_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -552,7 +579,7 @@ export def "get-fulfillment-policy" [
   if ($fulfillment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentPolicyId' must be non-empty" } }
   let full_url = (build-url $base ({fulfillment_policy_id: (encode-path-segment $fulfillment_policy_id)} | format pattern "/fulfillment_policy/{fulfillment_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -600,9 +627,9 @@ export def "update-fulfillment-policy" [
   if ($fulfillment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentPolicyId' must be non-empty" } }
   let full_url = (build-url $base ({fulfillment_policy_id: (encode-path-segment $fulfillment_policy_id)} | format pattern "/fulfillment_policy/{fulfillment_policy_id}") $auth.query)
   let req_body = {"categoryTypes": $category_types, "description": $description, "freightShipping": $freight_shipping, "globalShipping": $global_shipping, "handlingTime": $handling_time, "localPickup": $local_pickup, "marketplaceId": $marketplace_id, "name": $name, "pickupDropOff": $pickup_drop_off, "shipToLocations": $ship_to_locations, "shippingOptions": $shipping_options} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -636,7 +663,7 @@ export def "get-kyc" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kyc" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -673,7 +700,7 @@ export def "get-payment-policies" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_policy" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -717,9 +744,9 @@ export def "create-payment-policy" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_policy" $auth.query)
   let req_body = {"categoryTypes": $category_types, "deposit": $deposit, "description": $description, "fullPaymentDueIn": $full_payment_due_in, "immediatePay": $immediate_pay, "marketplaceId": $marketplace_id, "name": $name, "paymentInstructions": $payment_instructions, "paymentMethods": $payment_methods} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -758,7 +785,7 @@ export def "get-payment-policy-by-name" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -794,7 +821,7 @@ export def "delete-payment-policy" [
   if ($payment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_policy_id: (encode-path-segment $payment_policy_id)} | format pattern "/payment_policy/{payment_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -830,7 +857,7 @@ export def "get-payment-policy" [
   if ($payment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_policy_id: (encode-path-segment $payment_policy_id)} | format pattern "/payment_policy/{payment_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -876,9 +903,9 @@ export def "update-payment-policy" [
   if ($payment_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_policy_id: (encode-path-segment $payment_policy_id)} | format pattern "/payment_policy/{payment_policy_id}") $auth.query)
   let req_body = {"categoryTypes": $category_types, "deposit": $deposit, "description": $description, "fullPaymentDueIn": $full_payment_due_in, "immediatePay": $immediate_pay, "marketplaceId": $marketplace_id, "name": $name, "paymentInstructions": $payment_instructions, "paymentMethods": $payment_methods} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -916,7 +943,7 @@ export def "get-payments-program" [
   if ($payments_program_type | is-empty) { error make --unspanned { msg: "path parameter 'payments_program_type' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_id: (encode-path-segment $marketplace_id), payments_program_type: (encode-path-segment $payments_program_type)} | format pattern "/payments_program/{marketplace_id}/{payments_program_type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -954,7 +981,7 @@ export def "get-payments-program-onboarding" [
   if ($payments_program_type | is-empty) { error make --unspanned { msg: "path parameter 'payments_program_type' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_id: (encode-path-segment $marketplace_id), payments_program_type: (encode-path-segment $payments_program_type)} | format pattern "/payments_program/{marketplace_id}/{payments_program_type}/onboarding") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -988,7 +1015,7 @@ export def "get-privileges" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/privilege" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1022,7 +1049,7 @@ export def "get-opted-in-programs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/program/get_opted_in_programs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1058,9 +1085,9 @@ export def "opt-in-to-program" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/program/opt_in" $auth.query)
   let req_body = {"programType": $program_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1096,9 +1123,9 @@ export def "opt-out-of-program" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/program/opt_out" $auth.query)
   let req_body = {"programType": $program_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1134,7 +1161,7 @@ export def "get-rate-tables" [
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rate_table" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1171,7 +1198,7 @@ export def "get-return-policies" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/return_policy" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1219,9 +1246,9 @@ export def "create-return-policy" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/return_policy" $auth.query)
   let req_body = {"categoryTypes": $category_types, "description": $description, "extendedHolidayReturnsOffered": $extended_holiday_returns_offered, "internationalOverride": $international_override, "marketplaceId": $marketplace_id, "name": $name, "refundMethod": $refund_method, "restockingFeePercentage": $restocking_fee_percentage, "returnInstructions": $return_instructions, "returnMethod": $return_method, "returnPeriod": $return_period, "returnShippingCostPayer": $return_shipping_cost_payer, "returnsAccepted": $returns_accepted} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1260,7 +1287,7 @@ export def "get-return-policy-by-name" [
   let qp = [(serialize-qp "marketplace_id" $marketplace_id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/return_policy/get_by_policy_name" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1296,7 +1323,7 @@ export def "delete-return-policy" [
   if ($return_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'return_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({return_policy_id: (encode-path-segment $return_policy_id)} | format pattern "/return_policy/{return_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1332,7 +1359,7 @@ export def "get-return-policy" [
   if ($return_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'return_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({return_policy_id: (encode-path-segment $return_policy_id)} | format pattern "/return_policy/{return_policy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1382,9 +1409,9 @@ export def "update-return-policy" [
   if ($return_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'return_policy_id' must be non-empty" } }
   let full_url = (build-url $base ({return_policy_id: (encode-path-segment $return_policy_id)} | format pattern "/return_policy/{return_policy_id}") $auth.query)
   let req_body = {"categoryTypes": $category_types, "description": $description, "extendedHolidayReturnsOffered": $extended_holiday_returns_offered, "internationalOverride": $international_override, "marketplaceId": $marketplace_id, "name": $name, "refundMethod": $refund_method, "restockingFeePercentage": $restocking_fee_percentage, "returnInstructions": $return_instructions, "returnMethod": $return_method, "returnPeriod": $return_period, "returnShippingCostPayer": $return_shipping_cost_payer, "returnsAccepted": $returns_accepted} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1421,7 +1448,7 @@ export def "get-sales-taxes" [
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sales_tax" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1459,7 +1486,7 @@ export def "delete-sales-tax" [
   if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/sales_tax/{country_code}/{jurisdiction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1497,7 +1524,7 @@ export def "get-sales-tax" [
   if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/sales_tax/{country_code}/{jurisdiction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1538,9 +1565,9 @@ export def "create-or-replace-sales-tax" [
   if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/sales_tax/{country_code}/{jurisdiction_id}") $auth.query)
   let req_body = {"salesTaxPercentage": $sales_tax_percentage, "shippingAndHandlingTaxed": $shipping_and_handling_taxed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1577,7 +1604,7 @@ export def "get-subscription" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "continuation_token" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscription" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

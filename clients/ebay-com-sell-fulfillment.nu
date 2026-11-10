@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,7 +200,7 @@ export def "get-orders" [
   let qp = [(serialize-qp "fieldGroups" $field_groups "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderIds" $order_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -211,7 +238,7 @@ export def "get-order" [
   let qp = [(serialize-qp "fieldGroups" $field_groups "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,7 +274,7 @@ export def "get-shipping-fulfillments" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipping_fulfillment") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -288,9 +315,9 @@ export def "create-shipping-fulfillment" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/shipping_fulfillment") $auth.query)
   let req_body = {"lineItems": $line_items, "shippedDate": $shipped_date, "shippingCarrierCode": $shipping_carrier_code, "trackingNumber": $tracking_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -328,7 +355,7 @@ export def "get-shipping-fulfillment" [
   if ($fulfillment_id | is-empty) { error make --unspanned { msg: "path parameter 'fulfillmentId' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), fulfillment_id: (encode-path-segment $fulfillment_id)} | format pattern "/order/{order_id}/shipping_fulfillment/{fulfillment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -369,9 +396,9 @@ export def "issue-refund" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/order/{order_id}/issue_refund") $auth.query)
   let req_body = {"comment": $comment, "orderLevelRefundAmount": $order_level_refund_amount, "reasonForRefund": $reason_for_refund, "refundItems": $refund_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -407,7 +434,7 @@ export def "get-payment-dispute" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -446,9 +473,9 @@ export def "accept-payment-dispute" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/accept") $auth.query)
   let req_body = {"returnAddress": $return_address, "revision": $revision} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -484,7 +511,7 @@ export def "get-activities" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/activity") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -524,9 +551,9 @@ export def "add-evidence" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/add_evidence") $auth.query)
   let req_body = {"evidenceType": $evidence_type, "files": $files, "lineItems": $line_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -566,9 +593,9 @@ export def "contest-payment-dispute" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/contest") $auth.query)
   let req_body = {"note": $note, "returnAddress": $return_address, "revision": $revision} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -609,7 +636,7 @@ export def "fetch-evidence-content" [
   let qp = [(serialize-qp "evidence_id" $evidence_id "scalar") (serialize-qp "file_id" $file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/fetch_evidence_content") $qp $auth.query)
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -650,9 +677,9 @@ export def "update-evidence" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/update_evidence") $auth.query)
   let req_body = {"evidenceId": $evidence_id, "evidenceType": $evidence_type, "files": $files, "lineItems": $line_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -688,7 +715,7 @@ export def "upload-evidence-file" [
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_dispute_id: (encode-path-segment $payment_dispute_id)} | format pattern "/payment_dispute/{payment_dispute_id}/upload_evidence_file") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -730,7 +757,7 @@ export def "get-payment-dispute-summaries" [
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "buyer_username" $buyer_username "scalar") (serialize-qp "open_date_from" $open_date_from "scalar") (serialize-qp "open_date_to" $open_date_to "scalar") (serialize-qp "payment_dispute_status" $payment_dispute_status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_dispute_summary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

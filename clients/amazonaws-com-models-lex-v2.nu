@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -200,11 +227,11 @@ export def "batch-create-custom-vocabulary-item" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchcreate") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -253,11 +280,11 @@ export def "batch-delete-custom-vocabulary-item" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchdelete") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -306,11 +333,11 @@ export def "batch-update-custom-vocabulary-item" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchupdate") $auth.query)
   let req_body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -357,9 +384,9 @@ export def "build-bot-locale" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -406,9 +433,9 @@ export def "delete-bot-locale" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -455,9 +482,9 @@ export def "describe-bot-locale" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -508,11 +535,11 @@ export def "update-bot-locale" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/") $auth.query)
   let req_body = {"description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -563,11 +590,11 @@ export def "create-bot" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bots/" $auth.query)
   let req_body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botTags": $bot_tags, "testBotAliasTags": $test_bot_alias_tags, "botType": $bot_type, "botMembers": $bot_members} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -607,20 +634,20 @@ export def "list-bots" [
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: "BotName", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "BotName"|"BotType", values: list<string>, operator: "CO"|"EQ"|"NE"}
-  --max-results-body: int # The maximum number of bots to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListBots request to return the next page of results. For a complete set of results, call the ListBots operation until the nextToken returned in the response is null. (body field)
+  --body-max-results: int # The maximum number of bots to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListBots request to return the next page of results. For a complete set of results, call the ListBots operation until the nextToken returned in the response is null. (spec name: nextToken)
 ]: any -> oneof<record<botSummaries: table<botId: string, botName: string, description: string, botStatus: string, latestBotVersion: string, lastUpdatedDateTime: string, botType: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bots/" $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -671,11 +698,11 @@ export def "create-bot-alias" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/") $auth.query)
   let req_body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -714,8 +741,8 @@ export def "list-bot-aliases" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --max-results-body: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBotAliases operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBotAliases operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botAliasSummaries: table<botAliasId: string, botAliasName: string, description: string, botVersion: string, botAliasStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string, botId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -723,12 +750,12 @@ export def "list-bot-aliases" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botaliases/") $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -778,11 +805,11 @@ export def "create-bot-locale" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $auth.query)
   let req_body = {"localeId": $locale_id, "description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -824,8 +851,8 @@ export def "list-bot-locales" [
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of bot locales. — shape: {attribute?: "BotLocaleName", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification for a filter used to limit the response to only those locales that match the filter specification. You can only specify one filter and one value to filter on. — item shape: {name: "BotLocaleName", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBotLocales operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token as the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBotLocales operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token as the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, nextToken: string, botLocaleSummaries: table<localeId: string, localeName: string, description: string, botLocaleStatus: string, lastUpdatedDateTime: string, lastBuildSubmittedDateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -834,12 +861,12 @@ export def "list-bot-locales" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -885,11 +912,11 @@ export def "create-bot-version" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/") $auth.query)
   let req_body = {"description": $description, "botVersionLocaleSpecification": $bot_version_locale_specification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -929,8 +956,8 @@ export def "list-bot-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of bot versions. — shape: {attribute?: "BotVersion", order?: "Ascending"|"Descending"}
-  --max-results-body: int # The maximum number of versions to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response to the ListBotVersion operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of versions to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response to the ListBotVersion operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersionSummaries: table<botName: string, botVersion: string, description: string, botStatus: string, creationDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -938,12 +965,12 @@ export def "list-bot-versions" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/botversions/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -988,11 +1015,11 @@ export def "create-export" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/" $auth.query)
   let req_body = {"resourceSpecification": $resource_specification, "fileFormat": $file_format, "filePassword": $file_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1034,8 +1061,8 @@ export def "list-exports" [
   --bot-version: string # The version of the bot to list exports for.
   --sort-by: record # Provides information about sorting a list of exports. — shape: {attribute?: "LastUpdatedDateTime", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the exports in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "ExportResourceType", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of exports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListExports operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListExports request to return the next page of results. For a complete set of results, call the ListExports operation until the nextToken returned in the response is null. (body field)
+  --body-max-results: int # The maximum number of exports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListExports operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListExports request to return the next page of results. For a complete set of results, call the ListExports operation until the nextToken returned in the response is null. (spec name: nextToken)
   --locale-id: string # Specifies the resources that should be exported. If you don't specify a resource type in the filters parameter, both bot locales and custom vocabularies are exported.
 ]: any -> oneof<record<botId: string, botVersion: string, exportSummaries: table<exportId: string, resourceSpecification: record, fileFormat: string, exportStatus: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
@@ -1043,12 +1070,12 @@ export def "list-exports" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/exports/" $qp $auth.query)
-  let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body, "localeId": $locale_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token, "localeId": $locale_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1108,11 +1135,11 @@ export def "create-intent" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $auth.query)
   let req_body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1155,8 +1182,8 @@ export def "list-intents" [
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of intents. — shape: {attribute?: "IntentName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the intents in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "IntentName", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListIntents request to return the next page of results. For a complete set of results, call the ListIntents operation until the nextToken returned in the response is null. (body field)
+  --body-max-results: int # The maximum number of intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListIntents request to return the next page of results. For a complete set of results, call the ListIntents operation until the nextToken returned in the response is null. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, intentSummaries: table<intentId: string, intentName: string, description: string, parentIntentSignature: string, inputContexts: list, outputContexts: list, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,12 +1193,12 @@ export def "list-intents" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1216,11 +1243,11 @@ export def "create-resource-policy" [
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $auth.query)
   let req_body = {"policy": $policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1265,9 +1292,9 @@ export def "delete-resource-policy" [
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1310,9 +1337,9 @@ export def "describe-resource-policy" [
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1359,11 +1386,11 @@ export def "update-resource-policy" [
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/") $qp $auth.query)
   let req_body = {"policy": $policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1414,11 +1441,11 @@ export def "create-resource-policy-statement" [
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/policy/{resource_arn}/statements/") $qp $auth.query)
   let req_body = {"statementId": $statement_id, "effect": $effect, "principal": $principal, "action": $action, "condition": $condition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1475,11 +1502,11 @@ export def "create-slot" [
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $auth.query)
   let req_body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1523,8 +1550,8 @@ export def "list-slots" [
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: "SlotName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the slots in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "SlotName", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of slots to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListSlots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of slots to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListSlots operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, intentId: string, slotSummaries: table<slotId: string, slotName: string, description: string, slotConstraint: string, slotTypeId: string, valueElicitationPromptSpecification: record, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1535,12 +1562,12 @@ export def "list-slots" [
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1595,11 +1622,11 @@ export def "create-slot-type" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $auth.query)
   let req_body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1642,8 +1669,8 @@ export def "list-slot-types" [
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of slot types. — shape: {attribute?: "SlotTypeName"|"LastUpdatedDateTime", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the slot types in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: "SlotTypeName"|"ExternalSourceType", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, slotTypeSummaries: table<slotTypeId: string, slotTypeName: string, description: string, parentSlotTypeSignature: string, lastUpdatedDateTime: string, slotTypeCategory: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1653,12 +1680,12 @@ export def "list-slot-types" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1699,9 +1726,9 @@ export def "create-upload-url" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createuploadurl/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1746,9 +1773,9 @@ export def "delete-bot" [
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1791,9 +1818,9 @@ export def "describe-bot" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1844,11 +1871,11 @@ export def "update-bot" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/") $auth.query)
   let req_body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botType": $bot_type, "botMembers": $bot_members} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1895,9 +1922,9 @@ export def "delete-bot-alias" [
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1942,9 +1969,9 @@ export def "describe-bot-alias" [
   if ($bot_alias_id | is-empty) { error make --unspanned { msg: "path parameter 'botAliasId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1996,11 +2023,11 @@ export def "update-bot-alias" [
   if ($bot_alias_id | is-empty) { error make --unspanned { msg: "path parameter 'botAliasId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_alias_id: (encode-path-segment $bot_alias_id)} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $auth.query)
   let req_body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2047,9 +2074,9 @@ export def "delete-bot-version" [
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2094,9 +2121,9 @@ export def "describe-bot-version" [
   if ($bot_version | is-empty) { error make --unspanned { msg: "path parameter 'botVersion' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2143,9 +2170,9 @@ export def "delete-custom-vocabulary" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2188,9 +2215,9 @@ export def "delete-export" [
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
   let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2233,9 +2260,9 @@ export def "describe-export" [
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
   let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2280,11 +2307,11 @@ export def "update-export" [
   if ($export_id | is-empty) { error make --unspanned { msg: "path parameter 'exportId' must be non-empty" } }
   let full_url = (build-url $base ({export_id: (encode-path-segment $export_id)} | format pattern "/exports/{export_id}/") $auth.query)
   let req_body = {"filePassword": $file_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2327,9 +2354,9 @@ export def "delete-import" [
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
   let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2372,9 +2399,9 @@ export def "describe-import" [
   if ($import_id | is-empty) { error make --unspanned { msg: "path parameter 'importId' must be non-empty" } }
   let full_url = (build-url $base ({import_id: (encode-path-segment $import_id)} | format pattern "/imports/{import_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2423,9 +2450,9 @@ export def "delete-intent" [
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2474,9 +2501,9 @@ export def "describe-intent" [
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2539,11 +2566,11 @@ export def "update-intent" [
   if ($intent_id | is-empty) { error make --unspanned { msg: "path parameter 'intentId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/") $auth.query)
   let req_body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "slotPriorities": $slot_priorities, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2590,9 +2617,9 @@ export def "delete-resource-policy-statement" [
   let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn), statement_id: (encode-path-segment $statement_id)} | format pattern "/policy/{resource_arn}/statements/{statement_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2643,9 +2670,9 @@ export def "delete-slot" [
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2696,9 +2723,9 @@ export def "describe-slot" [
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2757,11 +2784,11 @@ export def "update-slot" [
   if ($slot_id | is-empty) { error make --unspanned { msg: "path parameter 'slotId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), intent_id: (encode-path-segment $intent_id), slot_id: (encode-path-segment $slot_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/") $auth.query)
   let req_body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2812,9 +2839,9 @@ export def "delete-slot-type" [
   let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2863,9 +2890,9 @@ export def "describe-slot-type" [
   if ($slot_type_id | is-empty) { error make --unspanned { msg: "path parameter 'slotTypeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2922,11 +2949,11 @@ export def "update-slot-type" [
   if ($slot_type_id | is-empty) { error make --unspanned { msg: "path parameter 'slotTypeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), slot_type_id: (encode-path-segment $slot_type_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $auth.query)
   let req_body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2972,9 +2999,9 @@ export def "delete-utterances" [
   let qp = [(serialize-qp "localeId" $locale_id "scalar") (serialize-qp "sessionId" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/utterances/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3023,9 +3050,9 @@ export def "describe-bot-recommendation" [
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3076,11 +3103,11 @@ export def "update-bot-recommendation" [
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/") $auth.query)
   let req_body = {"encryptionSetting": $encryption_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3127,9 +3154,9 @@ export def "describe-custom-vocabulary-metadata" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/metadata") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3174,8 +3201,8 @@ export def "list-aggregated-utterances" [
   aggregation_duration: record # Provides parameters for setting the time window and duration for aggregating utterance data. — shape: {relativeAggregationDuration?: record}
   --sort-by: record # Specifies attributes for sorting a list of utterances. — shape: {attribute?: "HitCount"|"MissedCount", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the utterances in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "Utterance", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of utterances to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. If you don't specify the maxResults parameter, 1,000 results are returned. (body field)
-  --next-token-body: string # If the response from the ListAggregatedUtterances operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of utterances to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. If you don't specify the maxResults parameter, 1,000 results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListAggregatedUtterances operation contains more results that specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botAliasId: string, botVersion: string, localeId: string, aggregationDuration: record<relativeAggregationDuration: record<timeDimension: string, timeValue: int>>, aggregationWindowStartTime: string, aggregationWindowEndTime: string, aggregationLastRefreshedDateTime: string, aggregatedUtterancesSummaries: table<utterance: string, hitCount: int, missedCount: int, utteranceFirstRecordedInAggregationDuration: string, utteranceLastRecordedInAggregationDuration: string, containsDataFromDeletedResources: bool>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3183,12 +3210,12 @@ export def "list-aggregated-utterances" [
   if ($bot_id | is-empty) { error make --unspanned { msg: "path parameter 'botId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id)} | format pattern "/bots/{bot_id}/aggregatedutterances/") $qp $auth.query)
-  let req_body = {"botAliasId": $bot_alias_id, "botVersion": $bot_version, "localeId": $locale_id, "aggregationDuration": $aggregation_duration, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"botAliasId": $bot_alias_id, "botVersion": $bot_version, "localeId": $locale_id, "aggregationDuration": $aggregation_duration, "sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3229,8 +3256,8 @@ export def "list-bot-recommendations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --max-results-body: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBotRecommendation operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBotRecommendation operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationSummaries: table<botRecommendationStatus: string, botRecommendationId: string, creationDateTime: string, lastUpdatedDateTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3240,12 +3267,12 @@ export def "list-bot-recommendations" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3295,11 +3322,11 @@ export def "start-bot-recommendation" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $auth.query)
   let req_body = {"transcriptSourceSetting": $transcript_source_setting, "encryptionSetting": $encryption_setting} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3339,8 +3366,8 @@ export def "list-built-in-intents" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of built-in intents. — shape: {attribute?: "IntentSignature", order?: "Ascending"|"Descending"}
-  --max-results-body: int # The maximum number of built-in intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBuiltInIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of built-in intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBuiltInIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<builtInIntentSummaries: table<intentSignature: string, description: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3348,12 +3375,12 @@ export def "list-built-in-intents" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/intents/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3393,8 +3420,8 @@ export def "list-built-in-slot-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --sort-by: record # Specifies attributes for sorting a list of built-in slot types. — shape: {attribute?: "SlotTypeSignature", order?: "Ascending"|"Descending"}
-  --max-results-body: int # The maximum number of built-in slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListBuiltInSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
+  --body-max-results: int # The maximum number of built-in slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListBuiltInSlotTypes operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
 ]: any -> oneof<record<builtInSlotTypeSummaries: table<slotTypeSignature: string, description: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3402,12 +3429,12 @@ export def "list-built-in-slot-types" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({locale_id: (encode-path-segment $locale_id)} | format pattern "/builtins/locales/{locale_id}/slottypes/") $qp $auth.query)
-  let req_body = {"sortBy": $sort_by, "maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"sortBy": $sort_by, "maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3448,8 +3475,8 @@ export def "list-custom-vocabulary-items" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --max-results-body: int # The maximum number of items returned by the list operation. (body field)
-  --next-token-body: string # The nextToken identifier to the list custom vocabulary request. (body field)
+  --body-max-results: int # The maximum number of items returned by the list operation. (spec name: maxResults)
+  --body-next-token: string # The nextToken identifier to the list custom vocabulary request. (spec name: nextToken)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, customVocabularyItems: table<itemId: string, phrase: string, weight: int, displayAs: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3459,12 +3486,12 @@ export def "list-custom-vocabulary-items" [
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'localeId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/list") $qp $auth.query)
-  let req_body = {"maxResults": $max_results_body, "nextToken": $next_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"maxResults": $body_max_results, "nextToken": $body_next_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3506,8 +3533,8 @@ export def "list-imports" [
   --bot-version: string # The version of the bot to list imports for.
   --sort-by: record # Provides information for sorting a list of imports. — shape: {attribute?: "LastUpdatedDateTime", order?: "Ascending"|"Descending"}
   --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: "ImportResourceType", values: list<string>, operator: "CO"|"EQ"}
-  --max-results-body: int # The maximum number of imports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
-  --next-token-body: string # If the response from the ListImports operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListImports request to return the next page of results. For a complete set of results, call the ListImports operation until the nextToken returned in the response is null. (body field)
+  --body-max-results: int # The maximum number of imports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
+  --body-next-token: string # If the response from the ListImports operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use the returned token in the nextToken parameter of a ListImports request to return the next page of results. For a complete set of results, call the ListImports operation until the nextToken returned in the response is null. (spec name: nextToken)
   --locale-id: string # Specifies the locale that should be present in the list. If you don't specify a resource type in the filters parameter, the list contains both bot locales and custom vocabularies.
 ]: any -> oneof<record<botId: string, botVersion: string, importSummaries: table<importId: string, importedResourceId: string, importedResourceName: string, importStatus: string, mergeStrategy: string, creationDateTime: string, lastUpdatedDateTime: string, importedResourceType: string>, nextToken: string, localeId: string>, string, nothing> {
   let input = $in
@@ -3515,12 +3542,12 @@ export def "list-imports" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/imports/" $qp $auth.query)
-  let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results_body, "nextToken": $next_token_body, "localeId": $locale_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $body_max_results, "nextToken": $body_next_token, "localeId": $locale_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3566,11 +3593,11 @@ export def "start-import" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports/" $auth.query)
   let req_body = {"importId": $import_id, "resourceSpecification": $resource_specification, "mergeStrategy": $merge_strategy, "filePassword": $file_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3612,8 +3639,8 @@ export def "list-recommended-intents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token-body: string # If the response from the ListRecommendedIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (body field)
-  --max-results-body: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (body field)
+  --body-next-token: string # If the response from the ListRecommendedIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results. (spec name: nextToken)
+  --body-max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned. (spec name: maxResults)
 ]: any -> oneof<record<botId: string, botVersion: string, localeId: string, botRecommendationId: string, summaryList: table<intentId: string, intentName: string, sampleUtterancesCount: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3624,12 +3651,12 @@ export def "list-recommended-intents" [
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/intents") $qp $auth.query)
-  let req_body = {"nextToken": $next_token_body, "maxResults": $max_results_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"nextToken": $body_next_token, "maxResults": $body_max_results} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3672,9 +3699,9 @@ export def "list-tags-for-resource" [
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3719,11 +3746,11 @@ export def "tag-resource" [
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceARN' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $auth.query)
   let req_body = {"tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3777,11 +3804,11 @@ export def "search-associated-transcripts" [
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/associatedtranscripts") $auth.query)
   let req_body = {"searchOrder": $search_order, "filters": $filters, "maxResults": $max_results, "nextIndex": $next_index} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3830,9 +3857,9 @@ export def "stop-bot-recommendation" [
   if ($bot_recommendation_id | is-empty) { error make --unspanned { msg: "path parameter 'botRecommendationId' must be non-empty" } }
   let full_url = (build-url $base ({bot_id: (encode-path-segment $bot_id), bot_version: (encode-path-segment $bot_version), locale_id: (encode-path-segment $locale_id), bot_recommendation_id: (encode-path-segment $bot_recommendation_id)} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/stopbotrecommendation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3878,9 +3905,9 @@ export def "untag-resource" [
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url

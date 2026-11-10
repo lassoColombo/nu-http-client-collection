@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -195,7 +222,7 @@ export def "list-advisories" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/advisories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -231,7 +258,7 @@ export def "detail-advisory" [
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -289,7 +316,7 @@ export def "list-advisory-systems" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/advisories/{advisory_id}/systems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -333,7 +360,7 @@ export def "export-advisories" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/export/advisories" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -386,7 +413,7 @@ export def "export-advisory-systems" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({advisory_id: (encode-path-segment $advisory_id)} | format pattern "/api/patch/v1/export/advisories/{advisory_id}/systems") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -428,7 +455,7 @@ export def "export-packages" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/export/packages" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,7 +495,7 @@ export def "export-package-systems" [
   let qp = [(serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/export/packages/{package_name}/systems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -519,7 +546,7 @@ export def "export-systems" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/export/systems" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -564,7 +591,7 @@ export def "export-system-advisories" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/advisories") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -607,7 +634,7 @@ export def "export-system-packages" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[evra]" $filter_evra "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "filter[updatable]" $filter_updatable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/export/systems/{inventory_id}/packages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -653,7 +680,7 @@ export def "list-packages" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/packages/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -689,7 +716,7 @@ export def "latest-package" [
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -731,7 +758,7 @@ export def "package-systems" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/systems") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -770,7 +797,7 @@ export def "package-versions" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({package_name: (encode-path-segment $package_name)} | format pattern "/api/patch/v1/packages/{package_name}/versions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -828,7 +855,7 @@ export def "list-systems" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/patch/v1/systems" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -864,7 +891,7 @@ export def "deletesystem" [
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -900,7 +927,7 @@ export def "detail-system" [
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -947,7 +974,7 @@ export def "list-system-advisories" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/advisories") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -992,7 +1019,7 @@ export def "system-packages" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[evra]" $filter_evra "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "filter[updatable]" $filter_updatable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_id: (encode-path-segment $inventory_id)} | format pattern "/api/patch/v1/systems/{inventory_id}/packages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1029,9 +1056,9 @@ export def "view-advisories-systems" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/patch/v1/views/advisories/systems" $auth.query)
   let req_body = {"advisories": $advisories, "systems": $systems} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1068,9 +1095,9 @@ export def "view-systems-advisories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/patch/v1/views/systems/advisories" $auth.query)
   let req_body = {"advisories": $advisories, "systems": $systems} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

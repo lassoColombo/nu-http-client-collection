@@ -23,7 +23,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -97,9 +97,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -120,6 +122,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -305,9 +332,9 @@ export def "account-cart-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.cart.add.json" $auth.query)
   let req_body = {"3dcart_access_token": $3dcart_access_token, "3dcart_private_key": $3dcart_private_key, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_access_key_id": $amazon_access_key_id, "amazon_access_token": $amazon_access_token, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_seller_id": $amazon_seller_id, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_context": $bigcommerceapi_context, "bridge_url": $bridge_url, "cart_id": $cart_id, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "db_tables_prefix": $db_tables_prefix, "demandware_api_password": $demandware_api_password, "demandware_client_id": $demandware_client_id, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_access_token": $ebay_access_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_environment": $ebay_environment, "ebay_refresh_token": $ebay_refresh_token, "ebay_runame": $ebay_runame, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_access_token": $etsy_access_token, "etsy_client_id": $etsy_client_id, "etsy_keystring": $etsy_keystring, "etsy_refresh_token": $etsy_refresh_token, "etsy_shared_secret": $etsy_shared_secret, "etsy_token_secret": $etsy_token_secret, "ftp_host": $ftp_host, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "ftp_user": $ftp_user, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_password": $hybris_password, "hybris_username": $hybris_username, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "magento_access_token": $magento_access_token, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_token_secret": $magento_token_secret, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "prestashop_webservice_key": $prestashop_webservice_key, "shopify_access_token": $shopify_access_token, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "squarespace_api_key": $squarespace_api_key, "store_key": $store_key, "store_root": $store_root, "store_url": $store_url, "validate_version": $validate_version, "verify": $verify, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_channel_type": $walmart_channel_type, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_refresh_token": $zid_refresh_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -348,7 +375,7 @@ export def "account-cart-list" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "request_from_date" $request_from_date "scalar") (serialize-qp "request_to_date" $request_to_date "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "store_key" $store_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account.cart.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -473,7 +500,7 @@ export def "account-config-update" [
   let qp = [(serialize-qp "new_store_key" $new_store_key "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "3dcartapi_api_key" $3dcartapi_api_key "scalar") (serialize-qp "amazon_sp_client_id" $amazon_sp_client_id "scalar") (serialize-qp "amazon_sp_client_secret" $amazon_sp_client_secret "scalar") (serialize-qp "amazon_sp_aws_user_key_id" $amazon_sp_aws_user_key_id "scalar") (serialize-qp "amazon_sp_aws_user_secret" $amazon_sp_aws_user_secret "scalar") (serialize-qp "amazon_sp_aws_region" $amazon_sp_aws_region "scalar") (serialize-qp "amazon_sp_aws_role_arn" $amazon_sp_aws_role_arn "scalar") (serialize-qp "amazon_sp_refresh_token" $amazon_sp_refresh_token "scalar") (serialize-qp "amazon_sp_api_environment" $amazon_sp_api_environment "scalar") (serialize-qp "amazon_access_token" $amazon_access_token "scalar") (serialize-qp "amazon_seller_id" $amazon_seller_id "scalar") (serialize-qp "amazon_marketplaces_ids" $amazon_marketplaces_ids "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "aspdotnetstorefront_api_user" $aspdotnetstorefront_api_user "scalar") (serialize-qp "aspdotnetstorefront_api_pass" $aspdotnetstorefront_api_pass "scalar") (serialize-qp "bigcommerceapi_admin_account" $bigcommerceapi_admin_account "scalar") (serialize-qp "bigcommerceapi_api_path" $bigcommerceapi_api_path "scalar") (serialize-qp "bigcommerceapi_api_key" $bigcommerceapi_api_key "scalar") (serialize-qp "bigcommerceapi_client_id" $bigcommerceapi_client_id "scalar") (serialize-qp "bigcommerceapi_access_token" $bigcommerceapi_access_token "scalar") (serialize-qp "bigcommerceapi_context" $bigcommerceapi_context "scalar") (serialize-qp "demandware_client_id" $demandware_client_id "scalar") (serialize-qp "demandware_api_password" $demandware_api_password "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "ecwid_acess_token" $ecwid_acess_token "scalar") (serialize-qp "ecwid_store_id" $ecwid_store_id "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "etsy_access_token" $etsy_access_token "scalar") (serialize-qp "etsy_token_secret" $etsy_token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "neto_api_key" $neto_api_key "scalar") (serialize-qp "neto_api_username" $neto_api_username "scalar") (serialize-qp "shopify_api_key" $shopify_api_key "scalar") (serialize-qp "shopify_api_password" $shopify_api_password "scalar") (serialize-qp "shopify_shared_secret" $shopify_shared_secret "scalar") (serialize-qp "shopify_access_token" $shopify_access_token "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "volusion_login" $volusion_login "scalar") (serialize-qp "volusion_password" $volusion_password "scalar") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "squarespace_api_key" $squarespace_api_key "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account.config.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -511,7 +538,7 @@ export def "account-failed-webhooks" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account.failed_webhooks.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -545,7 +572,7 @@ export def "account-supported-platforms" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.supported_platforms.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "attribute-add" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "is_global" $is_global "scalar") (serialize-qp "is_searchable" $is_searchable "scalar") (serialize-qp "is_filterable" $is_filterable "scalar") (serialize-qp "is_comparable" $is_comparable "scalar") (serialize-qp "is_html_allowed_on_front" $is_html_allowed_on_front "scalar") (serialize-qp "is_filterable_in_search" $is_filterable_in_search "scalar") (serialize-qp "is_configurable" $is_configurable "scalar") (serialize-qp "is_visible_in_advanced_search" $is_visible_in_advanced_search "scalar") (serialize-qp "is_used_for_promo_rules" $is_used_for_promo_rules "scalar") (serialize-qp "used_in_product_listing" $used_in_product_listing "scalar") (serialize-qp "used_for_sort_by" $used_for_sort_by "scalar") (serialize-qp "apply_to" $apply_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -643,7 +670,7 @@ export def "attribute-assign-group" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.group.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -683,7 +710,7 @@ export def "attribute-assign-set" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.set.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -723,7 +750,7 @@ export def "attribute-attributeset-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.attributeset.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -764,7 +791,7 @@ export def "attribute-count" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -802,7 +829,7 @@ export def "attribute-delete" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -844,7 +871,7 @@ export def "attribute-group-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.group.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -886,7 +913,7 @@ export def "attribute-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -933,7 +960,7 @@ export def "attribute-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "attribute_ids" $attribute_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -967,7 +994,7 @@ export def "attribute-type-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attribute.type.list.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1006,7 +1033,7 @@ export def "attribute-unassign-group" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.group.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1045,7 +1072,7 @@ export def "attribute-unassign-set" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.set.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1086,7 +1113,7 @@ export def "attribute-update" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1127,7 +1154,7 @@ export def "basket-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1169,7 +1196,7 @@ export def "basket-item-add" [
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.item.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1209,7 +1236,7 @@ export def "basket-live-shipping-service-create" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.create.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1246,7 +1273,7 @@ export def "basket-live-shipping-service-delete" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1284,7 +1311,7 @@ export def "basket-live-shipping-service-list" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1318,7 +1345,7 @@ export def "bridge-delete" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.delete.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1354,7 +1381,7 @@ export def "bridge-download" [
   let qp = [(serialize-qp "whitelabel" $whitelabel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bridge.download.file" $qp $auth.query)
   let accept_val = "application/zip"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1388,7 +1415,7 @@ export def "bridge-update" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.update.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1422,7 +1449,7 @@ export def "cart-bridge" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.bridge.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1456,7 +1483,7 @@ export def "cart-catalog-price-rules-count" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.catalog_price_rules.count.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1498,7 +1525,7 @@ export def "cart-catalog-price-rules-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.catalog_price_rules.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1535,7 +1562,7 @@ export def "cart-clear-cache" [
   let qp = [(serialize-qp "cache_type" $cache_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.clear_cache.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1572,7 +1599,7 @@ export def "cart-config" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.config.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1612,9 +1639,9 @@ export def "cart-config-update" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.config.update.json" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1665,9 +1692,9 @@ export def "cart-coupon-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.coupon.add.json" $auth.query)
   let req_body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1714,7 +1741,7 @@ export def "cart-coupon-condition-add" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "coupon_id" $coupon_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "operator" $operator "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.condition.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1755,7 +1782,7 @@ export def "cart-coupon-count" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1793,7 +1820,7 @@ export def "cart-coupon-delete" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1842,7 +1869,7 @@ export def "cart-coupon-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "coupons_ids" $coupons_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1894,11 +1921,11 @@ export def "cart-create" [
   --client-id: string # Client ID of the requesting app
   --access-token: string # Access token authorizing the app to access resources on behalf of a user
   --context: string # API Path section unique to the store
-  --access-token-2: string # Access token authorizing the app to access resources on behalf of a user (disambiguated-2)
+  --qp-access-token: string # Access token authorizing the app to access resources on behalf of a user (spec name: access_token)
   --api-key-shopify: string # Shopify API Key
   --api-password: string # Shopify API Password
   --access-token-shopify: string # Access token authorizing the app to access resources on behalf of a user
-  --api-key-2: string # Neto API Key (disambiguated-2)
+  --qp-api-key: string # Neto API Key (spec name: apiKey)
   --api-username: string # Neto User Name
   --encrypted-password: string # Volusion API Password
   --login: string # It's a Volusion account for which API is enabled
@@ -1975,14 +2002,14 @@ export def "cart-create" [
   if ($etsy_client_id == null) { error make --unspanned { msg: "required query parameter 'etsy_client_id' missing: pass --etsy-client-id" } }
   if ($etsy_refresh_token == null) { error make --unspanned { msg: "required query parameter 'etsy_refresh_token' missing: pass --etsy-refresh-token" } }
   if ($store_id == null) { error make --unspanned { msg: "required query parameter 'store_id' missing: pass --store-id" } }
-  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token_2 "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key_2 "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $qp_access_token "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $qp_api_key "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.create.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
-    query: ({"cart_id": $cart_id, "store_url": $store_url, "bridge_url": $bridge_url, "store_root": $store_root, "store_key": $store_key, "shared_secret": $shared_secret, "validate_version": $validate_version, "verify": $verify, "db_tables_prefix": $db_tables_prefix, "ftp_host": $ftp_host, "ftp_user": $ftp_user, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "apiKey_3dcart": $api_key_3dcart, "AdminAccount": $admin_account, "ApiPath": $api_path, "ApiKey": $api_key, "client_id": $client_id, "accessToken": $access_token, "context": $context, "access_token": $access_token_2, "apiKey_shopify": $api_key_shopify, "apiPassword": $api_password, "accessToken_shopify": $access_token_shopify, "apiKey": $api_key_2, "apiUsername": $api_username, "EncryptedPassword": $encrypted_password, "Login": $login, "apiUser_adnsf": $api_user_adnsf, "apiPass": $api_pass, "accessKey_scelite": $access_key_scelite, "apiKey_scelite": $api_key_scelite, "apiSecretKey_scelite": $api_secret_key_scelite, "privateKey": $private_key, "appToken": $app_token, "etsy_keystring": $etsy_keystring, "etsy_shared_secret": $etsy_shared_secret, "tokenSecret": $token_secret, "etsy_client_id": $etsy_client_id, "etsy_refresh_token": $etsy_refresh_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_runame": $ebay_runame, "ebay_access_token": $ebay_access_token, "ebay_refresh_token": $ebay_refresh_token, "ebay_environment": $ebay_environment, "ebay_site_id": $ebay_site_id, "dw_client_id": $dw_client_id, "dw_api_pass": $dw_api_pass, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "store_id": $store_id, "seller_id": $seller_id, "amazon_secret_key": $amazon_secret_key, "amazon_access_key_id": $amazon_access_key_id, "marketplaces_ids": $marketplaces_ids, "environment": $environment, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_username": $hybris_username, "hybris_password": $hybris_password, "hybris_websites": $hybris_websites, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "walmart_channel_type": $walmart_channel_type, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "3dcart_private_key": $3dcart_private_key, "3dcart_access_token": $3dcart_access_token, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_access_token": $magento_access_token, "magento_token_secret": $magento_token_secret, "prestashop_webservice_key": $prestashop_webservice_key, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_refresh_token": $zid_refresh_token} | compact)
+    query: ({"cart_id": $cart_id, "store_url": $store_url, "bridge_url": $bridge_url, "store_root": $store_root, "store_key": $store_key, "shared_secret": $shared_secret, "validate_version": $validate_version, "verify": $verify, "db_tables_prefix": $db_tables_prefix, "ftp_host": $ftp_host, "ftp_user": $ftp_user, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "apiKey_3dcart": $api_key_3dcart, "AdminAccount": $admin_account, "ApiPath": $api_path, "ApiKey": $api_key, "client_id": $client_id, "accessToken": $access_token, "context": $context, "access_token": $qp_access_token, "apiKey_shopify": $api_key_shopify, "apiPassword": $api_password, "accessToken_shopify": $access_token_shopify, "apiKey": $qp_api_key, "apiUsername": $api_username, "EncryptedPassword": $encrypted_password, "Login": $login, "apiUser_adnsf": $api_user_adnsf, "apiPass": $api_pass, "accessKey_scelite": $access_key_scelite, "apiKey_scelite": $api_key_scelite, "apiSecretKey_scelite": $api_secret_key_scelite, "privateKey": $private_key, "appToken": $app_token, "etsy_keystring": $etsy_keystring, "etsy_shared_secret": $etsy_shared_secret, "tokenSecret": $token_secret, "etsy_client_id": $etsy_client_id, "etsy_refresh_token": $etsy_refresh_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_runame": $ebay_runame, "ebay_access_token": $ebay_access_token, "ebay_refresh_token": $ebay_refresh_token, "ebay_environment": $ebay_environment, "ebay_site_id": $ebay_site_id, "dw_client_id": $dw_client_id, "dw_api_pass": $dw_api_pass, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "store_id": $store_id, "seller_id": $seller_id, "amazon_secret_key": $amazon_secret_key, "amazon_access_key_id": $amazon_access_key_id, "marketplaces_ids": $marketplaces_ids, "environment": $environment, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_username": $hybris_username, "hybris_password": $hybris_password, "hybris_websites": $hybris_websites, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "walmart_channel_type": $walmart_channel_type, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "3dcart_private_key": $3dcart_private_key, "3dcart_access_token": $3dcart_access_token, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_access_token": $magento_access_token, "magento_token_secret": $magento_token_secret, "prestashop_webservice_key": $prestashop_webservice_key, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_refresh_token": $zid_refresh_token} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2014,7 +2041,7 @@ export def "cart-delete" [
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2052,7 +2079,7 @@ export def "cart-disconnect" [
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.disconnect.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2092,7 +2119,7 @@ export def "cart-giftcard-add" [
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "owner_email" $owner_email "scalar") (serialize-qp "recipient_email" $recipient_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2128,7 +2155,7 @@ export def "cart-giftcard-count" [
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2170,7 +2197,7 @@ export def "cart-giftcard-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2209,7 +2236,7 @@ export def "cart-info" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2245,7 +2272,7 @@ export def "cart-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.list.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2290,7 +2317,7 @@ export def "cart-meta-data-list" [
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2335,7 +2362,7 @@ export def "cart-meta-data-set" [
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.set.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2378,7 +2405,7 @@ export def "cart-meta-data-unset" [
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.unset.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2412,7 +2439,7 @@ export def "cart-methods" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.methods.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2451,7 +2478,7 @@ export def "cart-plugin-list" [
   let qp = [(serialize-qp "store_key" $store_key "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.plugin.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2493,7 +2520,7 @@ export def "cart-script-add" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "src" $src "scalar") (serialize-qp "load_method" $load_method "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2531,7 +2558,7 @@ export def "cart-script-delete" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2578,7 +2605,7 @@ export def "cart-script-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "script_ids" $script_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2619,7 +2646,7 @@ export def "cart-shipping-zones-list" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.shipping_zones.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2655,7 +2682,7 @@ export def "cart-validate" [
   let qp = [(serialize-qp "validate_version" $validate_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.validate.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2705,7 +2732,7 @@ export def "category-add" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "created_time" $created_time "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2745,7 +2772,7 @@ export def "category-assign" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.assign.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2788,7 +2815,7 @@ export def "category-count" [
   let qp = [(serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2825,7 +2852,7 @@ export def "category-delete" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2866,7 +2893,7 @@ export def "category-find" [
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.find.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2913,7 +2940,7 @@ export def "category-image-add" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2953,7 +2980,7 @@ export def "category-image-delete" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_id" $image_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2995,7 +3022,7 @@ export def "category-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3044,7 +3071,7 @@ export def "category-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3084,7 +3111,7 @@ export def "category-unassign" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.unassign.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3134,7 +3161,7 @@ export def "category-update" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3188,9 +3215,9 @@ export def "customer-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer.add.json" $auth.query)
   let req_body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3234,7 +3261,7 @@ export def "customer-attribute-list" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.attribute.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3277,7 +3304,7 @@ export def "customer-count" [
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3317,7 +3344,7 @@ export def "customer-find" [
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.find.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3356,7 +3383,7 @@ export def "customer-group-add" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.group.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3400,7 +3427,7 @@ export def "customer-group-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.group.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3441,7 +3468,7 @@ export def "customer-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3490,7 +3517,7 @@ export def "customer-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3544,7 +3571,7 @@ export def "customer-update" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_x "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_x "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_x "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_x "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_x "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_x "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_x "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_x "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_x "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_x "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_x "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3593,7 +3620,7 @@ export def "order-abandoned-list" [
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "skip_empty_email" $skip_empty_email "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.abandoned.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3694,9 +3721,9 @@ export def "order-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.add.json" $auth.query)
   let req_body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3748,7 +3775,7 @@ export def "order-count" [
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3782,7 +3809,7 @@ export def "order-financial-status-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.financial_status.list.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3831,7 +3858,7 @@ export def "order-find" [
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "financial_status" $financial_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.find.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3865,7 +3892,7 @@ export def "order-fulfillment-status-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.fulfillment_status.list.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3907,7 +3934,7 @@ export def "order-info" [
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "enable_cache" $enable_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3975,7 +4002,7 @@ export def "order-list" [
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "basket_id" $basket_id "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "skip_order_ids" $skip_order_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "shipping_country_iso3" $shipping_country_iso3 "scalar") (serialize-qp "enable_cache" $enable_cache "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4022,9 +4049,9 @@ export def "order-preestimate-shipping-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.preestimate_shipping.list.json" $auth.query)
   let req_body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4069,9 +4096,9 @@ export def "order-refund-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.refund.add.json" $auth.query)
   let req_body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4118,9 +4145,9 @@ export def "order-shipment-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.add.json" $auth.query)
   let req_body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4160,7 +4187,7 @@ export def "order-shipment-delete" [
   let qp = [(serialize-qp "shipment_id" $shipment_id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4204,7 +4231,7 @@ export def "order-shipment-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4252,7 +4279,7 @@ export def "order-shipment-list" [
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4295,9 +4322,9 @@ export def "order-shipment-tracking-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.tracking.add.json" $auth.query)
   let req_body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4339,9 +4366,9 @@ export def "order-shipment-update" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.update.json" $auth.query)
   let req_body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4377,7 +4404,7 @@ export def "order-status-list" [
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.status.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4420,7 +4447,7 @@ export def "order-transaction-list" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "page_cursor" $page_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.transaction.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4468,7 +4495,7 @@ export def "order-update" [
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "admin_comment" $admin_comment "scalar") (serialize-qp "admin_private_comment" $admin_private_comment "scalar") (serialize-qp "date_modified" $date_modified "scalar") (serialize-qp "date_finished" $date_finished "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "order_payment_method" $order_payment_method "scalar") (serialize-qp "send_notifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4582,9 +4609,9 @@ export def "product-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.add.json" $auth.query)
   let req_body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4635,7 +4662,7 @@ export def "product-attribute-list" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "set_name" $set_name "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4679,7 +4706,7 @@ export def "product-attribute-value-set" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "attribute_name" $attribute_name "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "value_id" $value_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.set.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4722,7 +4749,7 @@ export def "product-attribute-value-unset" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "include_default" $include_default "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.unset.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4769,7 +4796,7 @@ export def "product-brand-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "brand_ids" $brand_ids "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.brand.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4809,7 +4836,7 @@ export def "product-child-item-find" [
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.find.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4854,7 +4881,7 @@ export def "product-child-item-info" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4907,7 +4934,7 @@ export def "product-child-item-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4958,7 +4985,7 @@ export def "product-count" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5002,7 +5029,7 @@ export def "product-currency-add" [
   let qp = [(serialize-qp "iso3" $iso3 "scalar") (serialize-qp "rate" $rate "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "symbol_left" $symbol_left "scalar") (serialize-qp "symbol_right" $symbol_right "scalar") (serialize-qp "default" $default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.currency.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5045,7 +5072,7 @@ export def "product-currency-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.currency.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5082,7 +5109,7 @@ export def "product-delete" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5116,7 +5143,7 @@ export def "product-fields" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.fields.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5158,7 +5185,7 @@ export def "product-find" [
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "find_what" $find_what "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.find.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5205,9 +5232,9 @@ export def "product-image-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.image.add.json" $auth.query)
   let req_body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url, "variant_ids": $variant_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5247,7 +5274,7 @@ export def "product-image-delete" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5293,7 +5320,7 @@ export def "product-image-update" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "hidden" $hidden "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5338,7 +5365,7 @@ export def "product-info" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5401,7 +5428,7 @@ export def "product-list" [
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "disable_cache" $disable_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5440,7 +5467,7 @@ export def "product-manufacturer-add" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.manufacturer.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5487,7 +5514,7 @@ export def "product-option-add" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "default_option_value" $default_option_value "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5530,7 +5557,7 @@ export def "product-option-assign" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.assign.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5573,7 +5600,7 @@ export def "product-option-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5616,7 +5643,7 @@ export def "product-option-value-add" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.add.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5656,7 +5683,7 @@ export def "product-option-value-assign" [
   let qp = [(serialize-qp "product_option_id" $product_option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.assign.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5702,7 +5729,7 @@ export def "product-option-value-update" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5739,9 +5766,9 @@ export def "product-price-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.add.json" $auth.query)
   let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5779,7 +5806,7 @@ export def "product-price-delete" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.price.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5816,9 +5843,9 @@ export def "product-price-update" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.update.json" $auth.query)
   let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5864,7 +5891,7 @@ export def "product-review-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.review.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5903,7 +5930,7 @@ export def "product-store-assign" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.store.assign.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5941,9 +5968,9 @@ export def "product-tax-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.tax.add.json" $auth.query)
   let req_body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6027,7 +6054,7 @@ export def "product-update" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "categories_ids" $categories_ids "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "product_class" $product_class "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "search_keywords" $search_keywords "scalar") (serialize-qp "barcode" $barcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6099,9 +6126,9 @@ export def "product-variant-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.add.json" $auth.query)
   let req_body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6144,7 +6171,7 @@ export def "product-variant-count" [
   let qp = [(serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6183,7 +6210,7 @@ export def "product-variant-delete" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6229,9 +6256,9 @@ export def "product-variant-image-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.image.add.json" $auth.query)
   let req_body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6273,7 +6300,7 @@ export def "product-variant-image-delete" [
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_variant_id" $product_variant_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.image.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6313,7 +6340,7 @@ export def "product-variant-info" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6359,7 +6386,7 @@ export def "product-variant-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6396,9 +6423,9 @@ export def "product-variant-price-add" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.add.json" $auth.query)
   let req_body = {"group_prices": $group_prices, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6436,7 +6463,7 @@ export def "product-variant-price-delete" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.price.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6473,9 +6500,9 @@ export def "product-variant-price-update" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.update.json" $auth.query)
   let req_body = {"group_prices": $group_prices, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6554,7 +6581,7 @@ export def "product-variant-update" [
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "options" $options "csv") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "available_for_sale" $available_for_sale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6602,7 +6629,7 @@ export def "subscriber-list" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subscribed" $subscribed "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriber.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6644,7 +6671,7 @@ export def "tax-class-info" [
   let qp = [(serialize-qp "tax_class_id" $tax_class_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tax.class.info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6682,7 +6709,7 @@ export def "webhook-count" [
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6726,7 +6753,7 @@ export def "webhook-create" [
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.create.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6763,7 +6790,7 @@ export def "webhook-delete" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.delete.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6797,7 +6824,7 @@ export def "webhook-events" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook.events.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6839,7 +6866,7 @@ export def "webhook-list" [
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.list.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6880,7 +6907,7 @@ export def "webhook-update" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.update.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

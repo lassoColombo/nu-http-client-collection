@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -192,7 +219,7 @@ export def "experiments-get-by-id" [
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -238,9 +265,9 @@ export def "experiments-update" [
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}") $auth.query)
   let req_body = {"archive": $archive, "description": $description, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -284,9 +311,9 @@ export def "experiments-delete-tags" [
   if ($experiment_id | is-empty) { error make --unspanned { msg: "path parameter 'experimentId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_id: (encode-path-segment $experiment_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experimentids/{experiment_id}/tags") $auth.query)
   let req_body = {"tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -328,7 +355,7 @@ export def "experiments-get" [
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -370,7 +397,7 @@ export def "experiments-create" [
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -414,9 +441,9 @@ export def "events-batch-post" [
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/events") $auth.query)
   let req_body = {"events": $events} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -460,9 +487,9 @@ export def "runs-batch-add-or-modify" [
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/batch/runs") $auth.query)
   let req_body = {"runs": $runs} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -506,7 +533,7 @@ export def "run-metrics-get" [
   if ($metric_id | is-empty) { error make --unspanned { msg: "path parameter 'metricId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), metric_id: (encode-path-segment $metric_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics/{metric_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -558,9 +585,9 @@ export def "run-metrics-get-by-query" [
   let qp = [(serialize-qp "MergeStrategyType" $merge_strategy_type "scalar") (serialize-qp "MergeStrategyOptions" $merge_strategy_options "scalar") (serialize-qp "MergeStrategySettings.Version" $merge_strategy_settings_version "scalar") (serialize-qp "MergeStrategySettings.SelectMetrics" $merge_strategy_settings_select_metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/metrics:query") $qp $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -604,7 +631,7 @@ export def "runs-get" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -651,7 +678,7 @@ export def "runs-patch" [
   --parent-run-id: string # The parent of the run if the run is hierarchical; otherwise, Null.
   --properties: record
   --run-definition: record
-  --body-run-id: string # The identifier for the run. Run IDs must be less than 256 characters and contain only alphanumeric characters with dashes and underscores.
+  --body-run-id: string # The identifier for the run. Run IDs must be less than 256 characters and contain only alphanumeric characters with dashes and underscores. (spec name: runId)
   --run-type: string
   --script-name: string
   --start-time-utc: string # The start time of the run in UTC. (format: date-time)
@@ -669,9 +696,9 @@ export def "runs-patch" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}") $auth.query)
   let req_body = {"cancelUri": $cancel_uri, "createdFrom": $created_from, "dataContainerId": $data_container_id, "description": $description, "diagnosticsUri": $diagnostics_uri, "endTimeUtc": $end_time_utc, "heartbeatEnabled": $heartbeat_enabled, "hidden": $hidden, "name": $name, "options": $options, "parentRunId": $parent_run_id, "properties": $properties, "runDefinition": $run_definition, "runId": $body_run_id, "runType": $run_type, "scriptName": $script_name, "startTimeUtc": $start_time_utc, "status": $status, "tags": $tags, "target": $target} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -717,7 +744,7 @@ export def "run-artifacts-list-in-container" [
   let qp = [(serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -763,7 +790,7 @@ export def "run-artifacts-get-sas-uri" [
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/artifacturi") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -809,9 +836,9 @@ export def "run-artifacts-batch-create-empty-artifacts" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/batch/metadata") $auth.query)
   let req_body = {"paths": $paths} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -857,7 +884,7 @@ export def "run-artifacts-get-content-information" [
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/contentinfo") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -903,7 +930,7 @@ export def "run-artifacts-get-by-id" [
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/metadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -950,7 +977,7 @@ export def "run-artifacts-list-in-path" [
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/path") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -997,7 +1024,7 @@ export def "run-artifacts-list-sas-by-prefix" [
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/artifacts/prefix/contentinfo") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,9 +1070,9 @@ export def "run-metrics-batch-post" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/batch/metrics") $auth.query)
   let req_body = {"values": $values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1096,7 +1123,7 @@ export def "runs-get-child" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$continuationtoken" $continuationtoken "scalar") (serialize-qp "$orderby" $orderby "multi") (serialize-qp "$sortorder" $sortorder "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/children") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1140,7 +1167,7 @@ export def "runs-get-details" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/details") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1188,9 +1215,9 @@ export def "events-post" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/events") $auth.query)
   let req_body = {"data": $data, "name": $name, "timestamp": $timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1246,9 +1273,9 @@ export def "run-metrics-post" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/metrics") $auth.query)
   let req_body = {"cells": $cells, "createdUtc": $created_utc, "dataContainerId": $data_container_id, "dataLocation": $data_location, "description": $description, "label": $label, "metricId": $metric_id, "metricType": $metric_type, "name": $name, "numCells": $num_cells, "schema": $schema} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1294,9 +1321,9 @@ export def "runs-delete-tags" [
   if ($run_id | is-empty) { error make --unspanned { msg: "path parameter 'runId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name), run_id: (encode-path-segment $run_id)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs/{run_id}/tags") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1343,9 +1370,9 @@ export def "runs-get-by-query" [
   if ($experiment_name | is-empty) { error make --unspanned { msg: "path parameter 'experimentName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name), experiment_name: (encode-path-segment $experiment_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments/{experiment_name}/runs:query") $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1390,9 +1417,9 @@ export def "experiments-get-by-query" [
   if ($workspace_name | is-empty) { error make --unspanned { msg: "path parameter 'workspaceName' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), workspace_name: (encode-path-segment $workspace_name)} | format pattern "/history/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/experiments:query") $auth.query)
   let req_body = {"continuationToken": $continuation_token, "filter": $filter, "orderBy": $order_by, "top": $top} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

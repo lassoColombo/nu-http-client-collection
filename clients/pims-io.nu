@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -178,9 +205,9 @@ export def "fetch-all-categories" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -217,9 +244,9 @@ export def "fetch-one-category" [
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/categories/{category_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -259,9 +286,9 @@ export def "fetch-all-channels" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -298,9 +325,9 @@ export def "fetch-one-channel" [
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -342,9 +369,9 @@ export def "fetch-all-events" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -381,9 +408,9 @@ export def "fetch-one-event" [
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -423,7 +450,7 @@ export def "fetch-all-events-capacities" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/capacities") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "fetch-one-event-capacity" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), capacity_id: (encode-path-segment $capacity_id)} | format pattern "/events/{event_id}/capacities/{capacity_id}") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -502,7 +529,7 @@ export def "fetch-all-events-categories" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/categories") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -542,7 +569,7 @@ export def "fetch-one-event-category" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), category_id: (encode-path-segment $category_id)} | format pattern "/events/{event_id}/categories/{category_id}") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -581,7 +608,7 @@ export def "fetch-all-events-channels" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/channels") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "fetch-one-event-channel" [
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/events/{event_id}/channels/{channel_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -664,9 +691,9 @@ export def "fetch-all-events-promotions" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/promotions") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -709,7 +736,7 @@ export def "fetch-all-ticket-counts" [
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -752,7 +779,7 @@ export def "fetch-all-detailed-ticket-counts" [
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "show_not_approved" $show_not_approved "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/events/{event_id}/ticket-counts/detailed") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -792,7 +819,7 @@ export def "fetch-one-detailed-ticket-count" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), ticket_count_id: (encode-path-segment $ticket_count_id)} | format pattern "/events/{event_id}/ticket-counts/detailed/{ticket_count_id}") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -832,7 +859,7 @@ export def "fetch-one-ticket-count" [
   let qp = [(serialize-qp "show_ignored" $show_ignored "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id), ticket_count_id: (encode-path-segment $ticket_count_id)} | format pattern "/events/{event_id}/ticket-counts/{ticket_count_id}") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -872,9 +899,9 @@ export def "fetch-all-price-ranges" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "show_ignored" $show_ignored "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/price-ranges" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -911,9 +938,9 @@ export def "fetch-one-price-range" [
   if ($price_range_id | is-empty) { error make --unspanned { msg: "path parameter 'price_range_id' must be non-empty" } }
   let full_url = (build-url $base ({price_range_id: (encode-path-segment $price_range_id)} | format pattern "/price-ranges/{price_range_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -956,9 +983,9 @@ export def "fetch-all-promotions" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -995,9 +1022,9 @@ export def "fetch-one-promotion" [
   if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotions/{promotion_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1039,9 +1066,9 @@ export def "fetch-all-series" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1078,9 +1105,9 @@ export def "fetch-one-series" [
   if ($series_id | is-empty) { error make --unspanned { msg: "path parameter 'series_id' must be non-empty" } }
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1123,9 +1150,9 @@ export def "fetch-all-series-events" [
   let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/events") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1170,9 +1197,9 @@ export def "fetch-all-series-promotions" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/series/{series_id}/promotions") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1214,9 +1241,9 @@ export def "fetch-all-venues" [
   let qp = [(serialize-qp "label" $label "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/venues" $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1253,9 +1280,9 @@ export def "fetch-one-venue" [
   if ($venue_id | is-empty) { error make --unspanned { msg: "path parameter 'venue_id' must be non-empty" } }
   let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/venues/{venue_id}") $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1298,9 +1325,9 @@ export def "fetch-all-venues-events" [
   let qp = [(serialize-qp "from_datetime" $from_datetime "scalar") (serialize-qp "to_datetime" $to_datetime "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/venues/{venue_id}/events") $qp $auth.query)
   let accept_val = "application/hal+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,7 +207,7 @@ export def "get-search-version-number-additional-data-ext" [
   let qp = [(serialize-qp "geometries" $geometries "scalar") (serialize-qp "geometriesZoom" $geometries_zoom "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/additionalData.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -234,7 +261,7 @@ export def "get-search-version-number-c-s-category-ext" [
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), category: (encode-path-segment $category), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/cS/{category}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -286,7 +313,7 @@ export def "get-search-version-number-category-search-query-ext" [
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/categorySearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -340,7 +367,7 @@ export def "get-search-version-number-geocode-query-ext" [
   let qp = [(serialize-qp "storeResult" $store_result "scalar") (serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geocode/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -382,7 +409,7 @@ export def "get-search-version-number-geometry-filter-ext" [
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "poiList" $poi_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -422,9 +449,9 @@ export def "post-search-version-number-geometry-filter-ext" [
   if ($ext | is-empty) { error make --unspanned { msg: "path parameter 'ext' must be non-empty" } }
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometryFilter.{ext}") $auth.query)
   let req_body = {"geometryList": $geometry_list, "poiList": $poi_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -469,7 +496,7 @@ export def "get-search-version-number-geometry-search-query-ext" [
   let qp = [(serialize-qp "geometryList" $geometry_list "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -515,9 +542,9 @@ export def "post-search-version-number-geometry-search-query-ext" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/geometrySearch/{query}.{ext}") $qp $auth.query)
   let req_body = {"geometryList": $geometry_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -573,7 +600,7 @@ export def "get-search-version-number-nearby-search-ext" [
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/nearbySearch/.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -625,7 +652,7 @@ export def "get-search-version-number-poi-search-query-ext" [
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/poiSearch/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -671,7 +698,7 @@ export def "get-search-version-number-reverse-geocode-cross-street-position-ext"
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/crossStreet/{position}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -720,7 +747,7 @@ export def "get-search-version-number-reverse-geocode-position-ext" [
   let qp = [(serialize-qp "spatialKeys" $spatial_keys "scalar") (serialize-qp "returnSpeedLimit" $return_speed_limit "scalar") (serialize-qp "heading" $heading "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "returnRoadUse" $return_road_use "scalar") (serialize-qp "roadUse" $road_use "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/reverseGeocode/{position}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -767,7 +794,7 @@ export def "get-search-version-number-routed-filter-position-heading-ext" [
   let qp = [(serialize-qp "poiList" $poi_list "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -814,9 +841,9 @@ export def "post-search-version-number-routed-filter-position-heading-ext" [
   let qp = [(serialize-qp "routingTimeout" $routing_timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedFilter/{position}/{heading}.{ext}") $qp $auth.query)
   let req_body = {"poiList": $poi_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -869,7 +896,7 @@ export def "get-search-version-number-routed-search-query-position-heading-ext" 
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "multiplier" $multiplier "scalar") (serialize-qp "routingTimeout" $routing_timeout "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "idxSet" $idx_set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), position: (encode-path-segment $position), heading: (encode-path-segment $heading), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/routedSearch/{query}/{position}/{heading}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -923,7 +950,7 @@ export def "get-search-version-number-s-query-ext" [
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/s/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -978,7 +1005,7 @@ export def "get-search-version-number-search-query-ext" [
   let qp = [(serialize-qp "typeahead" $typeahead "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "countrySet" $country_set "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "topLeft" $top_left "scalar") (serialize-qp "btmRight" $btm_right "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar") (serialize-qp "minFuzzyLevel" $min_fuzzy_level "scalar") (serialize-qp "maxFuzzyLevel" $max_fuzzy_level "scalar") (serialize-qp "idxSet" $idx_set "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/search/{query}.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,9 +1050,9 @@ export def "post-search-version-number-search-along-route-query-ext" [
   let qp = [(serialize-qp "maxDetourTime" $max_detour_time "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), query: (encode-path-segment $query), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/searchAlongRoute/{query}.{ext}") $qp $auth.query)
   let req_body = {"route": $route} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1078,7 +1105,7 @@ export def "get-search-version-number-structured-geocode-ext" [
   let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ofs" $ofs "scalar") (serialize-qp "streetNumber" $street_number "scalar") (serialize-qp "streetName" $street_name "scalar") (serialize-qp "crossStreet" $cross_street "scalar") (serialize-qp "municipality" $municipality "scalar") (serialize-qp "municipalitySubdivision" $municipality_subdivision "scalar") (serialize-qp "countryTertiarySubdivision" $country_tertiary_subdivision "scalar") (serialize-qp "countrySecondarySubdivision" $country_secondary_subdivision "scalar") (serialize-qp "countrySubdivision" $country_subdivision "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "extendedPostalCodesFor" $extended_postal_codes_for "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), ext: (encode-path-segment $ext)} | format pattern "/search/{version_number}/structuredGeocode.{ext}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

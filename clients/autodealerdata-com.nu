@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -178,7 +205,7 @@ export def "days-supply-days-supply-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysSupply" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -218,7 +245,7 @@ export def "days-to-sell-days-to-sell-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysToSell" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -255,7 +282,7 @@ export def "get-brand-names-get-brands-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getBrands" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -294,7 +321,7 @@ export def "get-dealers-get-dealers-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -333,7 +360,7 @@ export def "get-dealers-get-dealers-by-id-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByID" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -372,7 +399,7 @@ export def "get-dealers-get-dealers-by-region-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByRegion" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -411,7 +438,7 @@ export def "get-model-names-all-get-inactive-models-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getInactiveModels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -450,7 +477,7 @@ export def "get-model-names-get-models-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getModels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -490,7 +517,7 @@ export def "get-region-brand-market-share-get-region-brand-market-share-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionBrandMarketShare" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -528,7 +555,7 @@ export def "get-region-market-share-get-region-market-share-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionMarketShare" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -565,7 +592,7 @@ export def "get-regions-get-regions-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -604,7 +631,7 @@ export def "get-sub-user-keys-get-sub-user-keys-get" [
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSubUserKeys" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -643,7 +670,7 @@ export def "make-token-get-token-get" [
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -682,7 +709,7 @@ export def "make-token-get-token-post" [
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -722,7 +749,7 @@ export def "get-avg-list-price-list-price-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPrice" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -763,7 +790,7 @@ export def "get-listings-by-dealer-listings-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -817,7 +844,7 @@ export def "get-listings2-listings2-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "modelYear" $model_year "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings2" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -862,7 +889,7 @@ export def "get-listings-by-dealer-listings-by-date-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -906,7 +933,7 @@ export def "get-listings-by-region-listings-by-region-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegion" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -953,7 +980,7 @@ export def "get-listings-by-region-and-date-listings-by-region-and-date-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegionAndDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -995,7 +1022,7 @@ export def "listings-by-zip-code-listings-by-zip-code-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCode" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1041,7 +1068,7 @@ export def "listings-by-zip-code-and-date-listings-by-zip-code-and-date-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1083,9 +1110,9 @@ export def "make-sub-user-key-make-sub-user-key-post" [
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "siteName" $site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/makeSubUserKey" $qp $auth.query)
   let req_body = {"endPoints": $end_points} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1127,7 +1154,7 @@ export def "get-model-used-dist-model-year-dist-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/modelYearDist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1170,7 +1197,7 @@ export def "get-dealer-sales-region-daily-sales-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionDailySales" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1213,7 +1240,7 @@ export def "get-dealer-sales-region-sales-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionSales" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1254,7 +1281,7 @@ export def "revoke-sub-user-key-revoke-sub-user-key-put" [
   let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "subUserKeyUUID" $sub_user_key_uuid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/revokeSubUserKey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1294,7 +1321,7 @@ export def "get-avg-sale-price-sale-price-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePrice" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1336,7 +1363,7 @@ export def "get-model-sale-buckets-sale-price-histogram-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePriceHistogram" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1378,7 +1405,7 @@ export def "get-market3-similar-sale-price-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similarSalePrice" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1416,7 +1443,7 @@ export def "get-top-models-top-models-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topModels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1469,7 +1496,7 @@ export def "get-market4-valuation-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/valuation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1508,7 +1535,7 @@ export def "get-history2-vehicle-history-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vehicleHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1549,7 +1576,7 @@ export def "get-vehicle-seen-vehicle-seen-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "afterDate" $after_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vehicleSeen" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1590,7 +1617,7 @@ export def "vin-decode-vin-decode-get" [
   let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "passEmpty" $pass_empty "scalar") (serialize-qp "includeRecall" $include_recall "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vinDecode" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

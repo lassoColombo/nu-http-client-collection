@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,9 +200,9 @@ export def "get-nh-art" [
   let qp = [(serialize-qp "hasfake" $hasfake "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/art" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -216,9 +243,9 @@ export def "get-nh-art-artwork" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({artwork: (encode-path-segment $artwork)} | format pattern "/nh/art/{artwork}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -259,9 +286,9 @@ export def "get-nh-bugs" [
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/bugs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -302,9 +329,9 @@ export def "get-nh-bugs-bug" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bug: (encode-path-segment $bug)} | format pattern "/nh/bugs/{bug}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -347,9 +374,9 @@ export def "get-nh-clothing" [
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "style" $style "multi") (serialize-qp "labeltheme" $labeltheme "scalar") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/clothing" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -390,9 +417,9 @@ export def "get-nh-clothing-clothing" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({clothing: (encode-path-segment $clothing)} | format pattern "/nh/clothing/{clothing}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -434,9 +461,9 @@ export def "get-nh-events" [
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -477,9 +504,9 @@ export def "get-nh-fish" [
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fish" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -520,9 +547,9 @@ export def "get-nh-fish-fish" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fish: (encode-path-segment $fish)} | format pattern "/nh/fish/{fish}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -561,9 +588,9 @@ export def "get-nh-fossils-all" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/all" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -604,9 +631,9 @@ export def "get-nh-fossils-all-fossil" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/all/{fossil}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -645,9 +672,9 @@ export def "get-nh-fossils-groups" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/groups" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -688,9 +715,9 @@ export def "get-nh-fossils-groups-fossil-group" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fossil_group: (encode-path-segment $fossil_group)} | format pattern "/nh/fossils/groups/{fossil_group}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -729,9 +756,9 @@ export def "get-nh-fossils-individuals" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/fossils/individuals" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -772,9 +799,9 @@ export def "get-nh-fossils-individuals-fossil" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fossil: (encode-path-segment $fossil)} | format pattern "/nh/fossils/individuals/{fossil}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -815,9 +842,9 @@ export def "get-nh-furniture" [
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/furniture" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -858,9 +885,9 @@ export def "get-nh-furniture-furniture" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({furniture: (encode-path-segment $furniture)} | format pattern "/nh/furniture/{furniture}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -900,9 +927,9 @@ export def "get-nh-interior" [
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/interior" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -944,9 +971,9 @@ export def "get-nh-interior-item" [
   let qp = [(serialize-qp "color" $color "multi") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/interior/{item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -985,9 +1012,9 @@ export def "get-nh-items" [
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/items" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1028,9 +1055,9 @@ export def "get-nh-items-item" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/items/{item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1069,9 +1096,9 @@ export def "get-nh-photos" [
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/photos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1112,9 +1139,9 @@ export def "get-nh-photos-item" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/photos/{item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,9 +1182,9 @@ export def "get-nh-recipes" [
   let qp = [(serialize-qp "material" $material "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/recipes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1198,9 +1225,9 @@ export def "get-nh-recipes-item" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item: (encode-path-segment $item)} | format pattern "/nh/recipes/{item}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1241,9 +1268,9 @@ export def "get-nh-sea" [
   let qp = [(serialize-qp "month" $month "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/sea" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1284,9 +1311,9 @@ export def "get-nh-sea-sea-creature" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sea_creature: (encode-path-segment $sea_creature)} | format pattern "/nh/sea/{sea_creature}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1325,9 +1352,9 @@ export def "get-nh-tools" [
   let qp = [(serialize-qp "excludedetails" $excludedetails "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/nh/tools" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1368,9 +1395,9 @@ export def "get-nh-tools-tool" [
   let qp = [(serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tool: (encode-path-segment $tool)} | format pattern "/nh/tools/{tool}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1417,9 +1444,9 @@ export def "get-villagers" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "personality" $personality "scalar") (serialize-qp "game" $game "multi") (serialize-qp "birthmonth" $birthmonth "scalar") (serialize-qp "birthday" $birthday "scalar") (serialize-qp "nhdetails" $nhdetails "scalar") (serialize-qp "excludedetails" $excludedetails "scalar") (serialize-qp "thumbsize" $thumbsize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/villagers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-API-KEY": $x_api_key, "Accept-Version": $accept_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

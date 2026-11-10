@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -211,7 +238,7 @@ export def "get-rcra-rest-services-get-download" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -250,9 +277,9 @@ export def "post-rcra-rest-services-get-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_download" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -384,7 +411,7 @@ export def "get-rcra-rest-services-get-facilities" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_stdist" $p_stdist "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_cmps" $p_cmps "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_olr" $p_olr "scalar") (serialize-qp "p_oct" $p_oct "scalar") (serialize-qp "p_trichem" $p_trichem "scalar") (serialize-qp "p_tri_lr_pol" $p_tri_lr_pol "scalar") (serialize-qp "p_tri_lr_yr" $p_tri_lr_yr "scalar") (serialize-qp "p_tri_lr_amt" $p_tri_lr_amt "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_owc" $p_owc "scalar") (serialize-qp "p_owd" $p_owd "scalar") (serialize-qp "p_opc" $p_opc "scalar") (serialize-qp "p_opd" $p_opd "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_cifdi" $p_cifdi "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_violy" $p_violy "scalar") (serialize-qp "p_ncv" $p_ncv "scalar") (serialize-qp "p_fcv" $p_fcv "scalar") (serialize-qp "p_violt" $p_violt "scalar") (serialize-qp "p_des" $p_des "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_decouple" $p_decouple "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_facilities" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -515,9 +542,9 @@ export def "post-rcra-rest-services-get-facilities" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_facilities" $auth.query)
   let req_body = {"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_stdist": $p_stdist, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "p_c1lat": $p_c1lat, "p_c1lon": $p_c1lon, "p_c2lat": $p_c2lat, "p_c2lon": $p_c2lon, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_act": $p_act, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_cmps": $p_cmps, "p_law": $p_law, "p_section": $p_section, "p_qiv": $p_qiv, "p_impw": $p_impw, "p_trep": $p_trep, "p_olr": $p_olr, "p_oct": $p_oct, "p_trichem": $p_trichem, "p_tri_lr_pol": $p_tri_lr_pol, "p_tri_lr_yr": $p_tri_lr_yr, "p_tri_lr_amt": $p_tri_lr_amt, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_wbd": $p_wbd, "p_pid": $p_pid, "p_med": $p_med, "p_owc": $p_owc, "p_owd": $p_owd, "p_opc": $p_opc, "p_opd": $p_opd, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_owop": $p_owop, "p_agoo": $p_agoo, "p_idt1": $p_idt1, "p_idt2": $p_idt2, "p_pityp": $p_pityp, "p_cifdi": $p_cifdi, "p_pfead1": $p_pfead1, "p_pfead2": $p_pfead2, "p_pfeat": $p_pfeat, "p_psncq": $p_psncq, "p_dwd": $p_dwd, "p_violy": $p_violy, "p_ncv": $p_ncv, "p_fcv": $p_fcv, "p_violt": $p_violt, "p_des": $p_des, "p_fntype": $p_fntype, "p_pidall": $p_pidall, "p_fac_ico": $p_fac_ico, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_decouple": $p_decouple, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "queryset": $queryset, "responseset": $responseset, "tablelist": $tablelist, "maplist": $maplist, "summarylist": $summarylist, "callback": $callback, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -648,7 +675,7 @@ export def "get-rcra-rest-services-get-facility-info" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_sa" $p_sa "scalar") (serialize-qp "p_sa1" $p_sa1 "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_stdist" $p_stdist "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_frs" $p_frs "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_ncs" $p_ncs "scalar") (serialize-qp "p_pen" $p_pen "scalar") (serialize-qp "xmin" $xmin "scalar") (serialize-qp "ymin" $ymin "scalar") (serialize-qp "xmax" $xmax "scalar") (serialize-qp "ymax" $ymax "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_sic2" $p_sic2 "scalar") (serialize-qp "p_sic4" $p_sic4 "scalar") (serialize-qp "p_fa" $p_fa "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_cmps" $p_cmps "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_impw" $p_impw "scalar") (serialize-qp "p_trep" $p_trep "scalar") (serialize-qp "p_olr" $p_olr "scalar") (serialize-qp "p_oct" $p_oct "scalar") (serialize-qp "p_trichem" $p_trichem "scalar") (serialize-qp "p_tri_lr_pol" $p_tri_lr_pol "scalar") (serialize-qp "p_tri_lr_yr" $p_tri_lr_yr "scalar") (serialize-qp "p_tri_lr_amt" $p_tri_lr_amt "scalar") (serialize-qp "p_pm" $p_pm "scalar") (serialize-qp "p_pd" $p_pd "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_huc" $p_huc "scalar") (serialize-qp "p_wbd" $p_wbd "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_med" $p_med "scalar") (serialize-qp "p_owc" $p_owc "scalar") (serialize-qp "p_owd" $p_owd "scalar") (serialize-qp "p_opc" $p_opc "scalar") (serialize-qp "p_opd" $p_opd "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_tribeid" $p_tribeid "scalar") (serialize-qp "p_tribename" $p_tribename "scalar") (serialize-qp "p_tribedist" $p_tribedist "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_agoo" $p_agoo "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_pityp" $p_pityp "scalar") (serialize-qp "p_cifdi" $p_cifdi "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_psncq" $p_psncq "scalar") (serialize-qp "p_dwd" $p_dwd "scalar") (serialize-qp "p_violy" $p_violy "scalar") (serialize-qp "p_ncv" $p_ncv "scalar") (serialize-qp "p_fcv" $p_fcv "scalar") (serialize-qp "p_violt" $p_violt "scalar") (serialize-qp "p_des" $p_des "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_pidall" $p_pidall "scalar") (serialize-qp "p_fac_ico" $p_fac_ico "scalar") (serialize-qp "p_icoo" $p_icoo "scalar") (serialize-qp "p_fac_icos" $p_fac_icos "scalar") (serialize-qp "p_ejscreen" $p_ejscreen "scalar") (serialize-qp "p_limit_addr" $p_limit_addr "scalar") (serialize-qp "p_lat" $p_lat "scalar") (serialize-qp "p_long" $p_long "scalar") (serialize-qp "p_radius" $p_radius "scalar") (serialize-qp "p_decouple" $p_decouple "scalar") (serialize-qp "p_ejscreen_over80cnt" $p_ejscreen_over80cnt "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "summarylist" $summarylist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_facility_info" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -778,9 +805,9 @@ export def "post-rcra-rest-services-get-facility-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_facility_info" $auth.query)
   let req_body = {"output": $output, "p_fn": $p_fn, "p_sa": $p_sa, "p_sa1": $p_sa1, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_stdist": $p_stdist, "p_zip": $p_zip, "p_frs": $p_frs, "p_reg": $p_reg, "p_sic": $p_sic, "p_ncs": $p_ncs, "p_pen": $p_pen, "xmin": $xmin, "ymin": $ymin, "xmax": $xmax, "ymax": $ymax, "p_usmex": $p_usmex, "p_sic2": $p_sic2, "p_sic4": $p_sic4, "p_fa": $p_fa, "p_act": $p_act, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_cmps": $p_cmps, "p_law": $p_law, "p_section": $p_section, "p_qiv": $p_qiv, "p_impw": $p_impw, "p_trep": $p_trep, "p_olr": $p_olr, "p_oct": $p_oct, "p_trichem": $p_trichem, "p_tri_lr_pol": $p_tri_lr_pol, "p_tri_lr_yr": $p_tri_lr_yr, "p_tri_lr_amt": $p_tri_lr_amt, "p_pm": $p_pm, "p_pd": $p_pd, "p_ico": $p_ico, "p_huc": $p_huc, "p_wbd": $p_wbd, "p_pid": $p_pid, "p_med": $p_med, "p_owc": $p_owc, "p_owd": $p_owd, "p_opc": $p_opc, "p_opd": $p_opd, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_tribeid": $p_tribeid, "p_tribename": $p_tribename, "p_tribedist": $p_tribedist, "p_owop": $p_owop, "p_agoo": $p_agoo, "p_idt1": $p_idt1, "p_idt2": $p_idt2, "p_pityp": $p_pityp, "p_cifdi": $p_cifdi, "p_pfead1": $p_pfead1, "p_pfead2": $p_pfead2, "p_pfeat": $p_pfeat, "p_psncq": $p_psncq, "p_dwd": $p_dwd, "p_violy": $p_violy, "p_ncv": $p_ncv, "p_fcv": $p_fcv, "p_violt": $p_violt, "p_des": $p_des, "p_fntype": $p_fntype, "p_pidall": $p_pidall, "p_fac_ico": $p_fac_ico, "p_icoo": $p_icoo, "p_fac_icos": $p_fac_icos, "p_ejscreen": $p_ejscreen, "p_limit_addr": $p_limit_addr, "p_lat": $p_lat, "p_long": $p_long, "p_radius": $p_radius, "p_decouple": $p_decouple, "p_ejscreen_over80cnt": $p_ejscreen_over80cnt, "queryset": $queryset, "responseset": $responseset, "summarylist": $summarylist, "callback": $callback, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -824,7 +851,7 @@ export def "get-rcra-rest-services-get-geojson" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_geojson" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -866,9 +893,9 @@ export def "post-rcra-rest-services-get-geojson" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_geojson" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns, "p_pretty_print": $p_pretty_print} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -908,7 +935,7 @@ export def "get-rcra-rest-services-get-info-clusters" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_qid" $p_qid "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_info_clusters" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -946,9 +973,9 @@ export def "post-rcra-rest-services-get-info-clusters" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_info_clusters" $auth.query)
   let req_body = {"output": $output, "p_qid": $p_qid, "p_pretty_print": $p_pretty_print} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -995,7 +1022,7 @@ export def "get-rcra-rest-services-get-map" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "c1_lat" $c1_lat "scalar") (serialize-qp "c1_long" $c1_long "scalar") (serialize-qp "c2_lat" $c2_lat "scalar") (serialize-qp "c2_long" $c2_long "scalar") (serialize-qp "p_id" $p_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1039,9 +1066,9 @@ export def "post-rcra-rest-services-get-map" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_map" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "callback": $callback, "tablelist": $tablelist, "c1_lat": $c1_lat, "c1_long": $c1_long, "c2_lat": $c2_lat, "c2_long": $c2_long, "p_id": $p_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1085,7 +1112,7 @@ export def "get-rcra-rest-services-get-qid" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1127,9 +1154,9 @@ export def "post-rcra-rest-services-get-qid" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.get_qid" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1167,7 +1194,7 @@ export def "get-rcra-rest-services-metadata" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rcra_rest_services.metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1204,9 +1231,9 @@ export def "post-rcra-rest-services-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rcra_rest_services.metadata" $auth.query)
   let req_body = {"output": $output, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

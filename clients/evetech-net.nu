@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -192,9 +219,9 @@ export def "get-alliances" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alliances/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -233,9 +260,9 @@ export def "get-alliances-alliance-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -267,7 +294,7 @@ export def "get-alliances-alliance-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<contact_id: int, contact_type: string, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -276,9 +303,9 @@ export def "get-alliances-alliance-id-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -309,7 +336,7 @@ export def "get-alliances-alliance-id-contacts-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -318,9 +345,9 @@ export def "get-alliances-alliance-id-contacts-labels" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -359,9 +386,9 @@ export def "get-alliances-alliance-id-corporations" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/corporations/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -400,9 +427,9 @@ export def "get-alliances-alliance-id-icons" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({alliance_id: (encode-path-segment $alliance_id)} | format pattern "/alliances/{alliance_id}/icons/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -440,9 +467,9 @@ export def "post-characters-affiliation" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/characters/affiliation/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -481,9 +508,9 @@ export def "get-characters-character-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -514,7 +541,7 @@ export def "get-characters-character-id-agents-research" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<agent_id: int, points_per_day: float, remainder_points: float, skill_type_id: int, started_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -523,9 +550,9 @@ export def "get-characters-character-id-agents-research" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/agents_research/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -557,7 +584,7 @@ export def "get-characters-character-id-assets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -566,9 +593,9 @@ export def "get-characters-character-id-assets" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -599,7 +626,7 @@ export def "post-characters-character-id-assets-locations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --body: list
 ]: any -> oneof<table<item_id: int, position: record<x: float, y: float, z: float>>, string, record, nothing> {
   let input = $in
@@ -609,9 +636,9 @@ export def "post-characters-character-id-assets-locations" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/locations/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -642,7 +669,7 @@ export def "post-characters-character-id-assets-names" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --body: list
 ]: any -> oneof<table<item_id: int, name: string>, string, record, nothing> {
   let input = $in
@@ -652,9 +679,9 @@ export def "post-characters-character-id-assets-names" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/assets/names/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -685,7 +712,7 @@ export def "get-characters-character-id-attributes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<accrued_remap_cooldown_date: string, bonus_remaps: int, charisma: int, intelligence: int, last_remap_date: string, memory: int, perception: int, willpower: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -694,9 +721,9 @@ export def "get-characters-character-id-attributes" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/attributes/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -728,7 +755,7 @@ export def "get-characters-character-id-blueprints" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -737,9 +764,9 @@ export def "get-characters-character-id-blueprints" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/blueprints/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -771,7 +798,7 @@ export def "get-characters-character-id-bookmarks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -780,9 +807,9 @@ export def "get-characters-character-id-bookmarks" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -814,7 +841,7 @@ export def "get-characters-character-id-bookmarks-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<folder_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -823,9 +850,9 @@ export def "get-characters-character-id-bookmarks-folders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -857,7 +884,7 @@ export def "get-characters-character-id-calendar" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-event: int # The event ID to retrieve events from (format: int32)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<event_date: string, event_id: int, event_response: string, importance: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -866,9 +893,9 @@ export def "get-characters-character-id-calendar" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_event" $from_event "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/calendar/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -900,7 +927,7 @@ export def "get-characters-character-id-calendar-event-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<date: string, duration: int, event_id: int, importance: int, owner_id: int, owner_name: string, owner_type: string, response: string, text: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -910,9 +937,9 @@ export def "get-characters-character-id-calendar-event-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -944,7 +971,7 @@ export def "put-characters-character-id-calendar-event-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   response: string@response-completer # response string
 ]: any -> any {
   let input = $in
@@ -955,9 +982,9 @@ export def "put-characters-character-id-calendar-event-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp $auth.query)
   let req_body = {"response": $response} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -989,7 +1016,7 @@ export def "get-characters-character-id-calendar-event-id-attendees" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, event_response: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -999,9 +1026,9 @@ export def "get-characters-character-id-calendar-event-id-attendees" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), event_id: (encode-path-segment $event_id)} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1032,7 +1059,7 @@ export def "get-characters-character-id-clones" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<home_location: record<location_id: int, location_type: string>, jump_clones: table<implants: list, jump_clone_id: int, location_id: int, location_type: string, name: string>, last_clone_jump_date: string, last_station_change_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1041,9 +1068,9 @@ export def "get-characters-character-id-clones" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/clones/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1075,7 +1102,7 @@ export def "delete-characters-character-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --contact-ids: list<int> # A list of contacts to delete (required)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1084,7 +1111,7 @@ export def "delete-characters-character-id-contacts" [
   let qp = [(serialize-qp "contact_ids" $contact_ids "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1116,7 +1143,7 @@ export def "get-characters-character-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<contact_id: int, contact_type: string, is_blocked: bool, is_watched: bool, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1125,9 +1152,9 @@ export def "get-characters-character-id-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1160,7 +1187,7 @@ export def "post-characters-character-id-contacts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --label-ids: list<int> # Add custom labels to the new contact
   --standing: float # Standing for the contact (required, format: float)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
   --body: list
 ]: any -> oneof<list<int>, string, record, nothing> {
@@ -1172,9 +1199,9 @@ export def "post-characters-character-id-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1207,7 +1234,7 @@ export def "put-characters-character-id-contacts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --label-ids: list<int> # Add custom labels to the contact
   --standing: float # Standing for the contact (required, format: float)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
   --body: list
 ]: any -> any {
@@ -1219,9 +1246,9 @@ export def "put-characters-character-id-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1252,7 +1279,7 @@ export def "get-characters-character-id-contacts-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1261,9 +1288,9 @@ export def "get-characters-character-id-contacts-labels" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1295,7 +1322,7 @@ export def "get-characters-character-id-contracts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1304,9 +1331,9 @@ export def "get-characters-character-id-contracts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/contracts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1338,7 +1365,7 @@ export def "get-characters-character-id-contracts-contract-id-bids" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<amount: float, bid_id: int, bidder_id: int, date_bid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1348,9 +1375,9 @@ export def "get-characters-character-id-contracts-contract-id-bids" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1382,7 +1409,7 @@ export def "get-characters-character-id-contracts-contract-id-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1392,9 +1419,9 @@ export def "get-characters-character-id-contracts-contract-id-items" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1433,9 +1460,9 @@ export def "get-characters-character-id-corporationhistory" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/corporationhistory/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1466,7 +1493,7 @@ export def "post-characters-character-id-cspa" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --body: list
 ]: any -> oneof<float, string, record, nothing> {
   let input = $in
@@ -1476,9 +1503,9 @@ export def "post-characters-character-id-cspa" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/cspa/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1509,7 +1536,7 @@ export def "get-characters-character-id-fatigue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<jump_fatigue_expire_date: string, last_jump_date: string, last_update_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1518,9 +1545,9 @@ export def "get-characters-character-id-fatigue" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fatigue/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1551,7 +1578,7 @@ export def "get-characters-character-id-fittings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<description: string, fitting_id: int, items: list<record>, name: string, ship_type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1560,9 +1587,9 @@ export def "get-characters-character-id-fittings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1593,7 +1620,7 @@ export def "post-characters-character-id-fittings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   description: string # description string
   items: list # items array — item shape: {flag: int, quantity: int, type_id: int}
   name: string # name string
@@ -1606,9 +1633,9 @@ export def "post-characters-character-id-fittings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fittings/") $qp $auth.query)
   let req_body = {"description": $description, "items": $items, "name": $name, "ship_type_id": $ship_type_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1640,7 +1667,7 @@ export def "delete-characters-character-id-fittings-fitting-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1649,7 +1676,7 @@ export def "delete-characters-character-id-fittings-fitting-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), fitting_id: (encode-path-segment $fitting_id)} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1680,7 +1707,7 @@ export def "get-characters-character-id-fleet" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<fleet_id: int, role: string, squad_id: int, wing_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1689,9 +1716,9 @@ export def "get-characters-character-id-fleet" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fleet/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1722,7 +1749,7 @@ export def "get-characters-character-id-fw-stats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<current_rank: int, enlisted_on: string, faction_id: int, highest_rank: int, kills: record<last_week: int, total: int, yesterday: int>, victory_points: record<last_week: int, total: int, yesterday: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1731,9 +1758,9 @@ export def "get-characters-character-id-fw-stats" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/fw/stats/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1764,7 +1791,7 @@ export def "get-characters-character-id-implants" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1773,9 +1800,9 @@ export def "get-characters-character-id-implants" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/implants/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1807,7 +1834,7 @@ export def "get-characters-character-id-industry-jobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --include-completed: oneof<nothing, bool> # Whether to retrieve completed character industry jobs. Only includes jobs from the past 90 days
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, station_id: int, status: string, successful_runs: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1816,9 +1843,9 @@ export def "get-characters-character-id-industry-jobs" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/industry/jobs/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1850,7 +1877,7 @@ export def "get-characters-character-id-killmails-recent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<killmail_hash: string, killmail_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1859,9 +1886,9 @@ export def "get-characters-character-id-killmails-recent" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/killmails/recent/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1892,7 +1919,7 @@ export def "get-characters-character-id-location" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<solar_system_id: int, station_id: int, structure_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1901,9 +1928,9 @@ export def "get-characters-character-id-location" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/location/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1934,7 +1961,7 @@ export def "get-characters-character-id-loyalty-points" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<corporation_id: int, loyalty_points: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1943,9 +1970,9 @@ export def "get-characters-character-id-loyalty-points" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/loyalty/points/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1978,7 +2005,7 @@ export def "get-characters-character-id-mail" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --labels: list<int> # Fetch only mails that match one or more of the given labels
   --last-mail-id: int # List only mail with an ID lower than the given ID, if present (format: int32)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<from: int, is_read: bool, labels: list<int>, mail_id: int, recipients: list<record>, subject: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1987,9 +2014,9 @@ export def "get-characters-character-id-mail" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "labels" $labels "csv") (serialize-qp "last_mail_id" $last_mail_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2020,7 +2047,7 @@ export def "post-characters-character-id-mail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --approved-cost: int # approved_cost integer (format: int64, default: 0)
   body: string # body string
   recipients: list # recipients array — item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
@@ -2033,9 +2060,9 @@ export def "post-characters-character-id-mail" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/") $qp $auth.query)
   let req_body = {"approved_cost": $approved_cost, "body": $body, "recipients": $recipients, "subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2066,7 +2093,7 @@ export def "get-characters-character-id-mail-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<labels: table<color: string, label_id: int, name: string, unread_count: int>, total_unread_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2075,9 +2102,9 @@ export def "get-characters-character-id-mail-labels" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2108,7 +2135,7 @@ export def "post-characters-character-id-mail-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --color: string@color-completer # Hexadecimal string representing label color, in RGB format (default: #ffffff)
   name: string # name string
 ]: any -> oneof<int, string, record, nothing> {
@@ -2119,9 +2146,9 @@ export def "post-characters-character-id-mail-labels" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/labels/") $qp $auth.query)
   let req_body = {"color": $color, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2153,7 +2180,7 @@ export def "delete-characters-character-id-mail-labels-label-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2162,7 +2189,7 @@ export def "delete-characters-character-id-mail-labels-label-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), label_id: (encode-path-segment $label_id)} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2193,7 +2220,7 @@ export def "get-characters-character-id-mail-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<mailing_list_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2202,9 +2229,9 @@ export def "get-characters-character-id-mail-lists" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mail/lists/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2236,7 +2263,7 @@ export def "delete-characters-character-id-mail-mail-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2245,7 +2272,7 @@ export def "delete-characters-character-id-mail-mail-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2277,7 +2304,7 @@ export def "get-characters-character-id-mail-mail-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<body: string, from: int, labels: list<int>, read: bool, recipients: table<recipient_id: int, recipient_type: string>, subject: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2287,9 +2314,9 @@ export def "get-characters-character-id-mail-mail-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2321,7 +2348,7 @@ export def "put-characters-character-id-mail-mail-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --labels: list<int> # Labels to assign to the mail. Pre-existing labels are unassigned.
   --read: oneof<nothing, bool> # Whether the mail is flagged as read
 ]: any -> any {
@@ -2333,9 +2360,9 @@ export def "put-characters-character-id-mail-mail-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), mail_id: (encode-path-segment $mail_id)} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp $auth.query)
   let req_body = {"labels": $labels, "read": $read} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2366,7 +2393,7 @@ export def "get-characters-character-id-medals" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<corporation_id: int, date: string, description: string, graphics: list<record>, issuer_id: int, medal_id: int, reason: string, status: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2375,9 +2402,9 @@ export def "get-characters-character-id-medals" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/medals/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2409,7 +2436,7 @@ export def "get-characters-character-id-mining" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<date: string, quantity: int, solar_system_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2418,9 +2445,9 @@ export def "get-characters-character-id-mining" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/mining/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2451,7 +2478,7 @@ export def "get-characters-character-id-notifications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<is_read: bool, notification_id: int, sender_id: int, sender_type: string, text: string, timestamp: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2460,9 +2487,9 @@ export def "get-characters-character-id-notifications" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2493,7 +2520,7 @@ export def "get-characters-character-id-notifications-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<message: string, notification_id: int, send_date: string, sender_character_id: int, standing_level: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2502,9 +2529,9 @@ export def "get-characters-character-id-notifications-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/notifications/contacts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2535,7 +2562,7 @@ export def "get-characters-character-id-online" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<last_login: string, last_logout: string, logins: int, online: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2544,9 +2571,9 @@ export def "get-characters-character-id-online" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/online/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2577,7 +2604,7 @@ export def "get-characters-character-id-opportunities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<completed_at: string, task_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2586,9 +2613,9 @@ export def "get-characters-character-id-opportunities" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/opportunities/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2619,7 +2646,7 @@ export def "get-characters-character-id-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2628,9 +2655,9 @@ export def "get-characters-character-id-orders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2662,7 +2689,7 @@ export def "get-characters-character-id-orders-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2671,9 +2698,9 @@ export def "get-characters-character-id-orders-history" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/orders/history/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2704,7 +2731,7 @@ export def "get-characters-character-id-planets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<last_update: string, num_pins: int, owner_id: int, planet_id: int, planet_type: string, solar_system_id: int, upgrade_level: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2713,9 +2740,9 @@ export def "get-characters-character-id-planets" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/planets/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2747,7 +2774,7 @@ export def "get-characters-character-id-planets-planet-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<links: table<destination_pin_id: int, link_level: int, source_pin_id: int>, pins: table<contents: list, expiry_time: string, extractor_details: record, factory_details: record, install_time: string, last_cycle_start: string, latitude: float, longitude: float, pin_id: int, schematic_id: int, type_id: int>, routes: table<content_type_id: int, destination_pin_id: int, quantity: float, route_id: int, source_pin_id: int, waypoints: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2757,9 +2784,9 @@ export def "get-characters-character-id-planets-planet-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id), planet_id: (encode-path-segment $planet_id)} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2798,9 +2825,9 @@ export def "get-characters-character-id-portrait" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/portrait/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2831,7 +2858,7 @@ export def "get-characters-character-id-roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2840,9 +2867,9 @@ export def "get-characters-character-id-roles" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/roles/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2877,7 +2904,7 @@ export def "get-characters-character-id-search" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --search: string # The string to search on (required)
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>, structure: list<int>>, string, nothing> {
@@ -2889,9 +2916,9 @@ export def "get-characters-character-id-search" [
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/search/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2922,7 +2949,7 @@ export def "get-characters-character-id-ship" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<ship_item_id: int, ship_name: string, ship_type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2931,9 +2958,9 @@ export def "get-characters-character-id-ship" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/ship/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2964,7 +2991,7 @@ export def "get-characters-character-id-skillqueue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<finish_date: string, finished_level: int, level_end_sp: int, level_start_sp: int, queue_position: int, skill_id: int, start_date: string, training_start_sp: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2973,9 +3000,9 @@ export def "get-characters-character-id-skillqueue" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skillqueue/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3006,7 +3033,7 @@ export def "get-characters-character-id-skills" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<skills: table<active_skill_level: int, skill_id: int, skillpoints_in_skill: int, trained_skill_level: int>, total_sp: int, unallocated_sp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3015,9 +3042,9 @@ export def "get-characters-character-id-skills" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/skills/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3048,7 +3075,7 @@ export def "get-characters-character-id-standings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<from_id: int, from_type: string, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3057,9 +3084,9 @@ export def "get-characters-character-id-standings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/standings/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3090,7 +3117,7 @@ export def "get-characters-character-id-stats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character: record<days_of_activity: int, minutes: int, sessions_started: int>, combat: record<cap_drainedby_npc: int, cap_drainedby_pc: int, cap_draining_pc: int, criminal_flag_set: int, damage_from_np_cs_amount: int, damage_from_np_cs_num_shots: int, damage_from_players_bomb_amount: int, damage_from_players_bomb_num_shots: int, damage_from_players_combat_drone_amount: int, damage_from_players_combat_drone_num_shots: int, damage_from_players_energy_amount: int, damage_from_players_energy_num_shots: int, damage_from_players_fighter_bomber_amount: int, damage_from_players_fighter_bomber_num_shots: int, damage_from_players_fighter_drone_amount: int, damage_from_players_fighter_drone_num_shots: int, damage_from_players_hybrid_amount: int, damage_from_players_hybrid_num_shots: int, damage_from_players_missile_amount: int, damage_from_players_missile_num_shots: int, damage_from_players_projectile_amount: int, damage_from_players_projectile_num_shots: int, damage_from_players_smart_bomb_amount: int, damage_from_players_smart_bomb_num_shots: int, damage_from_players_super_amount: int, damage_from_players_super_num_shots: int, damage_from_structures_total_amount: int, damage_from_structures_total_num_shots: int, damage_to_players_bomb_amount: int, damage_to_players_bomb_num_shots: int, damage_to_players_combat_drone_amount: int, damage_to_players_combat_drone_num_shots: int, damage_to_players_energy_amount: int, damage_to_players_energy_num_shots: int, damage_to_players_fighter_bomber_amount: int, damage_to_players_fighter_bomber_num_shots: int, damage_to_players_fighter_drone_amount: int, damage_to_players_fighter_drone_num_shots: int, damage_to_players_hybrid_amount: int, damage_to_players_hybrid_num_shots: int, damage_to_players_missile_amount: int, damage_to_players_missile_num_shots: int, damage_to_players_projectile_amount: int, damage_to_players_projectile_num_shots: int, damage_to_players_smart_bomb_amount: int, damage_to_players_smart_bomb_num_shots: int, damage_to_players_super_amount: int, damage_to_players_super_num_shots: int, damage_to_structures_total_amount: int, damage_to_structures_total_num_shots: int, deaths_high_sec: int, deaths_low_sec: int, deaths_null_sec: int, deaths_pod_high_sec: int, deaths_pod_low_sec: int, deaths_pod_null_sec: int, deaths_pod_wormhole: int, deaths_wormhole: int, drone_engage: int, dscans: int, duel_requested: int, engagement_register: int, kills_assists: int, kills_high_sec: int, kills_low_sec: int, kills_null_sec: int, kills_pod_high_sec: int, kills_pod_low_sec: int, kills_pod_null_sec: int, kills_pod_wormhole: int, kills_wormhole: int, npc_flag_set: int, probe_scans: int, pvp_flag_set: int, repair_armor_by_remote_amount: int, repair_armor_remote_amount: int, repair_armor_self_amount: int, repair_capacitor_by_remote_amount: int, repair_capacitor_remote_amount: int, repair_capacitor_self_amount: int, repair_hull_by_remote_amount: int, repair_hull_remote_amount: int, repair_hull_self_amount: int, repair_shield_by_remote_amount: int, repair_shield_remote_amount: int, repair_shield_self_amount: int, self_destructs: int, warp_scramble_pc: int, warp_scrambledby_npc: int, warp_scrambledby_pc: int, weapon_flag_set: int, webifiedby_npc: int, webifiedby_pc: int, webifying_pc: int>, industry: record<hacking_successes: int, jobs_cancelled: int, jobs_completed_copy_blueprint: int, jobs_completed_invention: int, jobs_completed_manufacture: int, jobs_completed_manufacture_asteroid: int, jobs_completed_manufacture_asteroid_quantity: int, jobs_completed_manufacture_charge: int, jobs_completed_manufacture_charge_quantity: int, jobs_completed_manufacture_commodity: int, jobs_completed_manufacture_commodity_quantity: int, jobs_completed_manufacture_deployable: int, jobs_completed_manufacture_deployable_quantity: int, jobs_completed_manufacture_drone: int, jobs_completed_manufacture_drone_quantity: int, jobs_completed_manufacture_implant: int, jobs_completed_manufacture_implant_quantity: int, jobs_completed_manufacture_module: int, jobs_completed_manufacture_module_quantity: int, jobs_completed_manufacture_other: int, jobs_completed_manufacture_other_quantity: int, jobs_completed_manufacture_ship: int, jobs_completed_manufacture_ship_quantity: int, jobs_completed_manufacture_structure: int, jobs_completed_manufacture_structure_quantity: int, jobs_completed_manufacture_subsystem: int, jobs_completed_manufacture_subsystem_quantity: int, jobs_completed_material_productivity: int, jobs_completed_time_productivity: int, jobs_started_copy_blueprint: int, jobs_started_invention: int, jobs_started_manufacture: int, jobs_started_material_productivity: int, jobs_started_time_productivity: int, reprocess_item: int, reprocess_item_quantity: int>, inventory: record<abandon_loot_quantity: int, trash_item_quantity: int>, isk: record<in: int, out: int>, market: record<accept_contracts_courier: int, accept_contracts_item_exchange: int, buy_orders_placed: int, cancel_market_order: int, create_contracts_auction: int, create_contracts_courier: int, create_contracts_item_exchange: int, deliver_courier_contract: int, isk_gained: int, isk_spent: int, modify_market_order: int, search_contracts: int, sell_orders_placed: int>, mining: record<drone_mine: int, ore_arkonor: int, ore_bistot: int, ore_crokite: int, ore_dark_ochre: int, ore_gneiss: int, ore_harvestable_cloud: int, ore_hedbergite: int, ore_hemorphite: int, ore_ice: int, ore_jaspet: int, ore_kernite: int, ore_mercoxit: int, ore_omber: int, ore_plagioclase: int, ore_pyroxeres: int, ore_scordite: int, ore_spodumain: int, ore_veldspar: int>, module: record<activations_armor_hardener: int, activations_armor_repair_unit: int, activations_armor_resistance_shift_hardener: int, activations_automated_targeting_system: int, activations_bastion: int, activations_bomb_launcher: int, activations_capacitor_booster: int, activations_cargo_scanner: int, activations_cloaking_device: int, activations_clone_vat_bay: int, activations_cynosural_field: int, activations_damage_control: int, activations_data_miners: int, activations_drone_control_unit: int, activations_drone_tracking_modules: int, activations_eccm: int, activations_ecm: int, activations_ecm_burst: int, activations_energy_destabilizer: int, activations_energy_vampire: int, activations_energy_weapon: int, activations_festival_launcher: int, activations_frequency_mining_laser: int, activations_fueled_armor_repairer: int, activations_fueled_shield_booster: int, activations_gang_coordinator: int, activations_gas_cloud_harvester: int, activations_hull_repair_unit: int, activations_hybrid_weapon: int, activations_industrial_core: int, activations_interdiction_sphere_launcher: int, activations_micro_jump_drive: int, activations_mining_laser: int, activations_missile_launcher: int, activations_passive_targeting_system: int, activations_probe_launcher: int, activations_projected_eccm: int, activations_projectile_weapon: int, activations_propulsion_module: int, activations_remote_armor_repairer: int, activations_remote_capacitor_transmitter: int, activations_remote_ecm_burst: int, activations_remote_hull_repairer: int, activations_remote_sensor_booster: int, activations_remote_sensor_damper: int, activations_remote_shield_booster: int, activations_remote_tracking_computer: int, activations_salvager: int, activations_sensor_booster: int, activations_shield_booster: int, activations_shield_hardener: int, activations_ship_scanner: int, activations_siege: int, activations_smart_bomb: int, activations_stasis_web: int, activations_strip_miner: int, activations_super_weapon: int, activations_survey_scanner: int, activations_target_breaker: int, activations_target_painter: int, activations_tracking_computer: int, activations_tracking_disruptor: int, activations_tractor_beam: int, activations_triage: int, activations_warp_disrupt_field_generator: int, activations_warp_scrambler: int, link_weapons: int, overload: int, repairs: int>, orbital: record<strike_characters_killed: int, strike_damage_to_players_armor_amount: int, strike_damage_to_players_shield_amount: int>, pve: record<dungeons_completed_agent: int, dungeons_completed_distribution: int, missions_succeeded: int, missions_succeeded_epic_arc: int>, social: record<add_contact_bad: int, add_contact_good: int, add_contact_high: int, add_contact_horrible: int, add_contact_neutral: int, add_note: int, added_as_contact_bad: int, added_as_contact_good: int, added_as_contact_high: int, added_as_contact_horrible: int, added_as_contact_neutral: int, calendar_event_created: int, chat_messages_alliance: int, chat_messages_constellation: int, chat_messages_corporation: int, chat_messages_fleet: int, chat_messages_region: int, chat_messages_solarsystem: int, chat_messages_warfaction: int, chat_total_message_length: int, direct_trades: int, fleet_broadcasts: int, fleet_joins: int, mails_received: int, mails_sent: int>, travel: record<acceleration_gate_activations: int, align_to: int, distance_warped_high_sec: int, distance_warped_low_sec: int, distance_warped_null_sec: int, distance_warped_wormhole: int, docks_high_sec: int, docks_low_sec: int, docks_null_sec: int, jumps_stargate_high_sec: int, jumps_stargate_low_sec: int, jumps_stargate_null_sec: int, jumps_wormhole: int, warps_high_sec: int, warps_low_sec: int, warps_null_sec: int, warps_to_bookmark: int, warps_to_celestial: int, warps_to_fleet_member: int, warps_to_scan_result: int, warps_wormhole: int>, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3099,9 +3126,9 @@ export def "get-characters-character-id-stats" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/stats/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3132,7 +3159,7 @@ export def "get-characters-character-id-titles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<name: string, title_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3141,9 +3168,9 @@ export def "get-characters-character-id-titles" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/titles/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3174,7 +3201,7 @@ export def "get-characters-character-id-wallet" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<float, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3183,9 +3210,9 @@ export def "get-characters-character-id-wallet" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3217,7 +3244,7 @@ export def "get-characters-character-id-wallet-journal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3226,9 +3253,9 @@ export def "get-characters-character-id-wallet-journal" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/journal/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3260,7 +3287,7 @@ export def "get-characters-character-id-wallet-transactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-id: int # Only show transactions happened before the one referenced by this id (format: int64)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<client_id: int, date: string, is_buy: bool, is_personal: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3269,9 +3296,9 @@ export def "get-characters-character-id-wallet-transactions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({character_id: (encode-path-segment $character_id)} | format pattern "/characters/{character_id}/wallet/transactions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3311,9 +3338,9 @@ export def "get-contracts-public-bids-contract-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/bids/{contract_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3353,9 +3380,9 @@ export def "get-contracts-public-items-contract-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({contract_id: (encode-path-segment $contract_id)} | format pattern "/contracts/public/items/{contract_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3395,9 +3422,9 @@ export def "get-contracts-public-region-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/contracts/public/{region_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3429,7 +3456,7 @@ export def "get-corporation-corporation-id-mining-extractions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<chunk_arrival_time: string, extraction_start_time: string, moon_id: int, natural_decay_time: string, structure_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3438,9 +3465,9 @@ export def "get-corporation-corporation-id-mining-extractions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3472,7 +3499,7 @@ export def "get-corporation-corporation-id-mining-observers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<last_updated: string, observer_id: int, observer_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3481,9 +3508,9 @@ export def "get-corporation-corporation-id-mining-observers" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3516,7 +3543,7 @@ export def "get-corporation-corporation-id-mining-observers-observer-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, last_updated: string, quantity: int, recorded_corporation_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3526,9 +3553,9 @@ export def "get-corporation-corporation-id-mining-observers-observer-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), observer_id: (encode-path-segment $observer_id)} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3565,9 +3592,9 @@ export def "get-corporations-npccorps" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/corporations/npccorps/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3606,9 +3633,9 @@ export def "get-corporations-corporation-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3647,9 +3674,9 @@ export def "get-corporations-corporation-id-alliancehistory" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3681,7 +3708,7 @@ export def "get-corporations-corporation-id-assets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3690,9 +3717,9 @@ export def "get-corporations-corporation-id-assets" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3723,7 +3750,7 @@ export def "post-corporations-corporation-id-assets-locations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --body: list
 ]: any -> oneof<table<item_id: int, position: record<x: float, y: float, z: float>>, string, record, nothing> {
   let input = $in
@@ -3733,9 +3760,9 @@ export def "post-corporations-corporation-id-assets-locations" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3766,7 +3793,7 @@ export def "post-corporations-corporation-id-assets-names" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --body: list
 ]: any -> oneof<table<item_id: int, name: string>, string, record, nothing> {
   let input = $in
@@ -3776,9 +3803,9 @@ export def "post-corporations-corporation-id-assets-names" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/assets/names/") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3810,7 +3837,7 @@ export def "get-corporations-corporation-id-blueprints" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3819,9 +3846,9 @@ export def "get-corporations-corporation-id-blueprints" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/blueprints/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3853,7 +3880,7 @@ export def "get-corporations-corporation-id-bookmarks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3862,9 +3889,9 @@ export def "get-corporations-corporation-id-bookmarks" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3896,7 +3923,7 @@ export def "get-corporations-corporation-id-bookmarks-folders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<creator_id: int, folder_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3905,9 +3932,9 @@ export def "get-corporations-corporation-id-bookmarks-folders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3939,7 +3966,7 @@ export def "get-corporations-corporation-id-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<contact_id: int, contact_type: string, is_watched: bool, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3948,9 +3975,9 @@ export def "get-corporations-corporation-id-contacts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3981,7 +4008,7 @@ export def "get-corporations-corporation-id-contacts-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3990,9 +4017,9 @@ export def "get-corporations-corporation-id-contacts-labels" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4024,7 +4051,7 @@ export def "get-corporations-corporation-id-containers-logs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<action: string, character_id: int, container_id: int, container_type_id: int, location_flag: string, location_id: int, logged_at: string, new_config_bitmask: int, old_config_bitmask: int, password_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4033,9 +4060,9 @@ export def "get-corporations-corporation-id-containers-logs" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4067,7 +4094,7 @@ export def "get-corporations-corporation-id-contracts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4076,9 +4103,9 @@ export def "get-corporations-corporation-id-contracts" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/contracts/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4111,7 +4138,7 @@ export def "get-corporations-corporation-id-contracts-contract-id-bids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<amount: float, bid_id: int, bidder_id: int, date_bid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4121,9 +4148,9 @@ export def "get-corporations-corporation-id-contracts-contract-id-bids" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4155,7 +4182,7 @@ export def "get-corporations-corporation-id-contracts-contract-id-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4165,9 +4192,9 @@ export def "get-corporations-corporation-id-contracts-contract-id-items" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), contract_id: (encode-path-segment $contract_id)} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4199,7 +4226,7 @@ export def "get-corporations-corporation-id-customs-offices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<alliance_tax_rate: float, allow_access_with_standings: bool, allow_alliance_access: bool, bad_standing_tax_rate: float, corporation_tax_rate: float, excellent_standing_tax_rate: float, good_standing_tax_rate: float, neutral_standing_tax_rate: float, office_id: int, reinforce_exit_end: int, reinforce_exit_start: int, standing_level: string, system_id: int, terrible_standing_tax_rate: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4208,9 +4235,9 @@ export def "get-corporations-corporation-id-customs-offices" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4241,7 +4268,7 @@ export def "get-corporations-corporation-id-divisions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<hangar: table<division: int, name: string>, wallet: table<division: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4250,9 +4277,9 @@ export def "get-corporations-corporation-id-divisions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/divisions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4283,7 +4310,7 @@ export def "get-corporations-corporation-id-facilities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<facility_id: int, system_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4292,9 +4319,9 @@ export def "get-corporations-corporation-id-facilities" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/facilities/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4325,7 +4352,7 @@ export def "get-corporations-corporation-id-fw-stats" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<enlisted_on: string, faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, victory_points: record<last_week: int, total: int, yesterday: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4334,9 +4361,9 @@ export def "get-corporations-corporation-id-fw-stats" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4375,9 +4402,9 @@ export def "get-corporations-corporation-id-icons" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/icons/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4410,7 +4437,7 @@ export def "get-corporations-corporation-id-industry-jobs" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --include-completed: oneof<nothing, bool> # Whether to retrieve completed corporation industry jobs. Only includes jobs from the past 90 days (default: false)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, location_id: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, status: string, successful_runs: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4419,9 +4446,9 @@ export def "get-corporations-corporation-id-industry-jobs" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4453,7 +4480,7 @@ export def "get-corporations-corporation-id-killmails-recent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<killmail_hash: string, killmail_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4462,9 +4489,9 @@ export def "get-corporations-corporation-id-killmails-recent" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4496,7 +4523,7 @@ export def "get-corporations-corporation-id-medals" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<created_at: string, creator_id: int, description: string, medal_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4505,9 +4532,9 @@ export def "get-corporations-corporation-id-medals" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4539,7 +4566,7 @@ export def "get-corporations-corporation-id-medals-issued" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, issued_at: string, issuer_id: int, medal_id: int, reason: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4548,9 +4575,9 @@ export def "get-corporations-corporation-id-medals-issued" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4581,7 +4608,7 @@ export def "get-corporations-corporation-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4590,9 +4617,9 @@ export def "get-corporations-corporation-id-members" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4623,7 +4650,7 @@ export def "get-corporations-corporation-id-members-limit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4632,9 +4659,9 @@ export def "get-corporations-corporation-id-members-limit" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/limit/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4665,7 +4692,7 @@ export def "get-corporations-corporation-id-members-titles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, titles: list<int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4674,9 +4701,9 @@ export def "get-corporations-corporation-id-members-titles" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/members/titles/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4707,7 +4734,7 @@ export def "get-corporations-corporation-id-membertracking" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<base_id: int, character_id: int, location_id: int, logoff_date: string, logon_date: string, ship_type_id: int, start_date: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4716,9 +4743,9 @@ export def "get-corporations-corporation-id-membertracking" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/membertracking/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4750,7 +4777,7 @@ export def "get-corporations-corporation-id-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int, wallet_division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4759,9 +4786,9 @@ export def "get-corporations-corporation-id-orders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4793,7 +4820,7 @@ export def "get-corporations-corporation-id-orders-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int, wallet_division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4802,9 +4829,9 @@ export def "get-corporations-corporation-id-orders-history" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/orders/history/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4835,7 +4862,7 @@ export def "get-corporations-corporation-id-roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4844,9 +4871,9 @@ export def "get-corporations-corporation-id-roles" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4878,7 +4905,7 @@ export def "get-corporations-corporation-id-roles-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<changed_at: string, character_id: int, issuer_id: int, new_roles: list<string>, old_roles: list<string>, role_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4887,9 +4914,9 @@ export def "get-corporations-corporation-id-roles-history" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/roles/history/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4921,7 +4948,7 @@ export def "get-corporations-corporation-id-shareholders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<share_count: int, shareholder_id: int, shareholder_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4930,9 +4957,9 @@ export def "get-corporations-corporation-id-shareholders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/shareholders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4964,7 +4991,7 @@ export def "get-corporations-corporation-id-standings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<from_id: int, from_type: string, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4973,9 +5000,9 @@ export def "get-corporations-corporation-id-standings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/standings/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5007,7 +5034,7 @@ export def "get-corporations-corporation-id-starbases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<moon_id: int, onlined_since: string, reinforced_until: string, starbase_id: int, state: string, system_id: int, type_id: int, unanchor_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5016,9 +5043,9 @@ export def "get-corporations-corporation-id-starbases" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/starbases/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5051,7 +5078,7 @@ export def "get-corporations-corporation-id-starbases-starbase-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --system-id: int # The solar system this starbase (POS) is located in, (required, format: int32)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<allow_alliance_members: bool, allow_corporation_members: bool, anchor: string, attack_if_at_war: bool, attack_if_other_security_status_dropping: bool, attack_security_status_threshold: float, attack_standing_threshold: float, fuel_bay_take: string, fuel_bay_view: string, fuels: table<quantity: int, type_id: int>, offline: string, online: string, unanchor: string, use_alliance_standings: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5062,9 +5089,9 @@ export def "get-corporations-corporation-id-starbases-starbase-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "system_id" $system_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), starbase_id: (encode-path-segment $starbase_id)} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5097,7 +5124,7 @@ export def "get-corporations-corporation-id-structures" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<corporation_id: int, fuel_expires: string, next_reinforce_apply: string, next_reinforce_hour: int, next_reinforce_weekday: int, profile_id: int, reinforce_hour: int, reinforce_weekday: int, services: list<record>, state: string, state_timer_end: string, state_timer_start: string, structure_id: int, system_id: int, type_id: int, unanchors_at: string>, string, record, nothing> {
@@ -5107,9 +5134,9 @@ export def "get-corporations-corporation-id-structures" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/structures/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5140,7 +5167,7 @@ export def "get-corporations-corporation-id-titles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, name: string, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>, title_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5149,9 +5176,9 @@ export def "get-corporations-corporation-id-titles" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/titles/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5182,7 +5209,7 @@ export def "get-corporations-corporation-id-wallets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<balance: float, division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5191,9 +5218,9 @@ export def "get-corporations-corporation-id-wallets" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/corporations/{corporation_id}/wallets/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5226,7 +5253,7 @@ export def "get-corporations-corporation-id-wallets-division-journal" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5236,9 +5263,9 @@ export def "get-corporations-corporation-id-wallets-division-journal" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5271,7 +5298,7 @@ export def "get-corporations-corporation-id-wallets-division-transactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-id: int # Only show journal entries happened before the transaction referenced by this id (format: int64)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<client_id: int, date: string, is_buy: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5281,9 +5308,9 @@ export def "get-corporations-corporation-id-wallets-division-transactions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id), division: (encode-path-segment $division)} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5320,9 +5347,9 @@ export def "get-dogma-attributes" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/attributes/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5361,9 +5388,9 @@ export def "get-dogma-attributes-attribute-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({attribute_id: (encode-path-segment $attribute_id)} | format pattern "/dogma/attributes/{attribute_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5404,9 +5431,9 @@ export def "get-dogma-dynamic-items-type-id-item-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type_id: (encode-path-segment $type_id), item_id: (encode-path-segment $item_id)} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5443,9 +5470,9 @@ export def "get-dogma-effects" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/effects/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5484,9 +5511,9 @@ export def "get-dogma-effects-effect-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({effect_id: (encode-path-segment $effect_id)} | format pattern "/dogma/effects/{effect_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5517,7 +5544,7 @@ export def "get-fleets-fleet-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<is_free_move: bool, is_registered: bool, is_voice_enabled: bool, motd: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5526,9 +5553,9 @@ export def "get-fleets-fleet-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5559,7 +5586,7 @@ export def "put-fleets-fleet-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --is-free-move: oneof<nothing, bool> # Should free-move be enabled in the fleet
   --motd: string # New fleet MOTD in CCP flavoured HTML
 ]: any -> any {
@@ -5570,9 +5597,9 @@ export def "put-fleets-fleet-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/") $qp $auth.query)
   let req_body = {"is_free_move": $is_free_move, "motd": $motd} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5604,7 +5631,7 @@ export def "get-fleets-fleet-id-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<character_id: int, join_time: string, role: string, role_name: string, ship_type_id: int, solar_system_id: int, squad_id: int, station_id: int, takes_fleet_warp: bool, wing_id: int>, string, record, nothing> {
@@ -5614,9 +5641,9 @@ export def "get-fleets-fleet-id-members" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5647,7 +5674,7 @@ export def "post-fleets-fleet-id-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   character_id: int # The character you want to invite (format: int32)
   role: string@role-completer # If a character is invited with the `fleet_commander` role, neither `wing_id` or `squad_id` should be specified. If a character is invited with the `wing_commander` role, only `wing_id` should be specified. If a character is invited with the `squad_commander` role, both `wing_id` and `squad_id` should be specified. If a character is invited with the `squad_member` role, `wing_id` and `squad_id` should either both be specified or not specified at all. If they aren’t specified, the invited character will join any squad with available positions.
   --squad-id: int # squad_id integer (format: int64)
@@ -5660,9 +5687,9 @@ export def "post-fleets-fleet-id-members" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/members/") $qp $auth.query)
   let req_body = {"character_id": $character_id, "role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5694,7 +5721,7 @@ export def "delete-fleets-fleet-id-members-member-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5703,7 +5730,7 @@ export def "delete-fleets-fleet-id-members-member-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5735,7 +5762,7 @@ export def "put-fleets-fleet-id-members-member-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   role: string@role-completer # If a character is moved to the `fleet_commander` role, neither `wing_id` or `squad_id` should be specified. If a character is moved to the `wing_commander` role, only `wing_id` should be specified. If a character is moved to the `squad_commander` role, both `wing_id` and `squad_id` should be specified. If a character is moved to the `squad_member` role, both `wing_id` and `squad_id` should be specified.
   --squad-id: int # squad_id integer (format: int64)
   --wing-id: int # wing_id integer (format: int64)
@@ -5748,9 +5775,9 @@ export def "put-fleets-fleet-id-members-member-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), member_id: (encode-path-segment $member_id)} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp $auth.query)
   let req_body = {"role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5782,7 +5809,7 @@ export def "delete-fleets-fleet-id-squads-squad-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5791,7 +5818,7 @@ export def "delete-fleets-fleet-id-squads-squad-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5823,7 +5850,7 @@ export def "put-fleets-fleet-id-squads-squad-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   name: string # name string
 ]: any -> any {
   let input = $in
@@ -5834,9 +5861,9 @@ export def "put-fleets-fleet-id-squads-squad-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), squad_id: (encode-path-segment $squad_id)} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5868,7 +5895,7 @@ export def "get-fleets-fleet-id-wings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<id: int, name: string, squads: list<record>>, string, record, nothing> {
@@ -5878,9 +5905,9 @@ export def "get-fleets-fleet-id-wings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5911,7 +5938,7 @@ export def "post-fleets-fleet-id-wings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> oneof<record<wing_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5919,7 +5946,7 @@ export def "post-fleets-fleet-id-wings" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id)} | format pattern "/fleets/{fleet_id}/wings/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5951,7 +5978,7 @@ export def "delete-fleets-fleet-id-wings-wing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5960,7 +5987,7 @@ export def "delete-fleets-fleet-id-wings-wing-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5992,7 +6019,7 @@ export def "put-fleets-fleet-id-wings-wing-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   name: string # name string
 ]: any -> any {
   let input = $in
@@ -6003,9 +6030,9 @@ export def "put-fleets-fleet-id-wings-wing-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6037,7 +6064,7 @@ export def "post-fleets-fleet-id-wings-wing-id-squads" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> oneof<record<squad_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6046,7 +6073,7 @@ export def "post-fleets-fleet-id-wings-wing-id-squads" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fleet_id: (encode-path-segment $fleet_id), wing_id: (encode-path-segment $wing_id)} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6083,9 +6110,9 @@ export def "get-fw-leaderboards" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6122,9 +6149,9 @@ export def "get-fw-leaderboards-characters" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/characters/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6161,9 +6188,9 @@ export def "get-fw-leaderboards-corporations" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/corporations/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6200,9 +6227,9 @@ export def "get-fw-stats" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/stats/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6239,9 +6266,9 @@ export def "get-fw-systems" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/systems/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6278,9 +6305,9 @@ export def "get-fw-wars" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/wars/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6317,9 +6344,9 @@ export def "get-incursions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/incursions/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6356,9 +6383,9 @@ export def "get-industry-facilities" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/facilities/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6395,9 +6422,9 @@ export def "get-industry-systems" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/systems/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6436,9 +6463,9 @@ export def "get-insurance-prices" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insurance/prices/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6479,9 +6506,9 @@ export def "get-killmails-killmail-id-killmail-hash" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({killmail_id: (encode-path-segment $killmail_id), killmail_hash: (encode-path-segment $killmail_hash)} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6520,9 +6547,9 @@ export def "get-loyalty-stores-corporation-id-offers" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({corporation_id: (encode-path-segment $corporation_id)} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6559,9 +6586,9 @@ export def "get-markets-groups" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6602,9 +6629,9 @@ export def "get-markets-groups-market-group-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({market_group_id: (encode-path-segment $market_group_id)} | format pattern "/markets/groups/{market_group_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6641,9 +6668,9 @@ export def "get-markets-prices" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/prices/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6675,7 +6702,7 @@ export def "get-markets-structures-structure-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6684,9 +6711,9 @@ export def "get-markets-structures-structure-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/markets/structures/{structure_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6727,9 +6754,9 @@ export def "get-markets-region-id-history" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/history/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6772,9 +6799,9 @@ export def "get-markets-region-id-orders" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/orders/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6814,9 +6841,9 @@ export def "get-markets-region-id-types" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/markets/{region_id}/types/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6853,9 +6880,9 @@ export def "get-opportunities-groups" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6896,9 +6923,9 @@ export def "get-opportunities-groups-group-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/opportunities/groups/{group_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6935,9 +6962,9 @@ export def "get-opportunities-tasks" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/tasks/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6976,9 +7003,9 @@ export def "get-opportunities-tasks-task-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/opportunities/tasks/{task_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7022,9 +7049,9 @@ export def "get-route-origin-destination" [
   let qp = [(serialize-qp "avoid" $avoid "csv") (serialize-qp "connections" $connections "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "flag" $flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/route/{origin}/{destination}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7068,9 +7095,9 @@ export def "get-search" [
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7107,9 +7134,9 @@ export def "get-sovereignty-campaigns" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/campaigns/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7146,9 +7173,9 @@ export def "get-sovereignty-map" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/map/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7185,9 +7212,9 @@ export def "get-sovereignty-structures" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/structures/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7224,9 +7251,9 @@ export def "get-status" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/status/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7259,7 +7286,7 @@ export def "post-ui-autopilot-waypoint" [
   --clear-other-waypoints: oneof<nothing, bool> # Whether clean other waypoints beforing adding this one (required, default: false)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --destination-id: int # The destination to travel to, can be solar system, station or structure's id (required, format: int64)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7269,7 +7296,7 @@ export def "post-ui-autopilot-waypoint" [
   let qp = [(serialize-qp "add_to_beginning" $add_to_beginning "scalar") (serialize-qp "clear_other_waypoints" $clear_other_waypoints "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "destination_id" $destination_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/autopilot/waypoint/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7300,7 +7327,7 @@ export def "post-ui-openwindow-contract" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --contract-id: int # The contract to open (required, format: int32)
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7308,7 +7335,7 @@ export def "post-ui-openwindow-contract" [
   let qp = [(serialize-qp "contract_id" $contract_id "scalar") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/contract/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7339,7 +7366,7 @@ export def "post-ui-openwindow-information" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --target-id: int # The target to open (required, format: int32)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7347,7 +7374,7 @@ export def "post-ui-openwindow-information" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "target_id" $target_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/information/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7377,7 +7404,7 @@ export def "post-ui-openwindow-marketdetails" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --type-id: int # The item type to open in market window (required, format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7386,7 +7413,7 @@ export def "post-ui-openwindow-marketdetails" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/marketdetails/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7416,7 +7443,7 @@ export def "post-ui-openwindow-newmail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   body: string # body string
   recipients: list<int> # recipients array
   subject: string # subject string
@@ -7429,9 +7456,9 @@ export def "post-ui-openwindow-newmail" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/newmail/" $qp $auth.query)
   let req_body = {"body": $body, "recipients": $recipients, "subject": $subject, "to_corp_or_alliance_id": $to_corp_or_alliance_id, "to_mailing_list_id": $to_mailing_list_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7470,9 +7497,9 @@ export def "get-universe-ancestries" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ancestries/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7511,9 +7538,9 @@ export def "get-universe-asteroid-belts-asteroid-belt-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({asteroid_belt_id: (encode-path-segment $asteroid_belt_id)} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7552,9 +7579,9 @@ export def "get-universe-bloodlines" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/bloodlines/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7591,9 +7618,9 @@ export def "get-universe-categories" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/categories/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7634,9 +7661,9 @@ export def "get-universe-categories-category-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/universe/categories/{category_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7673,9 +7700,9 @@ export def "get-universe-constellations" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/constellations/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7716,9 +7743,9 @@ export def "get-universe-constellations-constellation-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({constellation_id: (encode-path-segment $constellation_id)} | format pattern "/universe/constellations/{constellation_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7757,9 +7784,9 @@ export def "get-universe-factions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/factions/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7796,9 +7823,9 @@ export def "get-universe-graphics" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/graphics/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7837,9 +7864,9 @@ export def "get-universe-graphics-graphic-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({graphic_id: (encode-path-segment $graphic_id)} | format pattern "/universe/graphics/{graphic_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7877,9 +7904,9 @@ export def "get-universe-groups" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7920,9 +7947,9 @@ export def "get-universe-groups-group-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/universe/groups/{group_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7962,11 +7989,11 @@ export def "post-universe-ids" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ids/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8005,9 +8032,9 @@ export def "get-universe-moons-moon-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({moon_id: (encode-path-segment $moon_id)} | format pattern "/universe/moons/{moon_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8045,9 +8072,9 @@ export def "post-universe-names" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/names/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8086,9 +8113,9 @@ export def "get-universe-planets-planet-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({planet_id: (encode-path-segment $planet_id)} | format pattern "/universe/planets/{planet_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8127,9 +8154,9 @@ export def "get-universe-races" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/races/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8166,9 +8193,9 @@ export def "get-universe-regions" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/regions/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8209,9 +8236,9 @@ export def "get-universe-regions-region-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/universe/regions/{region_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8250,9 +8277,9 @@ export def "get-universe-schematics-schematic-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({schematic_id: (encode-path-segment $schematic_id)} | format pattern "/universe/schematics/{schematic_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8291,9 +8318,9 @@ export def "get-universe-stargates-stargate-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stargate_id: (encode-path-segment $stargate_id)} | format pattern "/universe/stargates/{stargate_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8332,9 +8359,9 @@ export def "get-universe-stars-star-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({star_id: (encode-path-segment $star_id)} | format pattern "/universe/stars/{star_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8373,9 +8400,9 @@ export def "get-universe-stations-station-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station_id: (encode-path-segment $station_id)} | format pattern "/universe/stations/{station_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8413,9 +8440,9 @@ export def "get-universe-structures" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/structures/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8446,7 +8473,7 @@ export def "get-universe-structures-structure-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --qp-token: string # Access token to use if unable to set a header
+  --qp-token: string # Access token to use if unable to set a header (spec name: token)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> oneof<record<name: string, owner_id: int, position: record<x: float, y: float, z: float>, solar_system_id: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8455,9 +8482,9 @@ export def "get-universe-structures-structure-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({structure_id: (encode-path-segment $structure_id)} | format pattern "/universe/structures/{structure_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8494,9 +8521,9 @@ export def "get-universe-system-jumps" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_jumps/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8533,9 +8560,9 @@ export def "get-universe-system-kills" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_kills/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8572,9 +8599,9 @@ export def "get-universe-systems" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/systems/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8615,9 +8642,9 @@ export def "get-universe-systems-system-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_id: (encode-path-segment $system_id)} | format pattern "/universe/systems/{system_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8655,9 +8682,9 @@ export def "get-universe-types" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/types/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8698,9 +8725,9 @@ export def "get-universe-types-type-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/universe/types/{type_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8738,9 +8765,9 @@ export def "get-wars" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "max_war_id" $max_war_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wars/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8779,9 +8806,9 @@ export def "get-wars-war-id" [
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8821,9 +8848,9 @@ export def "get-wars-war-id-killmails" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({war_id: (encode-path-segment $war_id)} | format pattern "/wars/{war_id}/killmails/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -213,9 +240,9 @@ export def "get-calendars-all-dvd-start-date-days" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/dvd/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -254,9 +281,9 @@ export def "get-calendars-all-movies-start-date-days" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/movies/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -295,9 +322,9 @@ export def "get-calendars-all-shows-new-start-date-days" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/new/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -336,9 +363,9 @@ export def "get-calendars-all-shows-premieres-start-date-days" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/premieres/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -377,9 +404,9 @@ export def "get-calendars-all-shows-start-date-days" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/all/shows/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -419,9 +446,9 @@ export def "get-dvd-releases" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/dvd/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -461,9 +488,9 @@ export def "get-movies" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/movies/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -503,9 +530,9 @@ export def "get-new-shows" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/new/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -545,9 +572,9 @@ export def "get-season-premieres" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/premieres/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -587,9 +614,9 @@ export def "get-shows" [
   if ($days | is-empty) { error make --unspanned { msg: "path parameter 'days' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date), days: (encode-path-segment $days)} | format pattern "/calendars/my/shows/{start_date}/{days}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -627,9 +654,9 @@ export def "get-certifications" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/certifications/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -665,9 +692,9 @@ export def "delete-any-active-checkins" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkin" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -709,11 +736,11 @@ export def "check-into-an-item" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkin" $auth.query)
   let req_body = {"app_date": $app_date, "app_version": $app_version, "message": $message, "movie": $movie, "sharing": $sharing} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -754,11 +781,11 @@ export def "post-a-comment" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/comments" $auth.query)
   let req_body = {"comment": $comment, "movie": $movie, "sharing": $sharing, "spoiler": $spoiler} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -800,9 +827,9 @@ export def "get-recently-created-comments" [
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/recent/{comment_type}/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -844,9 +871,9 @@ export def "get-trending-comments" [
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/trending/{comment_type}/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -888,9 +915,9 @@ export def "get-recently-updated-comments" [
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/comments/updates/{comment_type}/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -928,9 +955,9 @@ export def "delete-a-comment-or-reply" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -968,9 +995,9 @@ export def "get-a-comment-or-reply" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1011,11 +1038,11 @@ export def "update-a-comment-or-reply" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}") $auth.query)
   let req_body = {"comment": $comment, "spoiler": $spoiler} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1053,9 +1080,9 @@ export def "get-the-attached-media-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/item") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1093,9 +1120,9 @@ export def "remove-like-on-a-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/like") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1133,9 +1160,9 @@ export def "like-a-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/like") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1173,9 +1200,9 @@ export def "get-all-users-who-liked-a-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/likes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1213,9 +1240,9 @@ export def "get-replies-for-a-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/replies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1256,11 +1283,11 @@ export def "post-a-reply-for-a-comment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/replies") $auth.query)
   let req_body = {"comment": $comment, "spoiler": $spoiler} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1298,9 +1325,9 @@ export def "get-countries" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/countries/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1338,9 +1365,9 @@ export def "get-genres" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/genres/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1378,9 +1405,9 @@ export def "get-languages" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/languages/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1416,9 +1443,9 @@ export def "get-popular-lists" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lists/popular" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1454,9 +1481,9 @@ export def "get-trending-lists" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lists/trending" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1494,9 +1521,9 @@ export def "get-list" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1536,9 +1563,9 @@ export def "get-all-list-comments" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/lists/{id}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1578,9 +1605,9 @@ export def "get-items-on-a-list" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/lists/{id}/items/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1618,9 +1645,9 @@ export def "get-all-users-who-liked-a-list" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/lists/{id}/likes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1656,9 +1683,9 @@ export def "get-the-most-anticipated-movies" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/movies/anticipated" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1694,9 +1721,9 @@ export def "get-the-weekend-box-office" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/movies/boxoffice" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1734,9 +1761,9 @@ export def "get-the-most-collected-movies" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/collected/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1774,9 +1801,9 @@ export def "get-the-most-played-movies" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/played/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1812,9 +1839,9 @@ export def "get-popular-movies" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/movies/popular" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1852,9 +1879,9 @@ export def "get-the-most-recommended-movies" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/recommended/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1890,9 +1917,9 @@ export def "get-trending-movies" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/movies/trending" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1930,9 +1957,9 @@ export def "get-recently-updated-movie-trakt-i-ds" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/movies/updates/id/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1970,9 +1997,9 @@ export def "get-recently-updated-movies" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/movies/updates/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2010,9 +2037,9 @@ export def "get-the-most-watched-movies" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/movies/watched/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2050,9 +2077,9 @@ export def "get-a-movie" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2090,9 +2117,9 @@ export def "get-all-movie-aliases" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/aliases") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2132,9 +2159,9 @@ export def "get-all-movie-comments" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/movies/{id}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2176,9 +2203,9 @@ export def "get-lists-containing-this-movie" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/movies/{id}/lists/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2216,9 +2243,9 @@ export def "get-all-people-for-a-movie" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/people") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2256,9 +2283,9 @@ export def "get-movie-ratings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/ratings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2296,9 +2323,9 @@ export def "get-related-movies" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/related") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2338,9 +2365,9 @@ export def "get-all-movie-releases" [
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), country: (encode-path-segment $country)} | format pattern "/movies/{id}/releases/{country}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2378,9 +2405,9 @@ export def "get-movie-stats" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2418,9 +2445,9 @@ export def "get-movie-studios" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/studios") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2460,9 +2487,9 @@ export def "get-all-movie-translations" [
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/movies/{id}/translations/{language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2500,9 +2527,9 @@ export def "get-users-watching-right-now" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/movies/{id}/watching") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2538,9 +2565,9 @@ export def "get-networks" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networks" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2582,7 +2609,7 @@ export def "authorize-application" [
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/authorize" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2618,9 +2645,9 @@ export def "generate-new-device-codes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/device/code" $auth.query)
   let req_body = {"client_id": $client_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2658,9 +2685,9 @@ export def "poll-for-the-access-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/device/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2691,16 +2718,16 @@ export def "revoke-an-access-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string
   --client-secret: string
-  --body-token: string
+  --body-token: string # (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/revoke" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2740,9 +2767,9 @@ export def "exchange-refresh-token-for-access-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2780,9 +2807,9 @@ export def "get-recently-updated-people-trakt-i-ds" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/people/updates/id/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2820,9 +2847,9 @@ export def "get-recently-updated-people" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/people/updates/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2860,9 +2887,9 @@ export def "get-a-single-person" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2904,9 +2931,9 @@ export def "get-lists-containing-this-person" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/people/{id}/lists/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2944,9 +2971,9 @@ export def "get-movie-credits" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}/movies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2984,9 +3011,9 @@ export def "get-show-credits" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/people/{id}/shows") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3025,9 +3052,9 @@ export def "get-movie-recommendations" [
   let qp = [(serialize-qp "ignore_collected" $ignore_collected "scalar") (serialize-qp "ignore_watchlisted" $ignore_watchlisted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recommendations/movies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3065,9 +3092,9 @@ export def "hide-a-movie-recommendation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recommendations/movies/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3106,9 +3133,9 @@ export def "get-show-recommendations" [
   let qp = [(serialize-qp "ignore_collected" $ignore_collected "scalar") (serialize-qp "ignore_watchlisted" $ignore_watchlisted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recommendations/shows" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3146,9 +3173,9 @@ export def "hide-a-show-recommendation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recommendations/shows/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3189,11 +3216,11 @@ export def "pause-watching-in-a-media-center" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/pause" $auth.query)
   let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3234,11 +3261,11 @@ export def "start-watching-in-a-media-center" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/start" $auth.query)
   let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3279,11 +3306,11 @@ export def "stop-or-finish-watching-in-a-media-center" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/stop" $auth.query)
   let req_body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3325,9 +3352,9 @@ export def "get-id-lookup-results" [
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_type: (encode-path-segment $id_type), id: (encode-path-segment $id)} | format pattern "/search/{id_type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3368,9 +3395,9 @@ export def "get-text-query-results" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/search/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3406,9 +3433,9 @@ export def "get-the-most-anticipated-shows" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shows/anticipated" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3446,9 +3473,9 @@ export def "get-the-most-collected-shows" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/collected/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3486,9 +3513,9 @@ export def "get-the-most-played-shows" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/played/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3524,9 +3551,9 @@ export def "get-popular-shows" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shows/popular" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3564,9 +3591,9 @@ export def "get-the-most-recommended-shows" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/recommended/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3602,9 +3629,9 @@ export def "get-trending-shows" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shows/trending" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3642,9 +3669,9 @@ export def "get-recently-updated-show-trakt-i-ds" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/shows/updates/id/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3682,9 +3709,9 @@ export def "get-recently-updated-shows" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'start_date' must be non-empty" } }
   let full_url = (build-url $base ({start_date: (encode-path-segment $start_date)} | format pattern "/shows/updates/{start_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3722,9 +3749,9 @@ export def "get-the-most-watched-shows" [
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
   let full_url = (build-url $base ({period: (encode-path-segment $period)} | format pattern "/shows/watched/{period}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3762,9 +3789,9 @@ export def "get-a-single-show" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3802,9 +3829,9 @@ export def "get-all-show-aliases" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/aliases") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3842,9 +3869,9 @@ export def "get-all-show-certifications" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/certifications") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3884,9 +3911,9 @@ export def "get-all-show-comments" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3924,9 +3951,9 @@ export def "get-last-episode" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/last_episode") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3968,9 +3995,9 @@ export def "get-lists-containing-this-show" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/lists/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4008,9 +4035,9 @@ export def "get-next-episode" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/next_episode") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4048,9 +4075,9 @@ export def "get-all-people-for-a-show" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/people") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4092,9 +4119,9 @@ export def "get-show-collection-progress" [
   let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/collection") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4136,9 +4163,9 @@ export def "get-show-watched-progress" [
   let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4176,9 +4203,9 @@ export def "undo-reset-show-progress" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched/reset") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4216,9 +4243,9 @@ export def "reset-show-progress" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/progress/watched/reset") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4256,9 +4283,9 @@ export def "get-show-ratings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/ratings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4296,9 +4323,9 @@ export def "get-related-shows" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/related") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4336,9 +4363,9 @@ export def "get-all-seasons-for-a-show" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/seasons") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4380,9 +4407,9 @@ export def "get-single-season-for-a-show" [
   let qp = [(serialize-qp "translations" $translations "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4424,9 +4451,9 @@ export def "get-all-season-comments" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4468,9 +4495,9 @@ export def "get-a-single-episode-for-a-show" [
   if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4514,9 +4541,9 @@ export def "get-all-episode-comments" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4562,9 +4589,9 @@ export def "get-lists-containing-this-episode" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/lists/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4606,9 +4633,9 @@ export def "get-all-people-for-an-episode" [
   if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/people") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4650,9 +4677,9 @@ export def "get-episode-ratings" [
   if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/ratings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4694,9 +4721,9 @@ export def "get-episode-stats" [
   if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4740,9 +4767,9 @@ export def "get-all-episode-translations" [
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode), language: (encode-path-segment $language)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/translations/{language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4783,9 +4810,9 @@ export def "get-shows-id-seasons-season-episodes-episode-watching" [
   if ($episode | is-empty) { error make --unspanned { msg: "path parameter 'episode' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), episode: (encode-path-segment $episode)} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/watching") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4829,9 +4856,9 @@ export def "get-lists-containing-this-season" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/shows/{id}/seasons/{season}/lists/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4871,9 +4898,9 @@ export def "get-all-people-for-a-season" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/people") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4913,9 +4940,9 @@ export def "get-season-ratings" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/ratings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4955,9 +4982,9 @@ export def "get-season-stats" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4999,9 +5026,9 @@ export def "get-all-season-translations" [
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season), language: (encode-path-segment $language)} | format pattern "/shows/{id}/seasons/{season}/translations/{language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5040,9 +5067,9 @@ export def "get-shows-id-seasons-season-watching" [
   if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), season: (encode-path-segment $season)} | format pattern "/shows/{id}/seasons/{season}/watching") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5080,9 +5107,9 @@ export def "get-show-stats" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5120,9 +5147,9 @@ export def "get-show-studios" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/studios") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5162,9 +5189,9 @@ export def "get-all-show-translations" [
   if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), language: (encode-path-segment $language)} | format pattern "/shows/{id}/translations/{language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5201,9 +5228,9 @@ export def "get-shows-id-watching" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shows/{id}/watching") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5244,11 +5271,11 @@ export def "add-items-to-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/collection" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5289,11 +5316,11 @@ export def "remove-items-from-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/collection/remove" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5331,9 +5358,9 @@ export def "get-collection" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/collection/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5374,11 +5401,11 @@ export def "add-items-to-watched-history" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/history" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5420,11 +5447,11 @@ export def "remove-items-from-history" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/history/remove" $auth.query)
   let req_body = {"episodes": $episodes, "ids": $ids, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5467,9 +5494,9 @@ export def "get-watched-history" [
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/sync/history/{type}/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5505,9 +5532,9 @@ export def "get-last-activity" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/last_activities" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5545,9 +5572,9 @@ export def "remove-a-playback-item" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sync/playback/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5588,9 +5615,9 @@ export def "get-playback-progress" [
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/playback/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5631,11 +5658,11 @@ export def "add-new-ratings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/ratings" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5676,11 +5703,11 @@ export def "remove-ratings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/ratings/remove" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5720,9 +5747,9 @@ export def "get-ratings" [
   if ($rating | is-empty) { error make --unspanned { msg: "path parameter 'rating' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), rating: (encode-path-segment $rating)} | format pattern "/sync/ratings/{type}/{rating}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5761,11 +5788,11 @@ export def "add-items-to-personal-recommendations" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations" $auth.query)
   let req_body = {"movies": $movies, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5804,11 +5831,11 @@ export def "remove-items-from-personal-recommendations" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations/remove" $auth.query)
   let req_body = {"movies": $movies, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5846,11 +5873,11 @@ export def "reorder-personally-recommended-items" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations/reorder" $auth.query)
   let req_body = {"rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5890,9 +5917,9 @@ export def "get-personal-recommendations" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/sync/recommendations/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5930,9 +5957,9 @@ export def "get-watched" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/sync/watched/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5973,11 +6000,11 @@ export def "add-items-to-watchlist" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6018,11 +6045,11 @@ export def "remove-items-from-watchlist" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist/remove" $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6060,11 +6087,11 @@ export def "reorder-watchlist-items" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist/reorder" $auth.query)
   let req_body = {"rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6104,9 +6131,9 @@ export def "get-watchlist" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/sync/watchlist/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6146,9 +6173,9 @@ export def "get-hidden-items" [
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6190,11 +6217,11 @@ export def "add-hidden-items" [
   if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
   let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}") $auth.query)
   let req_body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6236,11 +6263,11 @@ export def "remove-hidden-items" [
   if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
   let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/hidden/{section}/remove") $auth.query)
   let req_body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6276,9 +6303,9 @@ export def "get-follow-requests" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/requests" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6314,9 +6341,9 @@ export def "get-pending-following-requests" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/requests/following" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6354,9 +6381,9 @@ export def "deny-follow-request" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/requests/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6394,9 +6421,9 @@ export def "approve-follow-request" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/requests/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6434,9 +6461,9 @@ export def "get-saved-filters" [
   if ($section | is-empty) { error make --unspanned { msg: "path parameter 'section' must be non-empty" } }
   let full_url = (build-url $base ({section: (encode-path-segment $section)} | format pattern "/users/saved_filters/{section}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6472,9 +6499,9 @@ export def "retrieve-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/settings" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6512,9 +6539,9 @@ export def "get-user-profile" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6553,9 +6580,9 @@ export def "get-users-id-collection-type" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/collection/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6599,9 +6626,9 @@ export def "get-comments" [
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), comment_type: (encode-path-segment $comment_type), type: (encode-path-segment $type)} | format pattern "/users/{id}/comments/{comment_type}/{type}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6639,9 +6666,9 @@ export def "unfollow-this-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/follow") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6679,9 +6706,9 @@ export def "follow-this-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/follow") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6719,9 +6746,9 @@ export def "get-followers" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/followers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6759,9 +6786,9 @@ export def "get-following" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/following") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6799,9 +6826,9 @@ export def "get-friends" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/friends") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6845,9 +6872,9 @@ export def "get-users-id-history-type-item-id" [
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), item_id: (encode-path-segment $item_id)} | format pattern "/users/{id}/history/{type}/{item_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6887,9 +6914,9 @@ export def "get-likes" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/likes/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6927,9 +6954,9 @@ export def "get-a-users-personal-lists" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6975,11 +7002,11 @@ export def "create-personal-list" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists") $auth.query)
   let req_body = {"allow_comments": $allow_comments, "description": $description, "display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7017,9 +7044,9 @@ export def "get-all-lists-a-user-can-collaborate-on" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists/collaborations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7059,11 +7086,11 @@ export def "reorder-a-users-lists" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/lists/reorder") $auth.query)
   let req_body = {"rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7103,9 +7130,9 @@ export def "delete-a-users-personal-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7145,9 +7172,9 @@ export def "get-personal-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7193,11 +7220,11 @@ export def "update-personal-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}") $auth.query)
   let req_body = {"display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7238,9 +7265,9 @@ export def "get-users-id-lists-list-id-comments-sort" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/lists/{list_id}/comments/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7286,11 +7313,11 @@ export def "add-items-to-personal-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items") $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7336,11 +7363,11 @@ export def "remove-items-from-personal-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items/remove") $auth.query)
   let req_body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7382,11 +7409,11 @@ export def "reorder-items-on-a-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/items/reorder") $auth.query)
   let req_body = {"rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7428,9 +7455,9 @@ export def "get-items-on-a-personal-list" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id), type: (encode-path-segment $type)} | format pattern "/users/{id}/lists/{list_id}/items/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7470,9 +7497,9 @@ export def "remove-like-on-a-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/like") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7512,9 +7539,9 @@ export def "like-a-list" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/like") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7553,9 +7580,9 @@ export def "get-users-id-lists-list-id-likes" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), list_id: (encode-path-segment $list_id)} | format pattern "/users/{id}/lists/{list_id}/likes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7596,9 +7623,9 @@ export def "get-users-id-ratings-type-rating" [
   if ($rating | is-empty) { error make --unspanned { msg: "path parameter 'rating' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), rating: (encode-path-segment $rating)} | format pattern "/users/{id}/ratings/{type}/{rating}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7639,9 +7666,9 @@ export def "get-users-id-recommendations-type-sort" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/recommendations/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7679,9 +7706,9 @@ export def "get-stats" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7720,9 +7747,9 @@ export def "get-users-id-watched-type" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type)} | format pattern "/users/{id}/watched/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7760,9 +7787,9 @@ export def "get-watching" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/watching") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7803,9 +7830,9 @@ export def "get-users-id-watchlist-type-sort" [
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), type: (encode-path-segment $type), sort: (encode-path-segment $sort)} | format pattern "/users/{id}/watchlist/{type}/{sort}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

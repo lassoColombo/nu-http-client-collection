@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -179,7 +206,7 @@ export def "get-v2-tier2-short-name-area-areas" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/area/areas") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -217,7 +244,7 @@ export def "get-v2-tier2-short-name-area-areas-area-id" [
   if ($area_id | is-empty) { error make --unspanned { msg: "path parameter 'areaID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), area_id: (encode-path-segment $area_id)} | format pattern "/v2/tier2/{short_name}/area/areas/{area_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -258,7 +285,7 @@ export def "get-v2-tier2-short-name-branch-branches" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/branch/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -296,7 +323,7 @@ export def "get-v2-tier2-short-name-branch-branches-branch-id" [
   if ($branch_id | is-empty) { error make --unspanned { msg: "path parameter 'branchID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), branch_id: (encode-path-segment $branch_id)} | format pattern "/v2/tier2/{short_name}/branch/branches/{branch_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -333,7 +360,7 @@ export def "company-controller-get-company" [
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/company") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -374,7 +401,7 @@ export def "get-v2-tier2-short-name-county-counties" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/county/counties") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -412,7 +439,7 @@ export def "get-v2-tier2-short-name-county-counties-county-id" [
   if ($county_id | is-empty) { error make --unspanned { msg: "path parameter 'countyID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier2/{short_name}/county/counties/{county_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -456,7 +483,7 @@ export def "county-controller-get-counties-branches" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), county_id: (encode-path-segment $county_id)} | format pattern "/v2/tier2/{short_name}/county/counties/{county_id}/branches") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -497,7 +524,7 @@ export def "get-v2-tier2-short-name-diary-allocations" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/allocations") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -535,7 +562,7 @@ export def "get-v2-tier2-short-name-diary-allocations-diary-allocation-id" [
   if ($diary_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAllocationID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_allocation_id: (encode-path-segment $diary_allocation_id)} | format pattern "/v2/tier2/{short_name}/diary/allocations/{diary_allocation_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -576,7 +603,7 @@ export def "get-v2-tier2-short-name-diary-appointments" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/appointments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -614,7 +641,7 @@ export def "get-v2-tier2-short-name-diary-appointments-diary-appointment-id" [
   if ($diary_appointment_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAppointmentID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_id: (encode-path-segment $diary_appointment_id)} | format pattern "/v2/tier2/{short_name}/diary/appointments/{diary_appointment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -655,7 +682,7 @@ export def "get-v2-tier2-short-name-diary-appointmenttypes" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/diary/appointmenttypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -693,7 +720,7 @@ export def "get-v2-tier2-short-name-diary-appointmenttypes-diary-appointment-typ
   if ($diary_appointment_type_id | is-empty) { error make --unspanned { msg: "path parameter 'diaryAppointmentTypeID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), diary_appointment_type_id: (encode-path-segment $diary_appointment_type_id)} | format pattern "/v2/tier2/{short_name}/diary/appointmenttypes/{diary_appointment_type_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -743,7 +770,7 @@ export def "lettings-controller-get-advertised" [
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/advertised") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -797,7 +824,7 @@ export def "lettings-controller-get-advertised-between-dates" [
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "rangeStartDate" $range_start_date "scalar") (serialize-qp "rangeEndDate" $range_end_date "scalar") (serialize-qp "areaID" $area_id "scalar") (serialize-qp "rentMinimum" $rent_minimum "scalar") (serialize-qp "rentMaximum" $rent_maximum "scalar") (serialize-qp "maximumTenants" $maximum_tenants "scalar") (serialize-qp "wantSharedProperties" $want_shared_properties "scalar") (serialize-qp "wantStudentProperties" $want_student_properties "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/advertisedbetweendates") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -838,7 +865,7 @@ export def "get-v2-tier2-short-name-lettings-tenancies" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -876,7 +903,7 @@ export def "get-v2-tier2-short-name-lettings-tenancies-tenancy-id" [
   if ($tenancy_id | is-empty) { error make --unspanned { msg: "path parameter 'tenancyID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies/{tenancy_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -915,7 +942,7 @@ export def "lettings-controller-get-tenancy-brochure" [
   if ($tenancy_id | is-empty) { error make --unspanned { msg: "path parameter 'tenancyID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), tenancy_id: (encode-path-segment $tenancy_id)} | format pattern "/v2/tier2/{short_name}/lettings/tenancies/{tenancy_id}/brochure") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -956,7 +983,7 @@ export def "get-v2-tier2-short-name-photo-photos" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/photo/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -994,7 +1021,7 @@ export def "get-v2-tier2-short-name-photo-photos-photo-id" [
   if ($photo_id | is-empty) { error make --unspanned { msg: "path parameter 'photoID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier2/{short_name}/photo/photos/{photo_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1036,7 +1063,7 @@ export def "photo-controller-get-photo-download" [
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), photo_id: (encode-path-segment $photo_id)} | format pattern "/v2/tier2/{short_name}/photos/photo/{photo_id}/download") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1077,7 +1104,7 @@ export def "get-v2-tier2-short-name-property-properties" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/property/properties") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1115,7 +1142,7 @@ export def "get-v2-tier2-short-name-property-properties-property-id" [
   if ($property_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1159,7 +1186,7 @@ export def "property-controller-get-properties-facilities" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/facilities") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1203,7 +1230,7 @@ export def "property-controller-get-properties-photos" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1247,7 +1274,7 @@ export def "property-controller-get-properties-rooms" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/rooms") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1291,7 +1318,7 @@ export def "property-controller-get-properties-tenancies" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_id: (encode-path-segment $property_id)} | format pattern "/v2/tier2/{short_name}/property/properties/{property_id}/tenancies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1330,7 +1357,7 @@ export def "property-controller-get-property-eer-download" [
   if ($property_structure_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyStructureID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier2/{short_name}/property/structures/{property_structure_id}/reports/eer") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1369,7 +1396,7 @@ export def "property-controller-get-property-eir-download" [
   if ($property_structure_id | is-empty) { error make --unspanned { msg: "path parameter 'propertyStructureID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), property_structure_id: (encode-path-segment $property_structure_id)} | format pattern "/v2/tier2/{short_name}/property/structures/{property_structure_id}/reports/eir") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1424,7 +1451,7 @@ export def "sales-controller-get-advertised-sales" [
   let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "onlyDevelopement" $only_developement "scalar") (serialize-qp "onlyInvestements" $only_investements "scalar") (serialize-qp "minimumPrice" $minimum_price "scalar") (serialize-qp "maximumPrice" $maximum_price "scalar") (serialize-qp "minimumBeds" $minimum_beds "scalar") (serialize-qp "minimumBathrooms" $minimum_bathrooms "scalar") (serialize-qp "minimumEnsuites" $minimum_ensuites "scalar") (serialize-qp "minimumToilets" $minimum_toilets "scalar") (serialize-qp "minimumReception" $minimum_reception "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/advertisedsales") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1463,7 +1490,7 @@ export def "sales-controller-get-eer" [
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/reports/eer/{sales_instruction_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1502,7 +1529,7 @@ export def "sales-controller-get-eir" [
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/reports/eir/{sales_instruction_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1543,7 +1570,7 @@ export def "get-v2-tier2-short-name-sales-salesfeaturetypes" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/salesfeaturetypes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1581,7 +1608,7 @@ export def "get-v2-tier2-short-name-sales-salesfeaturetypes-sales-feature-type-i
   if ($sales_feature_type_id | is-empty) { error make --unspanned { msg: "path parameter 'salesFeatureTypeID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_feature_type_id: (encode-path-segment $sales_feature_type_id)} | format pattern "/v2/tier2/{short_name}/sales/salesfeaturetypes/{sales_feature_type_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1622,7 +1649,7 @@ export def "get-v2-tier2-short-name-sales-salesinstructions" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1660,7 +1687,7 @@ export def "get-v2-tier2-short-name-sales-salesinstructions-sales-instruction-id
   if ($sales_instruction_id | is-empty) { error make --unspanned { msg: "path parameter 'salesInstructionID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1704,7 +1731,7 @@ export def "sales-controller-get-sales-instructions-features" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/features") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1748,7 +1775,7 @@ export def "sales-controller-get-sales-instructions-floor-plans" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/floorplans") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1792,7 +1819,7 @@ export def "sales-controller-get-sales-instructions-photos" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1836,7 +1863,7 @@ export def "sales-controller-get-sales-instructions-rooms" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), sales_instruction_id: (encode-path-segment $sales_instruction_id)} | format pattern "/v2/tier2/{short_name}/sales/salesinstructions/{sales_instruction_id}/rooms") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1877,7 +1904,7 @@ export def "get-v2-tier2-short-name-staff-staff" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/staff/staff") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1915,7 +1942,7 @@ export def "get-v2-tier2-short-name-staff-staff-application-staff-id" [
   if ($application_staff_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationStaffID' must be non-empty" } }
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name), application_staff_id: (encode-path-segment $application_staff_id)} | format pattern "/v2/tier2/{short_name}/staff/staff/{application_staff_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1957,7 +1984,7 @@ export def "viewing-controller-get-bookings" [
   let qp = [(serialize-qp "preferredDate" $preferred_date "scalar") (serialize-qp "propertyIDsToView" $property_i_ds_to_view "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/viewing/bookings") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2018,9 +2045,9 @@ export def "viewing-controller-make-booking" [
   let qp = [(serialize-qp "forename" $forename "scalar") (serialize-qp "surname" $surname "scalar") (serialize-qp "mobilePhone" $mobile_phone "scalar") (serialize-qp "emailAddress" $email_address "scalar") (serialize-qp "propertyIDsToView" $property_i_ds_to_view "multi") (serialize-qp "wantRoomInSharedProperty" $want_room_in_shared_property "scalar") (serialize-qp "alertMinRent" $alert_min_rent "scalar") (serialize-qp "alertMaxRent" $alert_max_rent "scalar") (serialize-qp "alertNumberOfBeds" $alert_number_of_beds "scalar") (serialize-qp "alertAreaID" $alert_area_id "scalar") (serialize-qp "alertTenantType" $alert_tenant_type "scalar") (serialize-qp "subscribeToEmailAlerts" $subscribe_to_email_alerts "scalar") (serialize-qp "subscribeToSMSAlerts" $subscribe_to_sms_alerts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_name: (encode-path-segment $short_name)} | format pattern "/v2/tier2/{short_name}/viewing/bookings") $qp $auth.query)
   let req_body = {"End": $end, "StaffID": $staff_id, "StaffName": $staff_name, "Start": $start} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

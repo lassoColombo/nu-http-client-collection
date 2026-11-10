@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -166,7 +193,7 @@ export def "get-translate-braille" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -203,7 +230,7 @@ export def "get-translate-braille-dots" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/dots" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -240,7 +267,7 @@ export def "get-translate-braille-html" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/html" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -277,7 +304,7 @@ export def "get-translate-braille-image" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/image" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -314,7 +341,7 @@ export def "get-translate-braille-unicode" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/braille/unicode" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -351,7 +378,7 @@ export def "get-translate-brooklyn" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/brooklyn" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -388,7 +415,7 @@ export def "get-translate-chef" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/chef" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -425,7 +452,7 @@ export def "get-translate-cheunh" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/cheunh" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -462,7 +489,7 @@ export def "get-translate-cockney" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/cockney" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -499,7 +526,7 @@ export def "get-translate-dolan" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/dolan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -536,7 +563,7 @@ export def "get-translate-dothraki" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/dothraki" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -573,7 +600,7 @@ export def "get-translate-ermahgerd" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/ermahgerd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -610,7 +637,7 @@ export def "get-translate-ferblatin" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/ferblatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -647,7 +674,7 @@ export def "get-translate-fudd" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/fudd" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -684,7 +711,7 @@ export def "get-translate-gungan" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/gungan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -721,7 +748,7 @@ export def "get-translate-huttese" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/huttese" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -758,7 +785,7 @@ export def "get-translate-jive" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/jive" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -795,7 +822,7 @@ export def "get-translate-klingon" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/klingon" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -832,7 +859,7 @@ export def "get-translate-mandalorian" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/mandalorian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -869,7 +896,7 @@ export def "get-translate-minion" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/minion" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -906,7 +933,7 @@ export def "get-translate-morse" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -947,7 +974,7 @@ export def "get-translate-morse-audio" [
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "speed" $speed "scalar") (serialize-qp "tone" $tone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse/audio" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -984,7 +1011,7 @@ export def "get-translate-morse2english" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/morse2english" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1021,7 +1048,7 @@ export def "get-translate-oldenglish" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/oldenglish" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1058,7 +1085,7 @@ export def "get-translate-piglatin" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/piglatin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1095,7 +1122,7 @@ export def "get-translate-pirate" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/pirate" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1132,7 +1159,7 @@ export def "get-translate-quneya" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/quneya" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1169,7 +1196,7 @@ export def "get-translate-shakespeare" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/shakespeare" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1206,7 +1233,7 @@ export def "get-translate-sindarin" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/sindarin" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1243,7 +1270,7 @@ export def "get-translate-sith" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/sith" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1280,7 +1307,7 @@ export def "get-translate-uk2us" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/uk2us" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1317,7 +1344,7 @@ export def "get-translate-us2uk" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/us2uk" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1354,7 +1381,7 @@ export def "get-translate-valspeak" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/valspeak" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1391,7 +1418,7 @@ export def "get-translate-valyrian" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/valyrian" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1428,7 +1455,7 @@ export def "get-translate-vulcan" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/vulcan" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1465,7 +1492,7 @@ export def "get-translate-yoda" [
   let qp = [(serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/translate/yoda" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

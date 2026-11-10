@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -209,11 +236,11 @@ export def "add-tags" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.AddTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Tags": $tags, "ResourceId": $resource_id, "ResourceType": $resource_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -262,11 +289,11 @@ export def "create-batch-prediction" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id, "BatchPredictionName": $batch_prediction_name, "MLModelId": $ml_model_id, "BatchPredictionDataSourceId": $batch_prediction_data_source_id, "OutputUri": $output_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -315,11 +342,11 @@ export def "create-data-source-from-rds" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromRDS")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "RDSData": $rds_data, "RoleARN": $role_arn, "ComputeStatistics": $compute_statistics} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -368,11 +395,11 @@ export def "create-data-source-from-redshift" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromRedshift")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "DataSpec": $data_spec, "RoleARN": $role_arn, "ComputeStatistics": $compute_statistics} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -420,11 +447,11 @@ export def "create-data-source-from-s3" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateDataSourceFromS3")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name, "DataSpec": $data_spec, "ComputeStatistics": $compute_statistics} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -472,11 +499,11 @@ export def "create-evaluation" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id, "EvaluationName": $evaluation_name, "MLModelId": $ml_model_id, "EvaluationDataSourceId": $evaluation_data_source_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -527,11 +554,11 @@ export def "create-ml-model" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "MLModelName": $ml_model_name, "MLModelType": $ml_model_type, "Parameters": $parameters, "TrainingDataSourceId": $training_data_source_id, "Recipe": $recipe, "RecipeUri": $recipe_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -576,11 +603,11 @@ export def "create-realtime-endpoint" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.CreateRealtimeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -625,11 +652,11 @@ export def "delete-batch-prediction" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -674,11 +701,11 @@ export def "delete-data-source" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -723,11 +750,11 @@ export def "delete-evaluation" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -772,11 +799,11 @@ export def "delete-ml-model" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -821,11 +848,11 @@ export def "delete-realtime-endpoint" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteRealtimeEndpoint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -872,11 +899,11 @@ export def "delete-tags" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DeleteTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"TagKeys": $tag_keys, "ResourceId": $resource_id, "ResourceType": $resource_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -924,8 +951,8 @@ export def "describe-batch-predictions" [
   --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
-  --next-token-body: string # String type. (body field)
-  --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
+  --body-next-token: string # String type. (spec name: NextToken)
+  --body-limit: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (spec name: Limit)
 ]: any -> oneof<record<Results: table<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -933,12 +960,12 @@ export def "describe-batch-predictions" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeBatchPredictions")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -986,8 +1013,8 @@ export def "describe-data-sources" [
   --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
-  --next-token-body: string # String type. (body field)
-  --limit-body: int # The maximum number of DataSource to include in the result. (body field)
+  --body-next-token: string # String type. (spec name: NextToken)
+  --body-limit: int # The maximum number of DataSource to include in the result. (spec name: Limit)
 ]: any -> oneof<record<Results: table<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, Message: string, RedshiftMetadata: record, RDSMetadata: record, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -995,12 +1022,12 @@ export def "describe-data-sources" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeDataSources")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1048,8 +1075,8 @@ export def "describe-evaluations" [
   --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
-  --next-token-body: string # String type. (body field)
-  --limit-body: int # The maximum number of Evaluation to include in the result. (body field)
+  --body-next-token: string # String type. (spec name: NextToken)
+  --body-limit: int # The maximum number of Evaluation to include in the result. (spec name: Limit)
 ]: any -> oneof<record<Results: table<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1057,12 +1084,12 @@ export def "describe-evaluations" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeEvaluations")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1110,8 +1137,8 @@ export def "describe-ml-models" [
   --ne: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --prefix: string # The value specified in a filtering condition. The ComparatorValue becomes the reference value when matching or evaluating data values in filtering and searching functions.
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
-  --next-token-body: string # String type. (body field)
-  --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
+  --body-next-token: string # String type. (spec name: NextToken)
+  --body-limit: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (spec name: Limit)
 ]: any -> oneof<record<Results: table<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record, TrainingParameters: record, InputDataLocationS3: string, Algorithm: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1119,12 +1146,12 @@ export def "describe-ml-models" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeMLModels")
   let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $next_token_body, "Limit": $limit_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"FilterVariable": $filter_variable, "EQ": $eq, "GT": $gt, "LT": $lt, "GE": $ge, "LE": $le, "NE": $ne, "Prefix": $prefix, "SortOrder": $sort_order, "NextToken": $body_next_token, "Limit": $body_limit} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1170,11 +1197,11 @@ export def "describe-tags" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.DescribeTags")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "ResourceType": $resource_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1219,11 +1246,11 @@ export def "get-batch-prediction" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1269,11 +1296,11 @@ export def "get-data-source" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "Verbose": $verbose} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1318,11 +1345,11 @@ export def "get-evaluation" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1368,11 +1395,11 @@ export def "get-ml-model" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.GetMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "Verbose": $verbose} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1419,11 +1446,11 @@ export def "predict" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.Predict")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "Record": $record, "PredictEndpoint": $predict_endpoint} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1469,11 +1496,11 @@ export def "update-batch-prediction" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateBatchPrediction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BatchPredictionId": $batch_prediction_id, "BatchPredictionName": $batch_prediction_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1519,11 +1546,11 @@ export def "update-data-source" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateDataSource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"DataSourceId": $data_source_id, "DataSourceName": $data_source_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1569,11 +1596,11 @@ export def "update-evaluation" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateEvaluation")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"EvaluationId": $evaluation_id, "EvaluationName": $evaluation_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1620,11 +1647,11 @@ export def "update-ml-model" [
   let x_amz_target = ($x_amz_target | default "AmazonML_20141212.UpdateMLModel")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"MLModelId": $ml_model_id, "MLModelName": $ml_model_name, "ScoreThreshold": $score_threshold} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,9 +207,9 @@ export def "dev-get-assets" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/allapps" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -221,9 +248,9 @@ export def "dev-get-collections" [
   let qp = [(serialize-qp "appid" $appid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/allcollections" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -259,9 +286,9 @@ export def "get-systems" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/allsystems" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -299,9 +326,9 @@ export def "get-audit" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/audit" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -337,9 +364,9 @@ export def "get-counts" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/audit/count" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -379,9 +406,9 @@ export def "get-audit-dev" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -419,9 +446,9 @@ export def "get-counts-dev" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/audit/{system_key}/count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -458,9 +485,9 @@ export def "auth-dev" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/auth" $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -496,9 +523,9 @@ export def "verify-auth" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/checkauth" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -537,9 +564,9 @@ export def "dev-delete-collection" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/collectionmanagement" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -579,11 +606,11 @@ export def "dev-create-collection" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/collectionmanagement" $auth.query)
   let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -621,11 +648,11 @@ export def "dev-update-collection" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/collectionmanagement" $auth.query)
   let req_body = {"addColumn": $add_column, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -661,9 +688,9 @@ export def "get-admin-dev-count" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/count/developers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -699,9 +726,9 @@ export def "get-system-count" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/count/systems" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -735,7 +762,7 @@ export def "get-database-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/database/status" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -776,11 +803,11 @@ export def "admin-owner-change" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/developers/{system_key}") $auth.query)
   let req_body = {"change": $change, "owner": $owner} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -820,9 +847,9 @@ export def "delete-device-keys" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -864,11 +891,11 @@ export def "create-rotating-keys" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), device_name: (encode-path-segment $device_name)} | format pattern "/admin/devices/keys/{system_key}/{device_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -909,9 +936,9 @@ export def "delete-devices-admin" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -951,9 +978,9 @@ export def "get-system-devices" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -994,11 +1021,11 @@ export def "update-devices-admin" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/devices/{system_key}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1038,9 +1065,9 @@ export def "delete-system-device" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1080,9 +1107,9 @@ export def "get-system-device" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1122,7 +1149,7 @@ export def "create-system-device" [
   --description: string
   --enabled: oneof<nothing, bool>
   --keys: string
-  --body-name: string
+  --body-name: string # (spec name: name)
   state: string
   type: string
 ]: any -> any {
@@ -1134,15 +1161,15 @@ export def "create-system-device" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "name": $body_name, "state": $state, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "allow_certificate_auth") == null) { error make --unspanned { msg: "required body field 'allow_certificate_auth' missing: pass --allow-certificate-auth or pipe a record" } }
   if (($req_body | get -o "allow_key_auth") == null) { error make --unspanned { msg: "required body field 'allow_key_auth' missing: pass --allow-key-auth or pipe a record" } }
   if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1193,11 +1220,11 @@ export def "update-system-device" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "custom": $custom, "description": $description, "enabled": $enabled, "keys": $keys, "state": $state, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1235,9 +1262,9 @@ export def "get-edge-template" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/template/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1280,11 +1307,11 @@ export def "update-edge-template" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/template/{system_key}/{edge_name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1322,9 +1349,9 @@ export def "get-edges" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1362,9 +1389,9 @@ export def "get-adapter-edges" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/edges/{system_key}/control") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1404,9 +1431,9 @@ export def "delete-edge" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1446,9 +1473,9 @@ export def "get-edge" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1487,9 +1514,9 @@ export def "create-edge" [
   --mac-address: string
   --public-addr: string
   --public-port: string
-  --body-system-key: string
+  --body-system-key: string # (spec name: system_key)
   system_secret: string
-  --body-token: string
+  --body-token: string # (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1499,13 +1526,13 @@ export def "create-edge" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1544,9 +1571,9 @@ export def "update-edge" [
   --mac-address: string
   --public-addr: string
   --public-port: string
-  --body-system-key: string
+  --body-system-key: string # (spec name: system_key)
   system_secret: string
-  --body-token: string
+  --body-token: string # (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1556,12 +1583,12 @@ export def "update-edge" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/edges/{system_key}/{edge_name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1597,9 +1624,9 @@ export def "dev-logout" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/logout" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1635,9 +1662,9 @@ export def "get-license-key" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/pkey" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1676,9 +1703,9 @@ export def "get-dev" [
   let qp = [(serialize-qp "developer" $developer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developer" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1718,13 +1745,13 @@ export def "disable-dev" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/platform/developer" $auth.query)
   let req_body = {"admin": $admin, "disabled": $disabled, "email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "admin") == null) { error make --unspanned { msg: "required body field 'admin' missing: pass --admin or pipe a record" } }
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1765,9 +1792,9 @@ export def "get-devs" [
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenum" $pagenum "scalar") (serialize-qp "total" $total "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/developers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1805,9 +1832,9 @@ export def "get-system-updates" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/platform/systems" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Clearblade-DevToken": $clearblade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1847,9 +1874,9 @@ export def "get-system-updates-dev" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/systems/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"clearblade-devtoken": $clearblade_devtoken} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1887,9 +1914,9 @@ export def "get-system-status" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/platform/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1927,9 +1954,9 @@ export def "get-portal-info" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/portals/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1968,11 +1995,11 @@ export def "change-dev-password" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/putpass" $auth.query)
   let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2012,9 +2039,9 @@ export def "reg-dev" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/reg" $auth.query)
   let req_body = {"email": $email, "fname": $fname, "lname": $lname, "org": $org, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2052,11 +2079,11 @@ export def "regen-secret" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/regensystemsecret" $auth.query)
   let req_body = {"id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2095,11 +2122,11 @@ export def "reset-password" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/resetpassword" $auth.query)
   let req_body = {"email": $email, "new_password": $new_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2135,9 +2162,9 @@ export def "delete-email-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2173,9 +2200,9 @@ export def "email-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2223,11 +2250,11 @@ export def "create-email-communication" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let req_body = {"encryption_type": $encryption_type, "from": $from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2275,11 +2302,11 @@ export def "update-email-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service" $auth.query)
   let req_body = {"encryption_type": $encryption_type, "from": $from, "host": $host, "password": $password, "port": $port, "protocol": $protocol, "two_factor_message": $two_factor_message, "two_factor_subject": $two_factor_subject, "username": $username, "validation_message": $validation_message, "validation_subject": $validation_subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2317,11 +2344,11 @@ export def "test-email" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/email-service/test" $auth.query)
   let req_body = {"recipient": $recipient} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2357,9 +2384,9 @@ export def "view-security" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/security" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2398,11 +2425,11 @@ export def "update-security" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/security" $auth.query)
   let req_body = {"developer_token_ttl": $developer_token_ttl, "two_factor_auth": $two_factor_auth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2438,9 +2465,9 @@ export def "delete-sms-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2476,9 +2503,9 @@ export def "sms-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2522,11 +2549,11 @@ export def "create-sms-communication" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let req_body = {"from": $from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2570,11 +2597,11 @@ export def "update-sms-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service" $auth.query)
   let req_body = {"from": $from, "password": $password, "service_name": $service_name, "two_factor_message": $two_factor_message, "url": $url, "username": $username, "validation_message": $validation_message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2612,11 +2639,11 @@ export def "test-sms" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/settings/sms-service/test" $auth.query)
   let req_body = {"recipient": $recipient} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2654,9 +2681,9 @@ export def "get-systems-for-dev" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({dev_email: (encode-path-segment $dev_email)} | format pattern "/admin/systems/{dev_email}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2692,9 +2719,9 @@ export def "get-triggers" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/triggers/definitions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2732,9 +2759,9 @@ export def "get-trigger-handlers" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/handlers/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2774,9 +2801,9 @@ export def "delete-trigger-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2816,9 +2843,9 @@ export def "get-trigger-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2864,12 +2891,12 @@ export def "create-trigger" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2915,12 +2942,12 @@ export def "update-trigger-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/handlers/{system_key}/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2958,9 +2985,9 @@ export def "get-timer-handlers" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/triggers/timers/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3000,9 +3027,9 @@ export def "delete-timer-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3042,9 +3069,9 @@ export def "get-timer-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3079,7 +3106,7 @@ export def "create-timer-handler" [
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
-  --body-name: string # Timer label (e.g. tenSecondTimer)
+  --body-name: string # Timer label (e.g. tenSecondTimer) (spec name: name)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
 ]: any -> any {
@@ -3091,13 +3118,13 @@ export def "create-timer-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3132,7 +3159,7 @@ export def "update-timer-handler" [
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
-  --body-name: string # Timer label (e.g. tenSecondTimer)
+  --body-name: string # Timer label (e.g. tenSecondTimer) (spec name: name)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
 ]: any -> any {
@@ -3144,13 +3171,13 @@ export def "update-timer-handler" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/triggers/timers/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3190,9 +3217,9 @@ export def "delete-user" [
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3232,9 +3259,9 @@ export def "get-user-list" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3275,11 +3302,11 @@ export def "add-user" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3320,11 +3347,11 @@ export def "user-change-user-info" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}") $auth.query)
   let req_body = {"changes": $changes, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3362,9 +3389,9 @@ export def "get-user-column-data" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3405,11 +3432,11 @@ export def "add-column" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/columns") $auth.query)
   let req_body = {"column_name": $column_name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3450,9 +3477,9 @@ export def "delete-roles" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3492,9 +3519,9 @@ export def "get-roles" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3538,11 +3565,11 @@ export def "add-role" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $auth.query)
   let req_body = {"collections": $collections, "description": $description, "name": $name, "services": $services, "topics": $topics} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3583,11 +3610,11 @@ export def "settings-changes" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles") $auth.query)
   let req_body = {"changes": $changes, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3628,9 +3655,9 @@ export def "get-roles-count" [
   let qp = [(serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/user/{system_key}/roles/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3666,9 +3693,9 @@ export def "get-dev-info" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/userinfo" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3708,11 +3735,11 @@ export def "update-dev2-fa" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/userinfo" $auth.query)
   let req_body = {"phone": $phone, "two_factor_enabled": $two_factor_enabled, "two_factor_method": $two_factor_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3750,9 +3777,9 @@ export def "get-shared-cache" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/service_caches/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3792,9 +3819,9 @@ export def "delete-shared-cache" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3838,11 +3865,11 @@ export def "add-shared-cache" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let req_body = {"description": $description, "name": $name, "ttl": $ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3885,11 +3912,11 @@ export def "update-shared-cache" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), cache_name: (encode-path-segment $cache_name)} | format pattern "/admin/v/4/service_caches/{system_key}/{cache_name}") $auth.query)
   let req_body = {"description": $description, "ttl": $ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3929,9 +3956,9 @@ export def "delete-device-session" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3971,9 +3998,9 @@ export def "get-device-session" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4013,9 +4040,9 @@ export def "get-device-session-count" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/device/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4055,9 +4082,9 @@ export def "delete-user-session" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4097,9 +4124,9 @@ export def "get-user-session" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4139,9 +4166,9 @@ export def "get-user-session-count" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/session/{system_key}/user/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4180,9 +4207,9 @@ export def "delete-system" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4221,9 +4248,9 @@ export def "get-system-info" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4262,11 +4289,11 @@ export def "create-system" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4315,11 +4342,11 @@ export def "update-system" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/v/4/systemmanagement" $auth.query)
   let req_body = {"Dev": $dev, "appId": $app_id, "appSecret": $app_secret, "auth_service": $auth_service, "description": $description, "name": $name, "reg_service": $reg_service, "registration": $registration, "token_ttl": $token_ttl, "token_ttl_anon": $token_ttl_anon, "token_ttl_device": $token_ttl_device, "token_ttl_user": $token_ttl_user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4357,9 +4384,9 @@ export def "get-webhooks" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/v/4/webhook/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4399,9 +4426,9 @@ export def "delete-webhook" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4435,7 +4462,7 @@ export def "create-webhook" [
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
   auth_method: string # e.g. http_basic_auth
   --description: string # e.g. Create a webhook
-  --body-name: string # e.g. webhook_example
+  --body-name: string # e.g. webhook_example (spec name: name)
   service_name: string # e.g. service_example
 ]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
@@ -4446,12 +4473,12 @@ export def "create-webhook" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let req_body = {"auth_method": $auth_method, "description": $description, "name": $body_name, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4494,11 +4521,11 @@ export def "update-webhook" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/admin/v/4/webhook/{system_key}/{name}") $auth.query)
   let req_body = {"auth_method": $auth_method, "description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4536,11 +4563,11 @@ export def "send-validation" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/admin/validate" $auth.query)
   let req_body = {"type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4578,9 +4605,9 @@ export def "all-edge-sync-status" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/alledges/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4620,9 +4647,9 @@ export def "get-sync-status" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/admin/{system_key}/sync/deployment/status/{deployment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4662,9 +4689,9 @@ export def "edge-sync-status" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), edge_name: (encode-path-segment $edge_name)} | format pattern "/admin/{system_key}/sync/edge/status/{edge_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4708,11 +4735,11 @@ export def "retry-sync" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/admin/{system_key}/sync/retry") $auth.query)
   let req_body = {"asset_class": $asset_class, "asset_id": $asset_id, "edge": $edge, "is_collection": $is_collection, "sync_event": $sync_event} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4746,7 +4773,7 @@ export def "api-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/about" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4786,9 +4813,9 @@ export def "get-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4830,11 +4857,11 @@ export def "execute-service" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/api/v/1/code/{system_key}/{service_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4877,9 +4904,9 @@ export def "delete-collection-data" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4921,9 +4948,9 @@ export def "get-collection-data" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4965,11 +4992,11 @@ export def "create-collection-data" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5012,11 +5039,11 @@ export def "update-collection-data" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/1/collection/{system_key}/{collection_name}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5057,9 +5084,9 @@ export def "delete-collection-data-alt" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5099,9 +5126,9 @@ export def "get-collection-data-alt" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5141,11 +5168,11 @@ export def "create-collection-data-alt" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5186,11 +5213,11 @@ export def "update-collection-data-alt" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5232,9 +5259,9 @@ export def "get-columns" [
   if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/v/1/data/{collection_id}/columns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5280,9 +5307,9 @@ export def "delete-message-history" [
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5328,9 +5355,9 @@ export def "get-message-history" [
   let qp = [(serialize-qp "topic" $topic "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "last" $last "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "stop" $stop "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5372,11 +5399,11 @@ export def "publish-message" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/1/message/{system_key}/publish") $auth.query)
   let req_body = {"body": $body, "qos": $qos, "topic": $topic} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5414,9 +5441,9 @@ export def "get-users" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/1/user" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5454,9 +5481,9 @@ export def "auth-anon" [
   if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/anon" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5497,11 +5524,11 @@ export def "auth-user" [
   if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/auth" $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5539,9 +5566,9 @@ export def "user-check-auth" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/checkauth" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5583,11 +5610,11 @@ export def "delete-user-as-user" [
   if ($clear_blade_system_secret == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemSecret' missing: pass --clear-blade-system-secret" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let req_body = {"user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5623,9 +5650,9 @@ export def "get-user-info" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5663,11 +5690,11 @@ export def "update-user-info" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/info" $auth.query)
   let req_body = {"column_name": $column_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5703,9 +5730,9 @@ export def "user-logout" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/logout" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5744,11 +5771,11 @@ export def "update-user-pass" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/pass" $auth.query)
   let req_body = {"new_password": $new_password, "old_password": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5791,11 +5818,11 @@ export def "reg-user" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/1/user/reg" $auth.query)
   let req_body = {"email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-SystemKey": $clear_blade_system_key, "ClearBlade-SystemSecret": $clear_blade_system_secret, "ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5836,9 +5863,9 @@ export def "delete-devices" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5878,9 +5905,9 @@ export def "get-devices" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5921,11 +5948,11 @@ export def "update-devices" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}") $auth.query)
   let req_body = {"$set": $set, "query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5964,9 +5991,9 @@ export def "auth-device" [
   if ($system_key | is-empty) { error make --unspanned { msg: "path parameter 'SystemKey' must be non-empty" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/devices/{system_key}/auth") $auth.query)
   let req_body = {"activeKey": $active_key, "deviceName": $device_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6003,7 +6030,7 @@ export def "add-device" [
   --allow-key-auth: oneof<nothing, bool>
   --certificate: string
   --description: string # e.g. This is a sensor
-  --body-name: string # e.g. device_name
+  --body-name: string # e.g. device_name (spec name: name)
   --state: string # e.g. On
   --type: string # e.g. Sensor
 ]: any -> oneof<record<allow_certificate_auth: bool, allow_key_auth: bool, certificate: string, created_date: int, description: string, device_key: string, enabled: bool, last_active_date: int, name: string, state: string, system_key: string, type: string>, string, nothing> {
@@ -6015,11 +6042,11 @@ export def "add-device" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}") $auth.query)
   let req_body = {"active_key": $active_key, "allow_certificate_auth": $allow_certificate_auth, "allow_key_auth": $allow_key_auth, "certificate": $certificate, "description": $description, "name": $body_name, "state": $state, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6062,11 +6089,11 @@ export def "update-device-info" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/2/devices/{system_key}/{name}") $auth.query)
   let req_body = {"custom_attribute": $custom_attribute, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6107,9 +6134,9 @@ export def "get-all-edges" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/2/edges/{system_key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6147,9 +6174,9 @@ export def "get-collections" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/allcollections/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6187,9 +6214,9 @@ export def "return-service-settings" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/codemeta/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6229,9 +6256,9 @@ export def "delete-timer-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6271,9 +6298,9 @@ export def "get-timer-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6308,7 +6335,7 @@ export def "create-new-timer" [
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
-  --body-name: string # Timer label (e.g. tenSecondTimer)
+  --body-name: string # Timer label (e.g. tenSecondTimer) (spec name: name)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
 ]: any -> oneof<record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, nothing> {
@@ -6320,13 +6347,13 @@ export def "create-new-timer" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6361,7 +6388,7 @@ export def "update-timer-by-name" [
   --description: string # Information about the timer (e.g. My 10 second timer)
   --disabled: oneof<nothing, bool> # Enable or disable timer (e.g. true)
   frequency: int # Frequency (in seconds) between two consecutive invocations of a timer handler (e.g. 10)
-  --body-name: string # Timer label (e.g. tenSecondTimer)
+  --body-name: string # Timer label (e.g. tenSecondTimer) (spec name: name)
   repeats: int # The number of times a timer handler is invoked. To invoke the handler indefinitely set 'repeats = -1' (e.g. 20)
   service_name: string # The handler service invoked by the timer (e.g. getTemps)
 ]: any -> oneof<record<description: string, frequency: int, name: string, namespace: string, repeats: int, service_name: string, start_time: string, system_key: string, system_secret: string, timer_key: string, user_id: string, user_token: string>, string, nothing> {
@@ -6373,13 +6400,13 @@ export def "update-timer-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/timer/{name}") $auth.query)
   let req_body = {"description": $description, "disabled": $disabled, "frequency": $frequency, "name": $body_name, "repeats": $repeats, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   if (($req_body | get -o "name") == null) { error make --unspanned { msg: "required body field 'name' missing: pass --body-name or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6417,9 +6444,9 @@ export def "get-all-timers" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/timers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6459,9 +6486,9 @@ export def "delete-trigger-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6501,9 +6528,9 @@ export def "get-trigger-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6549,12 +6576,12 @@ export def "create-new-trigger" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6600,12 +6627,12 @@ export def "update-trigger-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/code/{system_key}/trigger/{name}") $auth.query)
   let req_body = {"def_module": $def_module, "def_name": $def_name, "disabled": $disabled, "key_value_pairs": $key_value_pairs, "service_name": $service_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "disabled") == null) { error make --unspanned { msg: "required body field 'disabled' missing: pass --disabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6643,9 +6670,9 @@ export def "get-all-trigger" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/code/{system_key}/triggers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6686,9 +6713,9 @@ export def "delete-collection" [
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6730,11 +6757,11 @@ export def "create-collection" [
   if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $auth.query)
   let req_body = {"appID": $app_id, "collectionID": $collection_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6775,11 +6802,11 @@ export def "update-collection" [
   if ($clear_blade_system_key == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-SystemKey' missing: pass --clear-blade-system-key" } }
   let full_url = (build-url $base "/api/v/3/collectionmanagement" $auth.query)
   let req_body = {"addColumn": $add_column, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token, "ClearBlade-SystemKey": $clear_blade_system_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6817,9 +6844,9 @@ export def "get-device-table-schema" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6857,9 +6884,9 @@ export def "get-device-count" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/devices/{system_key}/count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6897,9 +6924,9 @@ export def "get-edge-table-schema" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/columns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6937,9 +6964,9 @@ export def "get-edge-count" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/edges/{system_key}/count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6979,9 +7006,9 @@ export def "delete-edge-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7021,9 +7048,9 @@ export def "get-edge-data-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7062,9 +7089,9 @@ export def "create-new-edge" [
   --mac-address: string
   --public-addr: string
   --public-port: string
-  --body-system-key: string
+  --body-system-key: string # (spec name: system_key)
   system_secret: string
-  --body-token: string
+  --body-token: string # (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7074,13 +7101,13 @@ export def "create-new-edge" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7119,9 +7146,9 @@ export def "update-edge-by-name" [
   --mac-address: string
   --public-addr: string
   --public-port: string
-  --body-system-key: string
+  --body-system-key: string # (spec name: system_key)
   system_secret: string
-  --body-token: string
+  --body-token: string # (spec name: token)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7131,12 +7158,12 @@ export def "update-edge-by-name" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/3/edges/{system_key}/{name}") $auth.query)
   let req_body = {"description": $description, "local_addr": $local_addr, "local_port": $local_port, "location": $location, "mac_address": $mac_address, "public_addr": $public_addr, "public_port": $public_port, "system_key": $body_system_key, "system_secret": $system_secret, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "system_key") == null) { error make --unspanned { msg: "required body field 'system_key' missing: pass --body-system-key or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7176,9 +7203,9 @@ export def "get-all-deployments" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7220,11 +7247,11 @@ export def "create-deployment" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/3/{system_key}/deployments") $auth.query)
   let req_body = {"assets": $assets, "edges": $edges, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7264,9 +7291,9 @@ export def "delete-deployment" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7306,9 +7333,9 @@ export def "get-a-deployment" [
   if ($clearblade_usertoken == null) { error make --unspanned { msg: "required header parameter 'clearblade-usertoken' missing: pass --clearblade-usertoken" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"clearblade-usertoken": $clearblade_usertoken} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7351,11 +7378,11 @@ export def "update-deployment" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/3/{system_key}/deployments/{deployment_name}") $auth.query)
   let req_body = {"assets": $assets, "edges": $edges} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7393,9 +7420,9 @@ export def "get-buckets-data" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/bucket_sets/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7435,9 +7462,9 @@ export def "get-single-bucket-data" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7482,11 +7509,11 @@ export def "copy-bucket-file" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/copy") $auth.query)
   let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7530,11 +7557,11 @@ export def "create-bucket-file" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/create") $auth.query)
   let req_body = {"box": $box, "contents": $contents, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7577,11 +7604,11 @@ export def "delete-bucket-file" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/delete") $auth.query)
   let req_body = {"box": $box, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7624,9 +7651,9 @@ export def "get-box-files-meta" [
   let qp = [(serialize-qp "box" $box "scalar") (serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/meta") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7671,11 +7698,11 @@ export def "move-bucket-file" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/file/move") $auth.query)
   let req_body = {"from_box": $from_box, "from_path": $from_path, "to_box": $to_box, "to_path": $to_path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7717,9 +7744,9 @@ export def "get-box-files" [
   let qp = [(serialize-qp "box" $box "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), deployment_name: (encode-path-segment $deployment_name)} | format pattern "/api/v/4/bucket_sets/{system_key}/{deployment_name}/files") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7762,9 +7789,9 @@ export def "delete-non-unique-index" [
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7807,9 +7834,9 @@ export def "create-non-unique-index" [
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/index") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7849,9 +7876,9 @@ export def "get-indexes" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/listindexes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7894,9 +7921,9 @@ export def "delete-unique-index" [
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7939,9 +7966,9 @@ export def "create-unique-index" [
   let qp = [(serialize-qp "columnName" $column_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/uniqueindex") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7984,9 +8011,9 @@ export def "update-upsert" [
   let qp = [(serialize-qp "conflictColumn" $conflict_column "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), collection_name: (encode-path-segment $collection_name)} | format pattern "/api/v/4/data/{system_key}/{collection_name}/upsert") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8024,9 +8051,9 @@ export def "connected-device-count" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connectioncount") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8064,9 +8091,9 @@ export def "get-connected-device-list" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/devices/{system_key}/connections") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8106,9 +8133,9 @@ export def "get-connected-device-info" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/devices/{system_key}/connections/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8146,9 +8173,9 @@ export def "get-all-external-db" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8190,11 +8217,11 @@ export def "create-external-db" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/external-db/{system_key}") $auth.query)
   let req_body = {"credentials": $credentials, "dbtype": $dbtype, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8234,9 +8261,9 @@ export def "delete-external-db" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8276,9 +8303,9 @@ export def "get-external-db" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8324,11 +8351,11 @@ export def "update-database-credentials" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}") $auth.query)
   let req_body = {"address": $address, "dbname": $dbname, "password": $password, "port": $port, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8370,11 +8397,11 @@ export def "perform-db-operation" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), name: (encode-path-segment $name)} | format pattern "/api/v/4/external-db/{system_key}/{name}/data") $auth.query)
   let req_body = {"operation": $operation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8414,9 +8441,9 @@ export def "get-topics" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8454,9 +8481,9 @@ export def "get-topic-count" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/message/{system_key}/topics/count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8495,11 +8522,11 @@ export def "change-user-info" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base "/api/v/4/user/manage" $auth.query)
   let req_body = {"changes": $changes, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8530,7 +8557,7 @@ export def "payload-webhook-query" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-token: string # User authentication and data pushed through webhook (required)
+  --qp-token: string # User authentication and data pushed through webhook (required) (spec name: token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8540,7 +8567,7 @@ export def "payload-webhook-query" [
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8582,11 +8609,11 @@ export def "execute-webhook" [
   if ($clear_blade_user_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-UserToken' missing: pass --clear-blade-user-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), webhook_name: (encode-path-segment $webhook_name)} | format pattern "/api/v/4/webhook/execute/{system_key}/{webhook_name}") $auth.query)
   let req_body = {"data": $data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-UserToken": $clear_blade_user_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8624,9 +8651,9 @@ export def "get-adapters" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8674,11 +8701,11 @@ export def "add-adapter" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/adapters") $auth.query)
   let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "name": $name, "os": $os, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8718,9 +8745,9 @@ export def "delete-adapter" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8772,11 +8799,11 @@ export def "map-adapter-command" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}") $auth.query)
   let req_body = {"architecture": $architecture, "deploy_command": $deploy_command, "logs_command": $logs_command, "os": $os, "run_deploy_on_deploy": $run_deploy_on_deploy, "run_start_on_deploy": $run_start_on_deploy, "run_stop_on_deploy": $run_stop_on_deploy, "start_command": $start_command, "status_command": $status_command, "stop_command": $stop_command, "undeploy_command": $undeploy_command} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8819,11 +8846,11 @@ export def "add-edge-command" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/control") $auth.query)
   let req_body = {"command": $command, "edges": $edges} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8863,9 +8890,9 @@ export def "adapter-config" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8897,7 +8924,7 @@ export def "update-file-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --clear-blade-dev-token: string # Dev Token obtained through authentication. (required)
-  --body-adapter-name: string # The adapter the file is a part of.
+  --body-adapter-name: string # The adapter the file is a part of. (spec name: adapter_name)
   --file: string # The base64 encoded file content. (e.g. IyEvYmluL2Jhc2gKbWtkaXIgU2hvd1RpbWVBZGFwdGVyCgptdiBzdGFydC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RvcC5zaCBTaG93VGltZUFkYXB0ZXIKbXYgc3RhdHVzLnNoIFNob3dUaW1lQWRhcHRlcgptdiBkZXBsb3kuc2ggU2hvd1RpbWVBZGFwdGVyCm12IHVuZGVwbG95LnNoIFNob3dUaW1lQWRhcHRlcgptdiBzaG93VGltZSBTaG93VGltZUFkYXB0ZXIKCmVjaG8gIlNob3dUaW1lQWRhcHRlciBEZXBsb3llZCI=)
   name: string # The name of the file, spaces ` ` or `-` are not allowed
   --path-name: string # the file path where the adapter file is stored on the client side. For example, on the file system where edge is running. (e.g. start.sh)
@@ -8910,11 +8937,11 @@ export def "update-file-info" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files") $auth.query)
   let req_body = {"adapter_name": $body_adapter_name, "file": $file, "name": $name, "path_name": $path_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8956,9 +8983,9 @@ export def "delete-file" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9000,9 +9027,9 @@ export def "file-download" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9046,11 +9073,11 @@ export def "update-existing-file-content" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), adapter_name: (encode-path-segment $adapter_name), file_name: (encode-path-segment $file_name)} | format pattern "/api/v/4/{system_key}/adapters/{adapter_name}/files/{file_name}") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9090,9 +9117,9 @@ export def "get-failed-service-query" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/api/v/4/{system_key}/code/failed") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9128,9 +9155,9 @@ export def "get-failed-services" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base "/codeadmin/failed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9170,11 +9197,11 @@ export def "delete-failed-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9212,9 +9239,9 @@ export def "get-system-failed-services" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9254,11 +9281,11 @@ export def "retry-failed-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/failed/{system_key}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9298,9 +9325,9 @@ export def "library-history" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9342,9 +9369,9 @@ export def "get-old-library-version" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name), lib_version: (encode-path-segment $lib_version)} | format pattern "/codeadmin/v/2/history/library/{system_key}/{lib_name}/{lib_version}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9382,9 +9409,9 @@ export def "get-libraries" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key)} | format pattern "/codeadmin/v/2/library/{system_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9424,9 +9451,9 @@ export def "delete-library" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9466,9 +9493,9 @@ export def "get-library" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9512,11 +9539,11 @@ export def "create-library" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "visibility": $visibility} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9560,11 +9587,11 @@ export def "update-library" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), lib_name: (encode-path-segment $lib_name)} | format pattern "/codeadmin/v/2/library/{system_key}/{lib_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "description": $description} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9604,9 +9631,9 @@ export def "get-logs" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/logs/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9646,9 +9673,9 @@ export def "delete-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9695,11 +9722,11 @@ export def "add-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let req_body = {"code": $code, "dependencies": $dependencies, "name": $name, "parameters": $parameters, "run_user": $run_user, "systemID": $system_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9753,14 +9780,14 @@ export def "update-service" [
   if ($clear_blade_dev_token == null) { error make --unspanned { msg: "required header parameter 'ClearBlade-DevToken' missing: pass --clear-blade-dev-token" } }
   let full_url = (build-url $base ({system_key: (encode-path-segment $system_key), service_name: (encode-path-segment $service_name)} | format pattern "/codeadmin/v/2/{system_key}/{service_name}") $auth.query)
   let req_body = {"auto_balance": $auto_balance, "auto_restart": $auto_restart, "code": $code, "concurrency": $concurrency, "current_version": $current_version, "dependencies": $dependencies, "execution_timeout": $execution_timeout, "logging_enabled": $logging_enabled, "name": $name, "parameters": $parameters, "run_user": $run_user, "timers": $timers, "triggers": $triggers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "auto_balance") == null) { error make --unspanned { msg: "required body field 'auto_balance' missing: pass --auto-balance or pipe a record" } }
   if (($req_body | get -o "auto_restart") == null) { error make --unspanned { msg: "required body field 'auto_restart' missing: pass --auto-restart or pipe a record" } }
   if (($req_body | get -o "logging_enabled") == null) { error make --unspanned { msg: "required body field 'logging_enabled' missing: pass --logging-enabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"ClearBlade-DevToken": $clear_blade_dev_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

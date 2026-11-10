@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -187,7 +214,7 @@ export def "get-categories-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -227,9 +254,9 @@ export def "post-categories-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories.json" $qp $auth.query)
   let req_body = {"category": $category} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -267,7 +294,7 @@ export def "get-categories-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -307,7 +334,7 @@ export def "delete-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -347,7 +374,7 @@ export def "get-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -389,9 +416,9 @@ export def "put-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/categories/{id}.json") $qp $auth.query)
   let req_body = {"category": $category} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -431,7 +458,7 @@ export def "get-checkout-custom-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checkout_custom_fields.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -471,9 +498,9 @@ export def "post-checkout-custom-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/checkout_custom_fields.json" $qp $auth.query)
   let req_body = {"checkout_custom_field": $checkout_custom_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -513,7 +540,7 @@ export def "delete-checkout-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -553,7 +580,7 @@ export def "get-checkout-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -595,9 +622,9 @@ export def "put-checkout-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/checkout_custom_fields/{id}.json") $qp $auth.query)
   let req_body = {"checkout_custom_field": $checkout_custom_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -635,7 +662,7 @@ export def "get-countries-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/countries.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -675,7 +702,7 @@ export def "get-countries-country-code-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/countries/{country_code}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -715,7 +742,7 @@ export def "get-countries-country-code-regions-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code)} | format pattern "/countries/{country_code}/regions.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -757,7 +784,7 @@ export def "get-countries-country-code-regions-region-code-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), region_code: (encode-path-segment $region_code)} | format pattern "/countries/{country_code}/regions/{region_code}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -795,7 +822,7 @@ export def "get-custom-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_fields.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -835,9 +862,9 @@ export def "post-custom-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/custom_fields.json" $qp $auth.query)
   let req_body = {"custom_field": $custom_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -877,7 +904,7 @@ export def "delete-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -917,7 +944,7 @@ export def "get-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -959,9 +986,9 @@ export def "put-custom-fields-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}.json") $qp $auth.query)
   let req_body = {"custom_field": $custom_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1001,7 +1028,7 @@ export def "get-custom-fields-id-select-options-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}/select_options.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,9 +1070,9 @@ export def "post-custom-fields-id-select-options-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/custom_fields/{id}/select_options.json") $qp $auth.query)
   let req_body = {"custom_field_select_option": $custom_field_select_option} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1087,7 +1114,7 @@ export def "delete-custom-fields-id-select-options-custom-field-select-option-id
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1129,7 +1156,7 @@ export def "get-custom-fields-id-select-options-custom-field-select-option-id-js
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1173,9 +1200,9 @@ export def "put-custom-fields-id-select-options-custom-field-select-option-id-js
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), custom_field_select_option_id: (encode-path-segment $custom_field_select_option_id)} | format pattern "/custom_fields/{id}/select_options/{custom_field_select_option_id}.json") $qp $auth.query)
   let req_body = {"custom_field_select_option": $custom_field_select_option} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1215,7 +1242,7 @@ export def "get-customer-categories-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer_categories.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1255,9 +1282,9 @@ export def "post-customer-categories-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer_categories.json" $qp $auth.query)
   let req_body = {"category": $category} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1297,7 +1324,7 @@ export def "delete-customer-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1337,7 +1364,7 @@ export def "get-customer-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1379,9 +1406,9 @@ export def "put-customer-categories-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}.json") $qp $auth.query)
   let req_body = {"category": $category} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1423,9 +1450,9 @@ export def "delete-customer-categories-id-customers-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let req_body = {"customers": $customers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1465,7 +1492,7 @@ export def "get-customer-categories-id-customers-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1507,9 +1534,9 @@ export def "post-customer-categories-id-customers-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer_categories/{id}/customers.json") $qp $auth.query)
   let req_body = {"customers": $customers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1549,7 +1576,7 @@ export def "get-customers-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1589,9 +1616,9 @@ export def "post-customers-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers.json" $qp $auth.query)
   let req_body = {"customer": $customer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1629,7 +1656,7 @@ export def "get-customers-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customers/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1669,7 +1696,7 @@ export def "get-customers-email-email-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({email: (encode-path-segment $email)} | format pattern "/customers/email/{email}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1709,7 +1736,7 @@ export def "delete-customers-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1749,7 +1776,7 @@ export def "get-customers-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1791,9 +1818,9 @@ export def "put-customers-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}.json") $qp $auth.query)
   let req_body = {"customer": $customer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1833,7 +1860,7 @@ export def "get-customers-id-fields" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/fields") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1875,9 +1902,9 @@ export def "post-customers-id-fields" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/fields") $qp $auth.query)
   let req_body = {"customer_additional_field": $customer_additional_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1919,7 +1946,7 @@ export def "delete-customers-id-fields-field-id" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1961,7 +1988,7 @@ export def "get-customers-id-fields-field-id" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2005,9 +2032,9 @@ export def "put-customers-id-fields-field-id" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), field_id: (encode-path-segment $field_id)} | format pattern "/customers/{id}/fields/{field_id}") $qp $auth.query)
   let req_body = {"customer_additional_field": $customer_additional_field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2047,7 +2074,7 @@ export def "get-fulfillments-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillments.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2085,7 +2112,7 @@ export def "get-fulfillments-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fulfillments/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2125,7 +2152,7 @@ export def "get-fulfillments-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fulfillments/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2165,7 +2192,7 @@ export def "get-hooks-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2205,9 +2232,9 @@ export def "post-hooks-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks.json" $qp $auth.query)
   let req_body = {"hook": $hook} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2247,7 +2274,7 @@ export def "delete-hooks-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2287,7 +2314,7 @@ export def "get-hooks-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2329,9 +2356,9 @@ export def "put-hooks-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/hooks/{id}.json") $qp $auth.query)
   let req_body = {"hook": $hook} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2369,7 +2396,7 @@ export def "get-jsapps-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jsapps.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2409,9 +2436,9 @@ export def "post-jsapps-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/jsapps.json" $qp $auth.query)
   let req_body = {"app": $app} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2451,7 +2478,7 @@ export def "delete-jsapps-code-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/jsapps/{code}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2491,7 +2518,7 @@ export def "get-jsapps-code-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/jsapps/{code}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2531,7 +2558,7 @@ export def "get-order-id-fulfillments-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/order/{id}/fulfillments.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2571,7 +2598,7 @@ export def "get-orders-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2611,9 +2638,9 @@ export def "post-orders-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders.json" $qp $auth.query)
   let req_body = {"order": $order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2653,7 +2680,7 @@ export def "get-orders-after-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/after/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2691,7 +2718,7 @@ export def "get-orders-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2731,7 +2758,7 @@ export def "get-orders-status-status-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/orders/status/{status}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2771,7 +2798,7 @@ export def "get-orders-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2813,9 +2840,9 @@ export def "put-orders-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}.json") $qp $auth.query)
   let req_body = {"order": $order} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2855,7 +2882,7 @@ export def "get-orders-id-history-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/history.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2897,9 +2924,9 @@ export def "post-orders-id-history-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/orders/{id}/history.json") $qp $auth.query)
   let req_body = {"order_history": $order_history} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2939,7 +2966,7 @@ export def "get-pages-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2979,9 +3006,9 @@ export def "post-pages-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages.json" $qp $auth.query)
   let req_body = {"page": $page} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3019,7 +3046,7 @@ export def "get-pages-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pages/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3059,7 +3086,7 @@ export def "delete-pages-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3099,7 +3126,7 @@ export def "get-pages-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3141,9 +3168,9 @@ export def "put-pages-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/pages/{id}.json") $qp $auth.query)
   let req_body = {"page": $page} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3186,7 +3213,7 @@ export def "get-partners-stores-json" [
   let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/partners/stores.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3224,7 +3251,7 @@ export def "get-payment-methods-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment_methods.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3264,7 +3291,7 @@ export def "get-payment-methods-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3305,7 +3332,7 @@ export def "get-products-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3346,9 +3373,9 @@ export def "post-products-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products.json" $qp $auth.query)
   let req_body = {"product": $product} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3389,7 +3416,7 @@ export def "get-products-after-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/after/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3430,7 +3457,7 @@ export def "get-products-category-category-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/products/category/{category_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3471,7 +3498,7 @@ export def "get-products-category-category-id-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/products/category/{category_id}/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3509,7 +3536,7 @@ export def "get-products-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/count.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3551,7 +3578,7 @@ export def "get-products-search-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products/search.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3592,7 +3619,7 @@ export def "get-products-status-status-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/products/status/{status}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3633,7 +3660,7 @@ export def "get-products-status-status-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({status: (encode-path-segment $status)} | format pattern "/products/status/{status}/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3673,7 +3700,7 @@ export def "delete-products-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3714,7 +3741,7 @@ export def "get-products-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3757,9 +3784,9 @@ export def "put-products-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}.json") $qp $auth.query)
   let req_body = {"product": $product} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3799,7 +3826,7 @@ export def "get-products-id-attachments-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3841,9 +3868,9 @@ export def "post-products-id-attachments-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments.json") $qp $auth.query)
   let req_body = {"attachment": $attachment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3883,7 +3910,7 @@ export def "get-products-id-attachments-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/attachments/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3925,7 +3952,7 @@ export def "delete-products-id-attachments-attachment-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/products/{id}/attachments/{attachment_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3967,7 +3994,7 @@ export def "get-products-id-attachments-attachment-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/products/{id}/attachments/{attachment_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4007,7 +4034,7 @@ export def "get-products-id-digital-products-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4049,9 +4076,9 @@ export def "post-products-id-digital-products-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products.json") $qp $auth.query)
   let req_body = {"digital_product": $digital_product} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4091,7 +4118,7 @@ export def "get-products-id-digital-products-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/digital_products/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4133,7 +4160,7 @@ export def "delete-products-id-digital-products-digital-product-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), digital_product_id: (encode-path-segment $digital_product_id)} | format pattern "/products/{id}/digital_products/{digital_product_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4175,7 +4202,7 @@ export def "get-products-id-digital-products-digital-product-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), digital_product_id: (encode-path-segment $digital_product_id)} | format pattern "/products/{id}/digital_products/{digital_product_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4215,7 +4242,7 @@ export def "get-products-id-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4257,9 +4284,9 @@ export def "post-products-id-fields-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields.json") $qp $auth.query)
   let req_body = {"field": $field} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4299,7 +4326,7 @@ export def "get-products-id-fields-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/fields/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4339,7 +4366,7 @@ export def "get-products-id-images-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4381,9 +4408,9 @@ export def "post-products-id-images-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images.json") $qp $auth.query)
   let req_body = {"image": $image} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4423,7 +4450,7 @@ export def "get-products-id-images-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/images/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4465,7 +4492,7 @@ export def "delete-products-id-images-image-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), image_id: (encode-path-segment $image_id)} | format pattern "/products/{id}/images/{image_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4507,7 +4534,7 @@ export def "get-products-id-images-image-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), image_id: (encode-path-segment $image_id)} | format pattern "/products/{id}/images/{image_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4547,7 +4574,7 @@ export def "get-products-id-options-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4589,9 +4616,9 @@ export def "post-products-id-options-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options.json") $qp $auth.query)
   let req_body = {"option": $option} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4631,7 +4658,7 @@ export def "get-products-id-options-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/options/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4673,7 +4700,7 @@ export def "delete-products-id-options-option-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4715,7 +4742,7 @@ export def "get-products-id-options-option-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4759,9 +4786,9 @@ export def "put-products-id-options-option-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}.json") $qp $auth.query)
   let req_body = {"option": $option} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4803,7 +4830,7 @@ export def "get-products-id-options-option-id-values-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4847,9 +4874,9 @@ export def "post-products-id-options-option-id-values-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values.json") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4891,7 +4918,7 @@ export def "get-products-id-options-option-id-values-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id)} | format pattern "/products/{id}/options/{option_id}/values/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4935,7 +4962,7 @@ export def "delete-products-id-options-option-id-values-value-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4979,7 +5006,7 @@ export def "get-products-id-options-option-id-values-value-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5025,9 +5052,9 @@ export def "put-products-id-options-option-id-values-value-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), option_id: (encode-path-segment $option_id), value_id: (encode-path-segment $value_id)} | format pattern "/products/{id}/options/{option_id}/values/{value_id}.json") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5067,7 +5094,7 @@ export def "get-products-id-variants-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5109,9 +5136,9 @@ export def "post-products-id-variants-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants.json") $qp $auth.query)
   let req_body = {"variant": $variant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5151,7 +5178,7 @@ export def "get-products-id-variants-count-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}/variants/count.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5193,7 +5220,7 @@ export def "get-products-id-variants-variant-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), variant_id: (encode-path-segment $variant_id)} | format pattern "/products/{id}/variants/{variant_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5237,9 +5264,9 @@ export def "put-products-id-variants-variant-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), variant_id: (encode-path-segment $variant_id)} | format pattern "/products/{id}/variants/{variant_id}.json") $qp $auth.query)
   let req_body = {"variant": $variant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5281,7 +5308,7 @@ export def "delete-products-product-id-fields-field-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), field_id: (encode-path-segment $field_id)} | format pattern "/products/{product_id}/fields/{field_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5323,7 +5350,7 @@ export def "put-products-product-id-fields-field-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), field_id: (encode-path-segment $field_id)} | format pattern "/products/{product_id}/fields/{field_id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5363,7 +5390,7 @@ export def "get-promotions-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5403,9 +5430,9 @@ export def "post-promotions-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/promotions.json" $qp $auth.query)
   let req_body = {"promotion": $promotion} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5445,7 +5472,7 @@ export def "delete-promotions-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5485,7 +5512,7 @@ export def "get-promotions-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5527,9 +5554,9 @@ export def "put-promotions-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/promotions/{id}.json") $qp $auth.query)
   let req_body = {"promotion": $promotion} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5567,7 +5594,7 @@ export def "get-shipping-methods-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shipping_methods.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5607,9 +5634,9 @@ export def "post-shipping-methods-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shipping_methods.json" $qp $auth.query)
   let req_body = {"shipping_method": $shipping_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5649,7 +5676,7 @@ export def "delete-shipping-methods-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5689,7 +5716,7 @@ export def "get-shipping-methods-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5731,9 +5758,9 @@ export def "put-shipping-methods-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping_methods/{id}.json") $qp $auth.query)
   let req_body = {"shipping_method": $shipping_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5774,7 +5801,7 @@ export def "get-store-check-status-json" [
   let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar") (serialize-qp "store_code" $store_code "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/check_status.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5820,9 +5847,9 @@ export def "post-store-create-json" [
   let qp = [(serialize-qp "partner_code" $partner_code "scalar") (serialize-qp "auth_token" $auth_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/create.json" $qp $auth.query)
   let req_body = {"aff": $aff, "email": $email, "locale": $locale, "password": $password, "plan_name": $plan_name, "reject_duplicates": $reject_duplicates, "store_name": $store_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5860,7 +5887,7 @@ export def "get-store-info-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/info.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5898,7 +5925,7 @@ export def "get-store-languages-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/store/languages.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5936,7 +5963,7 @@ export def "get-taxes-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxes.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5976,9 +6003,9 @@ export def "post-taxes-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/taxes.json" $qp $auth.query)
   let req_body = {"tax": $tax} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6018,7 +6045,7 @@ export def "get-taxes-id-json" [
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "authtoken" $authtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/taxes/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

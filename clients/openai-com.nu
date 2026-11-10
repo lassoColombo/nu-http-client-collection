@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -224,9 +251,9 @@ export def "create-answer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answers" $auth.query)
   let req_body = {"documents": $documents, "examples": $examples, "examples_context": $examples_context, "expand": $expand, "file": $file, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_rerank": $max_rerank, "max_tokens": $max_tokens, "model": $model, "n": $n, "question": $question, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "stop": $stop, "temperature": $temperature, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -267,10 +294,10 @@ export def "create-transcription" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/audio/transcriptions" $auth.query)
   let req_body = {"file": $file, "language": $language, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -311,10 +338,10 @@ export def "create-translation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/audio/translations" $auth.query)
   let req_body = {"file": $file, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -362,9 +389,9 @@ export def "create-chat-completion" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat/completions" $auth.query)
   let req_body = {"frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "max_tokens": $max_tokens, "messages": $messages, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "stop": $stop, "stream": $stream, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -415,9 +442,9 @@ export def "create-classification" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications" $auth.query)
   let req_body = {"examples": $examples, "expand": $expand, "file": $file, "labels": $labels, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_examples": $max_examples, "model": $model, "query": $query, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "temperature": $temperature, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -468,9 +495,9 @@ export def "create-completion" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/completions" $auth.query)
   let req_body = {"best_of": $best_of, "echo": $echo, "frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_tokens": $max_tokens, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "prompt": $prompt, "stop": $stop, "stream": $stream, "suffix": $suffix, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -499,7 +526,7 @@ export def "create-edit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: string # The input text to use as a starting point for the edit. (nullable, default: "", e.g. What day of the wek is it?)
+  --body-input: string # The input text to use as a starting point for the edit. (nullable, default: "", e.g. What day of the wek is it?) (spec name: input)
   instruction: string # The instruction that tells the model how to edit the prompt. (e.g. Fix the spelling mistakes.)
   model: string # ID of the model to use. You can use the `text-davinci-edit-001` or `code-davinci-edit-001` model with this endpoint.
   --n: int # How many edits to generate for the input and instruction. (nullable, default: 1, e.g. 1)
@@ -511,9 +538,9 @@ export def "create-edit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/edits" $auth.query)
   let req_body = {"input": $body_input, "instruction": $instruction, "model": $model, "n": $n, "temperature": $temperature, "top_p": $top_p} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -542,7 +569,7 @@ export def "create-embedding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: any # Input text to get embeddings for, encoded as a string or array of tokens. To get embeddings for multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed 8192 tokens in length. (e.g. The quick brown fox jumped over the lazy dog)
+  --body-input: any # Input text to get embeddings for, encoded as a string or array of tokens. To get embeddings for multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed 8192 tokens in length. (e.g. The quick brown fox jumped over the lazy dog) (spec name: input)
   model: string # ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.
   --user: string # A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids). (e.g. user-1234)
 ]: any -> oneof<record<data: table<embedding: list, index: int, object: string>, model: string, object: string, usage: record<prompt_tokens: int, total_tokens: int>>, string, nothing> {
@@ -551,10 +578,10 @@ export def "create-embedding" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/embeddings" $auth.query)
   let req_body = {"input": $body_input, "model": $model, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -590,7 +617,7 @@ export def "list-engines" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/engines" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "retrieve-engine" [
   if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engine_id' must be non-empty" } }
   let full_url = (build-url $base ({engine_id: (encode-path-segment $engine_id)} | format pattern "/engines/{engine_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -673,9 +700,9 @@ export def "create-search" [
   if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engine_id' must be non-empty" } }
   let full_url = (build-url $base ({engine_id: (encode-path-segment $engine_id)} | format pattern "/engines/{engine_id}/search") $auth.query)
   let req_body = {"documents": $documents, "file": $file, "max_rerank": $max_rerank, "query": $query, "return_metadata": $return_metadata, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -709,7 +736,7 @@ export def "list-files" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -746,10 +773,10 @@ export def "create-file" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files" $auth.query)
   let req_body = {"file": $file, "purpose": $purpose} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -786,7 +813,7 @@ export def "delete-file" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -822,7 +849,7 @@ export def "retrieve-file" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -858,7 +885,7 @@ export def "download-file" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/content") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -892,7 +919,7 @@ export def "list-fine-tunes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fine-tunes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -939,9 +966,9 @@ export def "create-fine-tune" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fine-tunes" $auth.query)
   let req_body = {"batch_size": $batch_size, "classification_betas": $classification_betas, "classification_n_classes": $classification_n_classes, "classification_positive_class": $classification_positive_class, "compute_classification_metrics": $compute_classification_metrics, "learning_rate_multiplier": $learning_rate_multiplier, "model": $model, "n_epochs": $n_epochs, "prompt_loss_weight": $prompt_loss_weight, "suffix": $suffix, "training_file": $training_file, "validation_file": $validation_file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -977,7 +1004,7 @@ export def "retrieve-fine-tune" [
   if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
   let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1013,7 +1040,7 @@ export def "cancel-fine-tune" [
   if ($fine_tune_id | is-empty) { error make --unspanned { msg: "path parameter 'fine_tune_id' must be non-empty" } }
   let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1051,7 +1078,7 @@ export def "list-fine-tune-events" [
   let qp = [(serialize-qp "stream" $stream "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({fine_tune_id: (encode-path-segment $fine_tune_id)} | format pattern "/fine-tunes/{fine_tune_id}/events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1093,10 +1120,10 @@ export def "create-image-edit" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/edits" $auth.query)
   let req_body = {"image": $image, "mask": $mask, "n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image" "mask"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -1137,9 +1164,9 @@ export def "create-image" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/generations" $auth.query)
   let req_body = {"n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1179,10 +1206,10 @@ export def "create-image-variation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/variations" $auth.query)
   let req_body = {"image": $image, "n": $n, "response_format": $response_format, "size": $size, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["image"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -1217,7 +1244,7 @@ export def "list-models" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/models" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1253,7 +1280,7 @@ export def "delete-model" [
   if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
   let full_url = (build-url $base ({model: (encode-path-segment $model)} | format pattern "/models/{model}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1289,7 +1316,7 @@ export def "retrieve-model" [
   if ($model | is-empty) { error make --unspanned { msg: "path parameter 'model' must be non-empty" } }
   let full_url = (build-url $base ({model: (encode-path-segment $model)} | format pattern "/models/{model}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1318,7 +1345,7 @@ export def "create-moderation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: any # The input text to classify
+  --body-input: any # The input text to classify (spec name: input)
   --model: string # Two content moderations models are available: `text-moderation-stable` and `text-moderation-latest`. The default is `text-moderation-latest` which will be automatically upgraded over time. This ensures you are always using our most accurate model. If you use `text-moderation-stable`, we will provide advanced notice before updating the model. Accuracy of `text-moderation-stable` may be slightly lower than for `text-moderation-latest`. (default: text-moderation-latest, e.g. text-moderation-stable)
 ]: any -> oneof<record<id: string, model: string, results: table<categories: record, category_scores: record, flagged: bool>>, string, nothing> {
   let input = $in
@@ -1326,10 +1353,10 @@ export def "create-moderation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderations" $auth.query)
   let req_body = {"input": $body_input, "model": $model} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -207,14 +234,14 @@ export def "walletobjects-eventticketclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record, customGateLabel: record, customRowLabel: record, customSeatLabel: record, customSectionLabel: record, dateTime: record, enableSmartTap: bool, eventId: string, eventName: record, finePrint: record, gateLabel: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedIssuerName: record, locations: list, logo: record, messages: list, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, review: record, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record, textModulesData: list, venue: record, version: string, viewUnlockRequirement: string, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -303,9 +330,9 @@ export def "walletobjects-eventticketclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -353,7 +380,7 @@ export def "walletobjects-eventticketclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -444,9 +471,9 @@ export def "walletobjects-eventticketclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -537,9 +564,9 @@ export def "walletobjects-eventticketclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -589,9 +616,9 @@ export def "walletobjects-eventticketclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -633,14 +660,14 @@ export def "walletobjects-eventticketobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, faceValue: record, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, kind: string, linkedOfferIds: list, linksModuleData: record, locations: list, messages: list, passConstraints: record, reservationInfo: record, rotatingBarcode: record, seatInfo: record, smartTapRedemptionValue: string, state: string, textModulesData: list, ticketHolderName: string, ticketNumber: string, ticketType: record, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -718,9 +745,9 @@ export def "walletobjects-eventticketobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -768,7 +795,7 @@ export def "walletobjects-eventticketobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -848,9 +875,9 @@ export def "walletobjects-eventticketobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -930,9 +957,9 @@ export def "walletobjects-eventticketobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -982,9 +1009,9 @@ export def "walletobjects-eventticketobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1034,9 +1061,9 @@ export def "walletobjects-eventticketobject-modifylinkedofferobjects" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/modifyLinkedOfferObjects") $qp $auth.query)
   let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1078,14 +1105,14 @@ export def "walletobjects-flightclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record, callbackOptions: record, classTemplateInfo: record, countryCode: string, destination: record, enableSmartTap: bool, flightHeader: record, flightStatus: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, languageOverride: string, linksModuleData: record, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, origin: record, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1170,9 +1197,9 @@ export def "walletobjects-flightclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1220,7 +1247,7 @@ export def "walletobjects-flightclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1307,9 +1334,9 @@ export def "walletobjects-flightclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1396,9 +1423,9 @@ export def "walletobjects-flightclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1448,9 +1475,9 @@ export def "walletobjects-flightclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1492,14 +1519,14 @@ export def "walletobjects-flightobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, boardingAndSeatingInfo: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, passengerName: string, reservationInfo: record, rotatingBarcode: record, securityProgramLogo: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1574,9 +1601,9 @@ export def "walletobjects-flightobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1624,7 +1651,7 @@ export def "walletobjects-flightobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1701,9 +1728,9 @@ export def "walletobjects-flightobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1780,9 +1807,9 @@ export def "walletobjects-flightobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1832,9 +1859,9 @@ export def "walletobjects-flightobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1876,14 +1903,14 @@ export def "walletobjects-genericclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<callbackOptions: record, classTemplateInfo: record, enableSmartTap: bool, id: string, imageModulesData: list, linksModuleData: record, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, securityAnimation: record, textModulesData: list, viewUnlockRequirement: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1941,9 +1968,9 @@ export def "walletobjects-genericclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp $auth.query)
   let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1991,7 +2018,7 @@ export def "walletobjects-genericclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2051,9 +2078,9 @@ export def "walletobjects-genericclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp $auth.query)
   let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2113,9 +2140,9 @@ export def "walletobjects-genericclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp $auth.query)
   let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2157,14 +2184,14 @@ export def "walletobjects-genericobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, cardTitle: record, classId: string, genericType: string, groupingInfo: record, hasUsers: bool, header: record, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, linksModuleData: record, logo: record, notifications: record, passConstraints: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, subheader: record, textModulesData: list, validTimeInterval: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2233,9 +2260,9 @@ export def "walletobjects-genericobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2283,7 +2310,7 @@ export def "walletobjects-genericobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2354,9 +2381,9 @@ export def "walletobjects-genericobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2427,9 +2454,9 @@ export def "walletobjects-genericobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2471,14 +2498,14 @@ export def "walletobjects-giftcardclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record, cardNumberLabel: string, classTemplateInfo: record, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedCardNumberLabel: record, localizedEventNumberLabel: record, localizedIssuerName: record, localizedMerchantName: record, localizedPinLabel: record, locations: list, merchantName: string, messages: list, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2561,9 +2588,9 @@ export def "walletobjects-giftcardclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp $auth.query)
   let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2611,7 +2638,7 @@ export def "walletobjects-giftcardclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2696,9 +2723,9 @@ export def "walletobjects-giftcardclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2783,9 +2810,9 @@ export def "walletobjects-giftcardclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2835,9 +2862,9 @@ export def "walletobjects-giftcardclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2879,14 +2906,14 @@ export def "walletobjects-giftcardobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, balance: record, balanceUpdateTime: record, barcode: record, cardNumber: string, classId: string, classReference: record, disableExpirationNotification: bool, eventNumber: string, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, pin: string, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2961,9 +2988,9 @@ export def "walletobjects-giftcardobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3011,7 +3038,7 @@ export def "walletobjects-giftcardobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3088,9 +3115,9 @@ export def "walletobjects-giftcardobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3167,9 +3194,9 @@ export def "walletobjects-giftcardobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3219,9 +3246,9 @@ export def "walletobjects-giftcardobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3267,7 +3294,7 @@ export def "walletobjects-issuer-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3319,9 +3346,9 @@ export def "walletobjects-issuer-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp $auth.query)
   let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3369,7 +3396,7 @@ export def "walletobjects-issuer-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3423,9 +3450,9 @@ export def "walletobjects-issuer-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp $auth.query)
   let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3479,9 +3506,9 @@ export def "walletobjects-issuer-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp $auth.query)
   let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3529,9 +3556,9 @@ export def "walletobjects-jwt-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/jwt" $qp $auth.query)
   let req_body = {"jwt": $jwt} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3573,14 +3600,14 @@ export def "walletobjects-loyaltyclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, discoverableProgram: record, enableSmartTap: bool, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedAccountIdLabel: record, localizedAccountNameLabel: record, localizedIssuerName: record, localizedProgramName: record, localizedRewardsTier: record, localizedRewardsTierLabel: record, localizedSecondaryRewardsTier: record, localizedSecondaryRewardsTierLabel: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record, programName: string, redemptionIssuers: list, review: record, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record, textModulesData: list, version: string, viewUnlockRequirement: string, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3669,9 +3696,9 @@ export def "walletobjects-loyaltyclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp $auth.query)
   let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3719,7 +3746,7 @@ export def "walletobjects-loyaltyclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3810,9 +3837,9 @@ export def "walletobjects-loyaltyclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp $auth.query)
   let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3903,9 +3930,9 @@ export def "walletobjects-loyaltyclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp $auth.query)
   let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3955,9 +3982,9 @@ export def "walletobjects-loyaltyclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3999,14 +4026,14 @@ export def "walletobjects-loyaltyobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<accountId: string, accountName: string, appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linkedOfferIds: list, linksModuleData: record, locations: list, loyaltyPoints: record, messages: list, passConstraints: record, rotatingBarcode: record, secondaryLoyaltyPoints: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4081,9 +4108,9 @@ export def "walletobjects-loyaltyobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4131,7 +4158,7 @@ export def "walletobjects-loyaltyobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4208,9 +4235,9 @@ export def "walletobjects-loyaltyobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4287,9 +4314,9 @@ export def "walletobjects-loyaltyobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp $auth.query)
   let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4339,9 +4366,9 @@ export def "walletobjects-loyaltyobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4391,9 +4418,9 @@ export def "walletobjects-loyaltyobject-modifylinkedofferobjects" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/modifyLinkedOfferObjects") $qp $auth.query)
   let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4435,14 +4462,14 @@ export def "walletobjects-offerclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, kind: string, linksModuleData: record, localizedDetails: record, localizedFinePrint: record, localizedIssuerName: record, localizedProvider: record, localizedShortTitle: record, localizedTitle: record, locations: list, messages: list, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, shortTitle: string, textModulesData: list, title: string, titleImage: record, version: string, viewUnlockRequirement: string, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4528,9 +4555,9 @@ export def "walletobjects-offerclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4578,7 +4605,7 @@ export def "walletobjects-offerclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4666,9 +4693,9 @@ export def "walletobjects-offerclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4756,9 +4783,9 @@ export def "walletobjects-offerclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp $auth.query)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4808,9 +4835,9 @@ export def "walletobjects-offerclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4852,14 +4879,14 @@ export def "walletobjects-offerobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<appLinkData: record, barcode: record, classId: string, classReference: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, id: string, imageModulesData: list, infoModuleData: record, kind: string, linksModuleData: record, locations: list, messages: list, passConstraints: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4929,9 +4956,9 @@ export def "walletobjects-offerobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4979,7 +5006,7 @@ export def "walletobjects-offerobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5051,9 +5078,9 @@ export def "walletobjects-offerobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5125,9 +5152,9 @@ export def "walletobjects-offerobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp $auth.query)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5177,9 +5204,9 @@ export def "walletobjects-offerobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5227,7 +5254,7 @@ export def "walletobjects-permissions-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5278,9 +5305,9 @@ export def "walletobjects-permissions-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp $auth.query)
   let req_body = {"issuerId": $issuer_id, "permissions": $permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5330,9 +5357,9 @@ export def "walletobjects-walletobjects-v1-private-content-upload-private-data" 
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/privateContent/uploadPrivateData" $qp $auth.query)
   let req_body = {"issuerId": $issuer_id, "text": $text, "uri": $uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5382,9 +5409,9 @@ export def "walletobjects-media-upload" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_id: (encode-path-segment $issuer_id)} | format pattern "/walletobjects/v1/privateContent/{issuer_id}/uploadPrivateImage") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5435,9 +5462,9 @@ export def "walletobjects-smarttap-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/smartTap" $qp $auth.query)
   let req_body = {"id": $id, "infos": $infos, "kind": $kind, "merchantId": $merchant_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5479,14 +5506,14 @@ export def "walletobjects-transitclass-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --issuer-id: string # The ID of the issuer authorized to list classes.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` classes are available in a list. For example, if you have a list of 200 classes and you call list with `maxResults` set to 20, list will return the first 20 classes and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 classes. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<activationOptions: record, allowMultipleUsersPerObject: bool, callbackOptions: record, classTemplateInfo: record, countryCode: string, customCarriageLabel: record, customCoachLabel: record, customConcessionCategoryLabel: record, customConfirmationCodeLabel: record, customDiscountMessageLabel: record, customFareClassLabel: record, customFareNameLabel: record, customOtherRestrictionsLabel: record, customPlatformLabel: record, customPurchaseFaceValueLabel: record, customPurchasePriceLabel: record, customPurchaseReceiptNumberLabel: record, customRouteRestrictionsDetailsLabel: record, customRouteRestrictionsLabel: record, customSeatLabel: record, customTicketNumberLabel: record, customTimeRestrictionsLabel: record, customTransitTerminusNameLabel: record, customZoneLabel: record, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record, hexBackgroundColor: string, homepageUri: record, id: string, imageModulesData: list, infoModuleData: record, issuerName: string, languageOverride: string, linksModuleData: record, localizedIssuerName: record, locations: list, logo: record, messages: list, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list, review: record, reviewStatus: string, securityAnimation: record, textModulesData: list, transitOperatorName: record, transitType: string, version: string, viewUnlockRequirement: string, watermark: record, wordMark: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issuerId" $issuer_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5584,9 +5611,9 @@ export def "walletobjects-transitclass-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp $auth.query)
   let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5634,7 +5661,7 @@ export def "walletobjects-transitclass-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5734,9 +5761,9 @@ export def "walletobjects-transitclass-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp $auth.query)
   let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5836,9 +5863,9 @@ export def "walletobjects-transitclass-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp $auth.query)
   let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5888,9 +5915,9 @@ export def "walletobjects-transitclass-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5932,14 +5959,14 @@ export def "walletobjects-transitobject-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --class-id: string # The ID of the class whose objects will be listed.
   --max-results: int # Identifies the max number of results returned by a list. All results are returned if `maxResults` isn't defined.
-  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects.
+  --qp-token: string # Used to get the next set of results if `maxResults` is specified, but more than `maxResults` objects are available in a list. For example, if you have a list of 200 objects and you call list with `maxResults` set to 20, list will return the first 20 objects and a token. Call list again with `maxResults` set to 20 and the token to get the next 20 objects. (spec name: token)
 ]: nothing -> oneof<record<pagination: record<kind: string, nextPageToken: string, resultsPerPage: int>, resources: table<activationStatus: record, appLinkData: record, barcode: record, classId: string, classReference: record, concessionCategory: string, customConcessionCategory: record, customTicketStatus: record, deviceContext: record, disableExpirationNotification: bool, groupingInfo: record, hasLinkedDevice: bool, hasUsers: bool, heroImage: record, hexBackgroundColor: string, id: string, imageModulesData: list, infoModuleData: record, linksModuleData: record, locations: list, messages: list, passConstraints: record, passengerNames: string, passengerType: string, purchaseDetails: record, rotatingBarcode: record, smartTapRedemptionValue: string, state: string, textModulesData: list, ticketLeg: record, ticketLegs: list, ticketNumber: string, ticketRestrictions: record, ticketStatus: string, tripId: string, tripType: string, validTimeInterval: record, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "classId" $class_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6024,9 +6051,9 @@ export def "walletobjects-transitobject-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp $auth.query)
   let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6074,7 +6101,7 @@ export def "walletobjects-transitobject-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6161,9 +6188,9 @@ export def "walletobjects-transitobject-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp $auth.query)
   let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6250,9 +6277,9 @@ export def "walletobjects-transitobject-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp $auth.query)
   let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6302,9 +6329,9 @@ export def "walletobjects-transitobject-addmessage" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}/addMessage") $qp $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

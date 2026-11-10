@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,7 +207,7 @@ export def "get-airport" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "top_airports" $top_airports "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/airports" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -213,7 +240,7 @@ export def "options-airports" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/airports" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -257,7 +284,7 @@ export def "get-cities" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/findcitiesfromlatlong" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -290,7 +317,7 @@ export def "options-cities-findcitiesfromlatlong" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/findcitiesfromlatlong" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -332,7 +359,7 @@ export def "get-autocomplete" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/findcitiesfromtext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -365,7 +392,7 @@ export def "options-cities-findcitiesfromtext" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/findcitiesfromtext" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -410,7 +437,7 @@ export def "get-significant-cities" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "pourcent" $pourcent "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cities/significant" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -443,7 +470,7 @@ export def "options-cities-significant" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cities/significant" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -481,7 +508,7 @@ export def "get-continents" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "continentcode" $continentcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/continents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -514,7 +541,7 @@ export def "options-continents" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/continents" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -552,7 +579,7 @@ export def "get-countries" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "countrycode" $countrycode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -585,7 +612,7 @@ export def "options-countries" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/countries" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -625,7 +652,7 @@ export def "get-distance" [
   let qp = [(serialize-qp "locationA" $location_a "scalar") (serialize-qp "locationB" $location_b "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/distance" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -658,7 +685,7 @@ export def "options-distance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distance" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -696,7 +723,7 @@ export def "get-elevation" [
   let qp = [(serialize-qp "locations" $locations "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/elevation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -729,7 +756,7 @@ export def "options-elevation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/elevation" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -763,7 +790,7 @@ export def "get-ping" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pong" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -801,7 +828,7 @@ export def "get-sun" [
   let qp = [(serialize-qp "location" $location "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sun_positions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -834,7 +861,7 @@ export def "options-sun-positions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sun_positions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url
@@ -871,7 +898,7 @@ export def "get-timezone" [
   let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timezone" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -904,7 +931,7 @@ export def "options-timezone" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/timezone" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "options"
     url: $full_url

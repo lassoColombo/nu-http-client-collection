@@ -23,7 +23,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -97,9 +97,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -120,6 +122,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -195,7 +222,7 @@ export def "process-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --cookie: string # VTEX Chekout cookie associated with a specific order. Use the `Vtex_CHKO_Auth` and the `CheckoutDataAccess` cookies returned by the [Place order](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorder) or [Place order from existing cart](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorderfromexistingorderform) API requests, like a browser would. (required, default: Vtex_CHKO_Auth=0e/RpYIEZu19BuwXB4tZ7eIGu9HT8vdUAHWQDHDpxMc=; CheckoutDataAccess=0e/PoiTEZu19BuwXB4tZ7eIGu9HT8vdUAHWQDHDpxMc=)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
@@ -206,9 +233,9 @@ export def "process-order" [
   let cookie = ($cookie | default "Vtex_CHKO_Auth=0e/RpYIEZu19BuwXB4tZ7eIGu9HT8vdUAHWQDHDpxMc=; CheckoutDataAccess=0e/PoiTEZu19BuwXB4tZ7eIGu9HT8vdUAHWQDHDpxMc=")
   let full_url = (build-url $base ({order_group: (encode-path-segment $order_group)} | format pattern "/api/checkout/pub/gatewayCallback/{order_group}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "Cookie": $cookie} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -239,7 +266,7 @@ export def "create-a-new-cart" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force-new-cart: oneof<nothing, bool> # Use this query parameter to create a new empty shopping cart. (default: true)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -248,9 +275,9 @@ export def "create-a-new-cart" [
   let qp = [(serialize-qp "forceNewCart" $force_new_cart "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForm" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -282,7 +309,7 @@ export def "get-cart-information-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --refresh-outdated-data: oneof<nothing, bool> # It is possible to use the [Update cart items request](https://developers.vtex.com/vtex-rest-api/reference/cart-update#itemsupdate) so as to allow outdated information in the `orderForm`, which may improve performance in some cases. To guarantee that all cart information is updated, send this request with this parameter as `true`. We recommend doing this in the final stages of the shopping experience, starting from the checkout page. (default: true)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -292,9 +319,9 @@ export def "get-cart-information-by-id" [
   let qp = [(serialize-qp "refreshOutdatedData" $refresh_outdated_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -325,7 +352,7 @@ export def "add-client-preferences" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --locale: string # Locale chosen by the shopper. Determines website language. (default: EN)
   --optin-news-letter: oneof<nothing, bool> # Indicates whether the shopper opted in to receive the store's news letter. (default: false)
 ]: any -> any {
@@ -337,13 +364,13 @@ export def "add-client-preferences" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientPreferencesData") $auth.query)
   let req_body = {"locale": $locale, "optinNewsLetter": $optin_news_letter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -374,7 +401,7 @@ export def "add-client-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --corporate-document: string # Corporate document, if the customer is a legal entity. (default: 12345678000100)
   --corporate-name: string # Company name, if the customer is a legal entity. (default: company-name)
   --corporate-phone: string # Corporate phone number, if the customer is a legal entity. (default: +551100988887777)
@@ -396,13 +423,13 @@ export def "add-client-profile" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientProfileData") $auth.query)
   let req_body = {"corporateDocument": $corporate_document, "corporateName": $corporate_name, "corporatePhone": $corporate_phone, "document": $document, "documentType": $document_type, "email": $email, "firstName": $first_name, "isCorporate": $is_corporate, "lastName": $last_name, "phone": $phone, "stateInscription": $state_inscription, "tradeName": $trade_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -433,7 +460,7 @@ export def "add-marketing-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --coupon: string # Sending an existing coupon code in this field will return the corresponding discount in the purchase. Use the [cart simulation](https://developers.vtex.com/vtex-rest-api/reference/orderform#orderformsimulation) request to check which coupons might apply before placing the order. (default: free-shipping)
   --marketing-tags: list<string> # Marketing tags. (default: [tag1, tag2])
   --utm-campaign: string # UTM campaign (default: Black friday)
@@ -451,13 +478,13 @@ export def "add-marketing-data" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/marketingData") $auth.query)
   let req_body = {"coupon": $coupon, "marketingTags": $marketing_tags, "utmCampaign": $utm_campaign, "utmMedium": $utm_medium, "utmSource": $utm_source, "utmiCampaign": $utmi_campaign, "utmiPage": $utmi_page, "utmiPart": $utmi_part} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -488,7 +515,7 @@ export def "add-merchant-context-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   sales_associate_data: record # Sales Associate information. — shape: {salesAssociateId?: string}
 ]: any -> oneof<record<salesAssociateId: string>, string, nothing> {
   let input = $in
@@ -499,13 +526,13 @@ export def "add-merchant-context-data" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/merchantContextData") $auth.query)
   let req_body = {"salesAssociateData": $sales_associate_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -536,7 +563,7 @@ export def "add-payment-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --payments: list # Array with information on each payment chosen by the shopper. — item shape: {group?: string, hasDefaultBillingAddress?: bool, installments?: int, installmentsInterestRate?: float, installmentsValue?: int, paymentSystem?: int, paymentSystemName?: string, referenceValue?: int, value?: int}
 ]: any -> any {
   let input = $in
@@ -547,13 +574,13 @@ export def "add-payment-data" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/paymentData") $auth.query)
   let req_body = {"payments": $payments} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -584,7 +611,7 @@ export def "add-shipping-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --clear-address-if-postal-code-not-found: oneof<nothing, bool> # This field should be sent as `false` to prevent the address information from being filled in automatically based on the `postalCode` information. (e.g. false)
   --logistics-info: list # Array with logistics information on each item of the `items` array in the `orderForm`. — item shape: {itemIndex?: int, selectedDeliveryChannel?: string, selectedSla?: string}
   --selected-addresses: list # List of objects with addresses information. — item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list<float>, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
@@ -597,13 +624,13 @@ export def "add-shipping-address" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/shippingData") $auth.query)
   let req_body = {"clearAddressIfPostalCodeNotFound": $clear_address_if_postal_code_not_found, "logisticsInfo": $logistics_info, "selectedAddresses": $selected_addresses} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -634,7 +661,7 @@ export def "add-coupons" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --text: string # Sending an existing coupon code in this field will return the corresponding discount in the purchase. Use the [cart simulation](https://developers.vtex.com/vtex-rest-api/reference/orderform#orderformsimulation) request to check which coupons might apply before placing the order. (default: freeshipping)
 ]: any -> oneof<record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int>, string, nothing> {
   let input = $in
@@ -645,13 +672,13 @@ export def "add-coupons" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/coupons") $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -683,7 +710,7 @@ export def "set-multiple-custom-field-values" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: record
 ]: any -> any {
   let input = $in
@@ -695,13 +722,13 @@ export def "set-multiple-custom-field-values" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -734,7 +761,7 @@ export def "removesinglecustomfieldvalue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -745,9 +772,9 @@ export def "removesinglecustomfieldvalue" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -780,7 +807,7 @@ export def "set-single-custom-field-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   value: string # The value you want to set to the specified field.
 ]: any -> any {
   let input = $in
@@ -793,13 +820,13 @@ export def "set-single-custom-field-value" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), app_id: (encode-path-segment $app_id), app_field_name: (encode-path-segment $app_field_name)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/customData/{app_id}/{app_field_name}") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -831,7 +858,7 @@ export def "get-cart-installments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payment-system: int # ID of the payment method to be consulted for installments. (required)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -842,9 +869,9 @@ export def "get-cart-installments" [
   let qp = [(serialize-qp "paymentSystem" $payment_system "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/installments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -876,7 +903,7 @@ export def "post-api-checkout-pub-order-form-order-form-id-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-outdated-data: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance. This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
 ]: any -> oneof<record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int>, string, nothing> {
   let input = $in
@@ -888,13 +915,13 @@ export def "post-api-checkout-pub-order-form-order-form-id-items" [
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items") $qp $auth.query)
   let req_body = {"orderItems": $order_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -925,7 +952,7 @@ export def "remove-all-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record, string, nothing> {
   let input = $in
@@ -936,13 +963,13 @@ export def "remove-all-items" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/removeAll") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -974,7 +1001,7 @@ export def "items-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-outdated-data: list # In order to optimize performance, this parameter allows some information to not be updated when there are changes in the minicart. For instance, if a shopper adds another unit of a given SKU to the cart, it may not be necessary to recalculate payment information, which could impact performance. This array accepts strings and currently the only possible value is `”paymentData”`. (default: [paymentData])
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {index: int, quantity: int}
 ]: any -> oneof<record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int>, string, nothing> {
   let input = $in
@@ -986,13 +1013,13 @@ export def "items-update" [
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/update") $qp $auth.query)
   let req_body = {"orderItems": $order_items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1024,7 +1051,7 @@ export def "price-change" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   price: int # The new price of the item. (format: int32)
 ]: any -> any {
   let input = $in
@@ -1036,13 +1063,13 @@ export def "price-change" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id), item_index: (encode-path-segment $item_index)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/{item_index}/price") $auth.query)
   let req_body = {"price": $price} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1073,7 +1100,7 @@ export def "clearorder-form-messages" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: record
 ]: any -> oneof<record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int>, string, nothing> {
   let input = $in
@@ -1084,13 +1111,13 @@ export def "clearorder-form-messages" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/messages/clear") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1121,7 +1148,7 @@ export def "ignore-profile-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --ignore-profile-data: oneof<nothing, bool> # Indicates whether profile data should be ignored. (default: false)
 ]: any -> any {
   let input = $in
@@ -1132,13 +1159,13 @@ export def "ignore-profile-data" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/profile") $auth.query)
   let req_body = {"ignoreProfileData": $ignore_profile_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "patch"
     url: $full_url
@@ -1169,7 +1196,7 @@ export def "place-order-from-existing-order-form" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   interest_value: int # Interest rate to be used in case it applies. (default: 0)
   --optin-news-letter: oneof<nothing, bool> # True if the shopper opted to receive the newsletter. (default: false)
   reference_id: string # ID of the `orderForm` corresponding to the cart from which to place the order. This is the same as the `orderFormId` parameter. (default: 41a22925298a4ddca95318131a25b000)
@@ -1185,13 +1212,13 @@ export def "place-order-from-existing-order-form" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/transaction") $auth.query)
   let req_body = {"interestValue": $interest_value, "optinNewsLetter": $optin_news_letter, "referenceId": $reference_id, "referenceValue": $reference_value, "savePersonalData": $save_personal_data, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1223,7 +1250,7 @@ export def "cart-simulation" [
   --rnb-behavior: int # This parameter defines which promotions apply to the simulation. Use `0` for simulations at cart stage, which means all promotions apply. In case of window simulation use `1`, which indicates promotions that apply nominal discounts over the total purchase value shouldn't be considered on the simulation. Note that if this not sent, the parameter is `1`. (default: 0)
   --sc: int # Trade Policy (Sales Channel) identification. (e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --country: string # Three letter ISO code of the country of the shipping address. This value must be sent along with the `postalCode` or `geoCoordinates` values. (e.g. BRA)
   --geo-coordinates: list<float> # Array containing two floats with geocoordinates, first longitude, then latitude. (default: [-47.924747467041016, -15.832582473754883])
   --items: list # Array containing information about the SKUs inside the cart to be simulated. — item shape: {id?: string, quantity?: int, seller?: string}
@@ -1237,13 +1264,13 @@ export def "cart-simulation" [
   let qp = [(serialize-qp "RnbBehavior" $rnb_behavior "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp $auth.query)
   let req_body = {"country": $country, "geoCoordinates": $geo_coordinates, "items": $items, "postalCode": $postal_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1274,7 +1301,7 @@ export def "place-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade Policy (Sales Channel) identification. This query can be used to create an order for a specific sales channel. (e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   client_profile_data: record # Customer's profile information. The `email` functions as a customer's ID. For customers already in your database, sending only the email address is enough to register the order to the shopper’s existing account. > If the shopper exists in you database but is not logged in, sending other profile information along with the email will cause the platform to fail placing the order. This happens because this action is interpreted as an attempt to edit profile data, which is not possible unless the customer is logged in to the store. — shape: {corporateDocument?: string, corporateName?: string, corporatePhone?: string, document?: string, documentType?: string, email: string, firstName?: string, isCorporate?: bool, lastName?: string, phone?: string, stateInscription?: string, tradeName?: string}
   items: list # Array of objects containing information on each of the order's items. — item shape: {attachments?: list<string>, bundleItems?: list, commission?: int, freightCommission?: int, id: string, isGift?: bool, itemAttachment?: record, measurementUnit?: string, price?: int, priceTags?: list, quantity: int, seller: string, unitMultiplier?: int}
   --marketing-data: record # shape: {coupon?: string, utmCampaign?: string, utmMedium?: string, utmSource?: string, utmiCampaign?: string, utmiPage?: string, utmiPart?: string}
@@ -1291,13 +1318,13 @@ export def "place-order" [
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orders" $qp $auth.query)
   let req_body = {"clientProfileData": $client_profile_data, "items": $items, "marketingData": $marketing_data, "openTextField": $open_text_field, "paymentData": $payment_data, "salesAssociateData": $sales_associate_data, "shippingData": $shipping_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1330,7 +1357,7 @@ export def "list-pickup-ppoints-by-location" [
   --postal-code: string # Postal code around which to search for pickup points. If you use this type of search, make sure to pass a `countryCode` and do not pass `geoCoordinates`. (default: 1234000)
   --country-code: string # Three letter country code refering to the `postalCode` field. Pass the country code only if you are searching pickup points by postal code. (default: BRA)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1339,9 +1366,9 @@ export def "list-pickup-ppoints-by-location" [
   let qp = [(serialize-qp "geoCoordinates" $geo_coordinates "multi") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/pickup-points" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1373,7 +1400,7 @@ export def "get-address-by-postal-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1383,9 +1410,9 @@ export def "get-address-by-postal-code" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({country_code: (encode-path-segment $country_code), postal_code: (encode-path-segment $postal_code)} | format pattern "/api/checkout/pub/postal-code/{country_code}/{postal_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1416,7 +1443,7 @@ export def "get-client-profile-by-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Client's email address to be searched. (required, default: clark.kent@examplemail.com)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, isComplete: bool, profileProvider: string, userProfile: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: string, profileErrorOnLoading: string, stateInscription: string, tradeName: string>, userProfileId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1426,9 +1453,9 @@ export def "get-client-profile-by-email" [
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/profiles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1462,7 +1489,7 @@ export def "get-sellers-by-region" [
   --postal-code: string # Postal code corresponding to the shopper's location. (default: 1234000)
   --geo-coordinates: list<float> # Geocoordinates (first longitude, semicolon, then latitude) corresponding to the shopper's location. (default: [-47.924747467041016, -15.832582473754883])
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<id: string, sellers: table<id: string, logo: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1473,9 +1500,9 @@ export def "get-sellers-by-region" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "geoCoordinates" $geo_coordinates "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/api/checkout/pub/regions/{region_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1505,7 +1532,7 @@ export def "getorder-formconfiguration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1513,9 +1540,9 @@ export def "getorder-formconfiguration" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1545,7 +1572,7 @@ export def "updateorder-formconfiguration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --allow-manual-price: oneof<nothing, bool> # Allows the editing of SKU prices right in the cart. (nullable)
   --allow-multiple-deliveries: oneof<nothing, bool> # On the same purchase, allows the selection of items from multiple delivery channels. (nullable)
   --apps: list # Array of objects containing Apps configuration information. (nullable) — item shape: {fields?: list<string>, id?: string, major?: int}
@@ -1566,13 +1593,13 @@ export def "updateorder-formconfiguration" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm" $auth.query)
   let req_body = {"allowManualPrice": $allow_manual_price, "allowMultipleDeliveries": $allow_multiple_deliveries, "apps": $apps, "decimalDigitsPrecision": $decimal_digits_precision, "maskFirstPurchaseData": $mask_first_purchase_data, "maxNumberOfWhiteLabelSellers": $max_number_of_white_label_sellers, "minimumQuantityAccumulatedForItems": $minimum_quantity_accumulated_for_items, "minimumValueAccumulated": $minimum_value_accumulated, "paymentConfiguration": $payment_configuration, "paymentSystemToCheckFirstInstallment": $payment_system_to_check_first_installment, "recaptchaValidation": $recaptcha_validation, "taxConfiguration": $tax_configuration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1602,7 +1629,7 @@ export def "get-window-to-change-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1610,9 +1637,9 @@ export def "get-window-to-change-seller" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1642,7 +1669,7 @@ export def "update-window-to-change-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   waiting_time: int # Number of days after order cancelation by a seller, during which another seller may be assigned to fulfill the order.
 ]: any -> any {
   let input = $in
@@ -1652,13 +1679,13 @@ export def "update-window-to-change-seller" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller" $auth.query)
   let req_body = {"waitingTime": $waiting_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1689,7 +1716,7 @@ export def "removeallpersonaldata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1698,9 +1725,9 @@ export def "removeallpersonaldata" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/checkout/changeToAnonymousUser/{order_form_id}") $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

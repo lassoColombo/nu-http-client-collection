@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -196,9 +223,9 @@ export def "get-best-podcasts" [
   let qp = [(serialize-qp "genre_id" $genre_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "publisher_region" $publisher_region "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/best_podcasts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -236,9 +263,9 @@ export def "get-curated-podcasts" [
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/curated_podcasts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -276,9 +303,9 @@ export def "get-curated-podcast-by-id" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/curated_podcasts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -316,11 +343,11 @@ export def "get-episodes-in-batch" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/episodes" $auth.query)
   let req_body = {"ids": $ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -361,9 +388,9 @@ export def "get-episode-by-id" [
   let qp = [(serialize-qp "show_transcript" $show_transcript "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -403,9 +430,9 @@ export def "get-episode-recommendations" [
   let qp = [(serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/episodes/{id}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -443,9 +470,9 @@ export def "get-genres" [
   let qp = [(serialize-qp "top_level_only" $top_level_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/genres" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -481,9 +508,9 @@ export def "just-listen" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/just_listen" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -519,9 +546,9 @@ export def "get-languages" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/languages" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -560,9 +587,9 @@ export def "get-playlists" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playlists" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -604,9 +631,9 @@ export def "get-playlist-by-id" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "last_timestamp_ms" $last_timestamp_ms "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/playlists/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -649,11 +676,11 @@ export def "get-podcasts-in-batch" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/podcasts" $auth.query)
   let req_body = {"ids": $ids, "itunes_ids": $itunes_ids, "next_episode_pub_date": $next_episode_pub_date, "rsses": $rsses, "show_latest_episodes": $show_latest_episodes, "spotify_ids": $spotify_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -693,11 +720,11 @@ export def "submit-podcast" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/podcasts/submit" $auth.query)
   let req_body = {"email": $email, "rss": $rss} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -738,9 +765,9 @@ export def "delete-podcast-by-id" [
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/podcasts/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -781,9 +808,9 @@ export def "get-podcast-by-id" [
   let qp = [(serialize-qp "next_episode_pub_date" $next_episode_pub_date "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/podcasts/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -821,9 +848,9 @@ export def "get-podcast-audience" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/podcasts/{id}/audience") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -863,9 +890,9 @@ export def "get-podcast-recommendations" [
   let qp = [(serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/podcasts/{id}/recommendations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -901,9 +928,9 @@ export def "get-regions" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/regions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -942,9 +969,9 @@ export def "get-related-searches" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/related_searches" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1002,9 +1029,9 @@ export def "search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort_by_date" $sort_by_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "len_min" $len_min "scalar") (serialize-qp "len_max" $len_max "scalar") (serialize-qp "episode_count_min" $episode_count_min "scalar") (serialize-qp "episode_count_max" $episode_count_max "scalar") (serialize-qp "update_freq_min" $update_freq_min "scalar") (serialize-qp "update_freq_max" $update_freq_max "scalar") (serialize-qp "genre_ids" $genre_ids "scalar") (serialize-qp "published_before" $published_before "scalar") (serialize-qp "published_after" $published_after "scalar") (serialize-qp "only_in" $only_in "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "ocid" $ocid "scalar") (serialize-qp "ncid" $ncid "scalar") (serialize-qp "safe_mode" $safe_mode "scalar") (serialize-qp "unique_podcasts" $unique_podcasts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,9 +1070,9 @@ export def "spellcheck" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spellcheck" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1081,9 +1108,9 @@ export def "get-trending-searches" [
   if ($x_listen_api_key == null) { error make --unspanned { msg: "required header parameter 'X-ListenAPI-Key' missing: pass --x-listen-api-key" } }
   let full_url = (build-url $base "/trending_searches" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1125,9 +1152,9 @@ export def "typeahead" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "show_podcasts" $show_podcasts "scalar") (serialize-qp "show_genres" $show_genres "scalar") (serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/typeahead" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -261,7 +288,7 @@ export def "get-abuses" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefined_reason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $search_reporter "scalar") (serialize-qp "searchReportee" $search_reportee "scalar") (serialize-qp "searchVideo" $search_video "scalar") (serialize-qp "searchVideoChannel" $search_video_channel "scalar") (serialize-qp "videoIs" $video_is "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/abuses" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -300,9 +327,9 @@ export def "post-api-v1-abuses" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/abuses" $auth.query)
   let req_body = {"account": $account, "comment": $comment, "predefinedReasons": $predefined_reasons, "reason": $reason, "video": $video} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -337,7 +364,7 @@ export def "delete-api-v1-abuses-abuse-id" [
   if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
   let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -375,9 +402,9 @@ export def "put-api-v1-abuses-abuse-id" [
   if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
   let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}") $auth.query)
   let req_body = {"moderationComment": $moderation_comment, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -412,7 +439,7 @@ export def "get-api-v1-abuses-abuse-id-messages" [
   if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
   let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -449,9 +476,9 @@ export def "post-api-v1-abuses-abuse-id-messages" [
   if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
   let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages") $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -488,7 +515,7 @@ export def "delete-api-v1-abuses-abuse-id-messages-abuse-message-id" [
   if ($abuse_message_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseMessageId' must be non-empty" } }
   let full_url = (build-url $base ({abuse_id: (encode-path-segment $abuse_id), abuse_message_id: (encode-path-segment $abuse_message_id)} | format pattern "/api/v1/abuses/{abuse_id}/messages/{abuse_message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -526,7 +553,7 @@ export def "get-accounts" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -562,7 +589,7 @@ export def "get-account" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "get-account-followers" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/followers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -643,7 +670,7 @@ export def "get-api-v1-accounts-name-ratings" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "rating" $rating "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/ratings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -682,7 +709,7 @@ export def "get-api-v1-accounts-name-video-channel-syncs" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channel-syncs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -722,7 +749,7 @@ export def "get-api-v1-accounts-name-video-channels" [
   let qp = [(serialize-qp "withStats" $with_stats "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-channels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -763,7 +790,7 @@ export def "get-api-v1-accounts-name-video-playlists" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/video-playlists") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -816,7 +843,7 @@ export def "get-account-videos" [
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/accounts/{name}/videos") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -852,7 +879,7 @@ export def "get-api-v1-blocklist-status" [
   let qp = [(serialize-qp "accounts" $accounts "multi") (serialize-qp "hosts" $hosts "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/blocklist/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -886,7 +913,7 @@ export def "get-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -920,7 +947,7 @@ export def "get-about" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/about" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -954,7 +981,7 @@ export def "del-custom-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -988,7 +1015,7 @@ export def "get-custom-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1022,7 +1049,7 @@ export def "put-custom-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1055,7 +1082,7 @@ export def "get-api-v1-custom-pages-homepage-instance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1090,9 +1117,9 @@ export def "put-api-v1-custom-pages-homepage-instance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance" $auth.query)
   let req_body = {"content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1125,7 +1152,7 @@ export def "post-api-v1-jobs-pause" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/jobs/pause" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1158,7 +1185,7 @@ export def "post-api-v1-jobs-resume" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/jobs/resume" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1199,7 +1226,7 @@ export def "get-jobs" [
   let qp = [(serialize-qp "jobType" $job_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({state: (encode-path-segment $state)} | format pattern "/api/v1/jobs/{state}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1242,9 +1269,9 @@ export def "post-api-v1-metrics-playback" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/metrics/playback" $auth.query)
   let req_body = {"downloadedBytesHTTP": $downloaded_bytes_http, "downloadedBytesP2P": $downloaded_bytes_p2p, "errors": $errors, "fps": $fps, "playerMode": $player_mode, "resolution": $resolution, "resolutionChanges": $resolution_changes, "uploadedBytesP2P": $uploaded_bytes_p2p, "videoId": $video_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1278,7 +1305,7 @@ export def "get-o-auth-client" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/oauth-clients/local" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1318,7 +1345,7 @@ export def "get-plugins" [
   let qp = [(serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "uninstalled" $uninstalled "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/plugins" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1359,7 +1386,7 @@ export def "get-available-plugins" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "currentPeerTubeEngine" $current_peer_tube_engine "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/plugins/available" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1396,9 +1423,9 @@ export def "add-plugin" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/install" $auth.query)
   let req_body = {"npmName": $npm_name, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1434,9 +1461,9 @@ export def "uninstall-plugin" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/uninstall" $auth.query)
   let req_body = {"npmName": $npm_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1473,9 +1500,9 @@ export def "update-plugin" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/plugins/update" $auth.query)
   let req_body = {"npmName": $npm_name, "path": $path} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1511,7 +1538,7 @@ export def "get-plugin" [
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
   let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1546,7 +1573,7 @@ export def "get-api-v1-plugins-npm-name-public-settings" [
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
   let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/public-settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1581,7 +1608,7 @@ export def "get-api-v1-plugins-npm-name-registered-settings" [
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
   let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/registered-settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1618,9 +1645,9 @@ export def "put-api-v1-plugins-npm-name-settings" [
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
   let full_url = (build-url $base ({npm_name: (encode-path-segment $npm_name)} | format pattern "/api/v1/plugins/{npm_name}/settings") $auth.query)
   let req_body = {"settings": $settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1661,7 +1688,7 @@ export def "search-channels" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/video-channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1702,7 +1729,7 @@ export def "search-playlists" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/video-playlists" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1763,7 +1790,7 @@ export def "search-videos" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "uuids" $uuids "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "searchTarget" $search_target "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "originallyPublishedStartDate" $originally_published_start_date "scalar") (serialize-qp "originallyPublishedEndDate" $originally_published_end_date "scalar") (serialize-qp "durationMin" $duration_min "scalar") (serialize-qp "durationMax" $duration_max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/search/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1797,7 +1824,7 @@ export def "get-instance-audit-logs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/audit-logs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1834,7 +1861,7 @@ export def "get-api-v1-server-blocklist-accounts" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/blocklist/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1869,9 +1896,9 @@ export def "post-api-v1-server-blocklist-accounts" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/blocklist/accounts" $auth.query)
   let req_body = {"accountName": $account_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1906,7 +1933,7 @@ export def "delete-api-v1-server-blocklist-accounts-account-name" [
   if ($account_name | is-empty) { error make --unspanned { msg: "path parameter 'accountName' must be non-empty" } }
   let full_url = (build-url $base ({account_name: (encode-path-segment $account_name)} | format pattern "/api/v1/server/blocklist/accounts/{account_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1943,7 +1970,7 @@ export def "get-api-v1-server-blocklist-servers" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/blocklist/servers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1978,9 +2005,9 @@ export def "post-api-v1-server-blocklist-servers" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/blocklist/servers" $auth.query)
   let req_body = {"host": $host} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2015,7 +2042,7 @@ export def "delete-api-v1-server-blocklist-servers-host" [
   if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
   let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/blocklist/servers/{host}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2054,7 +2081,7 @@ export def "get-api-v1-server-followers" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/followers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2089,7 +2116,7 @@ export def "delete-api-v1-server-followers-name-with-host" [
   if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
   let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2124,7 +2151,7 @@ export def "post-api-v1-server-followers-name-with-host-accept" [
   if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
   let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/accept") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2159,7 +2186,7 @@ export def "post-api-v1-server-followers-name-with-host-reject" [
   if ($name_with_host | is-empty) { error make --unspanned { msg: "path parameter 'nameWithHost' must be non-empty" } }
   let full_url = (build-url $base ({name_with_host: (encode-path-segment $name_with_host)} | format pattern "/api/v1/server/followers/{name_with_host}/reject") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2198,7 +2225,7 @@ export def "get-api-v1-server-following" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/following" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2234,9 +2261,9 @@ export def "post-api-v1-server-following" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/following" $auth.query)
   let req_body = {"handles": $handles, "hosts": $hosts} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2271,7 +2298,7 @@ export def "delete-api-v1-server-following-host-or-handle" [
   if ($host_or_handle | is-empty) { error make --unspanned { msg: "path parameter 'hostOrHandle' must be non-empty" } }
   let full_url = (build-url $base ({host_or_handle: (encode-path-segment $host_or_handle)} | format pattern "/api/v1/server/following/{host_or_handle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2305,7 +2332,7 @@ export def "get-instance-logs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/logs" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2346,9 +2373,9 @@ export def "send-client-log" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/logs/client" $auth.query)
   let req_body = {"level": $level, "message": $message, "meta": $meta, "stackTrace": $stack_trace, "url": $url, "userAgent": $user_agent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2388,7 +2415,7 @@ export def "get-mirrored-videos" [
   let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/server/redundancy/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2424,9 +2451,9 @@ export def "put-mirrored-video" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/redundancy/videos" $auth.query)
   let req_body = {"videoId": $video_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2462,7 +2489,7 @@ export def "del-mirrored-video" [
   if ($redundancy_id | is-empty) { error make --unspanned { msg: "path parameter 'redundancyId' must be non-empty" } }
   let full_url = (build-url $base ({redundancy_id: (encode-path-segment $redundancy_id)} | format pattern "/api/v1/server/redundancy/videos/{redundancy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2499,10 +2526,10 @@ export def "put-api-v1-server-redundancy-host" [
   if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
   let full_url = (build-url $base ({host: (encode-path-segment $host)} | format pattern "/api/v1/server/redundancy/{host}") $auth.query)
   let req_body = {"redundancyAllowed": $redundancy_allowed} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "redundancyAllowed") == null) { error make --unspanned { msg: "required body field 'redundancyAllowed' missing: pass --redundancy-allowed or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2536,7 +2563,7 @@ export def "get-instance-stats" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/stats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2576,7 +2603,7 @@ export def "get-users" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2619,9 +2646,9 @@ export def "add-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users" $auth.query)
   let req_body = {"adminFlags": $admin_flags, "channelName": $channel_name, "email": $email, "password": $password, "role": $role, "username": $username, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2657,9 +2684,9 @@ export def "resend-email-to-verify-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/ask-send-verify-email" $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2693,7 +2720,7 @@ export def "get-user-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2743,9 +2770,9 @@ export def "put-user-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me" $auth.query)
   let req_body = {"autoPlayNextVideo": $auto_play_next_video, "autoPlayNextVideoPlaylist": $auto_play_next_video_playlist, "autoPlayVideo": $auto_play_video, "currentPassword": $current_password, "displayNSFW": $display_nsfw, "displayName": $display_name, "email": $email, "noAccountSetupWarningModal": $no_account_setup_warning_modal, "noInstanceConfigWarningModal": $no_instance_config_warning_modal, "noWelcomeModal": $no_welcome_modal, "p2pEnabled": $p2p_enabled, "password": $password, "theme": $theme, "videoLanguages": $video_languages, "videosHistoryEnabled": $videos_history_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2785,7 +2812,7 @@ export def "get-my-abuses" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/abuses" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2818,7 +2845,7 @@ export def "delete-api-v1-users-me-avatar" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/avatar" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2853,10 +2880,10 @@ export def "post-api-v1-users-me-avatar-pick" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/avatar/pick" $auth.query)
   let req_body = {"avatarfile": $avatarfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -2894,7 +2921,7 @@ export def "get-api-v1-users-me-history-videos" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/history/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2929,10 +2956,10 @@ export def "post-api-v1-users-me-history-videos-remove" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/history/videos/remove" $auth.query)
   let req_body = {"beforeDate": $before_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -2968,7 +2995,7 @@ export def "delete-api-v1-users-me-history-videos-video-id" [
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/history/videos/{video_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3014,9 +3041,9 @@ export def "put-api-v1-users-me-notification-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notification-settings" $auth.query)
   let req_body = {"abuseAsModerator": $abuse_as_moderator, "autoInstanceFollowing": $auto_instance_following, "blacklistOnMyVideo": $blacklist_on_my_video, "commentMention": $comment_mention, "myVideoImportFinished": $my_video_import_finished, "myVideoPublished": $my_video_published, "newCommentOnMyVideo": $new_comment_on_my_video, "newFollow": $new_follow, "newInstanceFollower": $new_instance_follower, "newUserRegistration": $new_user_registration, "newVideoFromSubscription": $new_video_from_subscription, "videoAutoBlacklistAsModerator": $video_auto_blacklist_as_moderator} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3054,7 +3081,7 @@ export def "get-api-v1-users-me-notifications" [
   let qp = [(serialize-qp "unread" $unread "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/notifications" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3089,9 +3116,9 @@ export def "post-api-v1-users-me-notifications-read" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notifications/read" $auth.query)
   let req_body = {"ids": $ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3124,7 +3151,7 @@ export def "post-api-v1-users-me-notifications-read-all" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notifications/read-all" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3161,7 +3188,7 @@ export def "get-api-v1-users-me-subscriptions" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3196,9 +3223,9 @@ export def "post-api-v1-users-me-subscriptions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/subscriptions" $auth.query)
   let req_body = {"uri": $uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3234,7 +3261,7 @@ export def "get-api-v1-users-me-subscriptions-exist" [
   let qp = [(serialize-qp "uris" $uris "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions/exist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3284,7 +3311,7 @@ export def "get-api-v1-users-me-subscriptions-videos" [
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/subscriptions/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3319,7 +3346,7 @@ export def "delete-api-v1-users-me-subscriptions-subscription-handle" [
   if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
   let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3354,7 +3381,7 @@ export def "get-api-v1-users-me-subscriptions-subscription-handle" [
   if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
   let full_url = (build-url $base ({subscription_handle: (encode-path-segment $subscription_handle)} | format pattern "/api/v1/users/me/subscriptions/{subscription_handle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3390,7 +3417,7 @@ export def "get-api-v1-users-me-video-playlists-videos-exist" [
   let qp = [(serialize-qp "videoIds" $video_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/video-playlists/videos-exist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3423,7 +3450,7 @@ export def "get-api-v1-users-me-video-quota-used" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/video-quota-used" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3460,7 +3487,7 @@ export def "get-api-v1-users-me-videos" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3500,7 +3527,7 @@ export def "get-api-v1-users-me-videos-imports" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "targetUrl" $target_url "scalar") (serialize-qp "videoChannelSyncId" $video_channel_sync_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/me/videos/imports" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3535,7 +3562,7 @@ export def "get-api-v1-users-me-videos-video-id-rating" [
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/api/v1/users/me/videos/{video_id}/rating") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3575,9 +3602,9 @@ export def "register-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/register" $auth.query)
   let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3616,7 +3643,7 @@ export def "list-registrations" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/users/registrations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3652,9 +3679,9 @@ export def "resend-email-to-verify-registration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/registrations/ask-send-verify-email" $auth.query)
   let req_body = {"email": $email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3695,9 +3722,9 @@ export def "request-registration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/registrations/request" $auth.query)
   let req_body = {"channel": $channel, "displayName": $display_name, "email": $email, "password": $password, "username": $username, "registrationReason": $registration_reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3733,7 +3760,7 @@ export def "delete-registration" [
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3772,9 +3799,9 @@ export def "accept-registration" [
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/accept") $auth.query)
   let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3813,9 +3840,9 @@ export def "reject-registration" [
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/reject") $auth.query)
   let req_body = {"moderationResponse": $moderation_response, "preventEmailDelivery": $prevent_email_delivery} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3853,9 +3880,9 @@ export def "verify-registration-email" [
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
   let full_url = (build-url $base ({registration_id: (encode-path-segment $registration_id)} | format pattern "/api/v1/users/registrations/{registration_id}/verify-email") $auth.query)
   let req_body = {"verificationString": $verification_string} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3889,7 +3916,7 @@ export def "revoke-o-auth-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/revoke-token" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3931,9 +3958,9 @@ export def "get-o-auth-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/token" $auth.query)
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "password": $password, "username": $username, "refresh_token": $refresh_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3970,7 +3997,7 @@ export def "del-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4008,7 +4035,7 @@ export def "get-user" [
   let qp = [(serialize-qp "withStats" $with_stats "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4053,9 +4080,9 @@ export def "put-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}") $auth.query)
   let req_body = {"adminFlags": $admin_flags, "email": $email, "emailVerified": $email_verified, "password": $password, "pluginAuth": $plugin_auth, "role": $role, "videoQuota": $video_quota, "videoQuotaDaily": $video_quota_daily} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4094,9 +4121,9 @@ export def "confirm-two-factor-request" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/confirm-request") $auth.query)
   let req_body = {"otpToken": $otp_token, "requestToken": $request_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4134,9 +4161,9 @@ export def "disable-two-factor" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/disable") $auth.query)
   let req_body = {"currentPassword": $current_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4174,9 +4201,9 @@ export def "request-two-factor" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/two-factor/request") $auth.query)
   let req_body = {"currentPassword": $current_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4215,9 +4242,9 @@ export def "verify-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/users/{id}/verify-email") $auth.query)
   let req_body = {"isPendingEmail": $is_pending_email, "verificationString": $verification_string} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4254,9 +4281,9 @@ export def "add-video-channel-sync" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-channel-syncs" $auth.query)
   let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelId": $video_channel_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4292,7 +4319,7 @@ export def "del-video-channel-sync" [
   if ($channel_sync_id | is-empty) { error make --unspanned { msg: "path parameter 'channelSyncId' must be non-empty" } }
   let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4328,7 +4355,7 @@ export def "trigger-video-channel-sync" [
   if ($channel_sync_id | is-empty) { error make --unspanned { msg: "path parameter 'channelSyncId' must be non-empty" } }
   let full_url = (build-url $base ({channel_sync_id: (encode-path-segment $channel_sync_id)} | format pattern "/api/v1/video-channel-syncs/{channel_sync_id}/sync") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4366,7 +4393,7 @@ export def "get-video-channels" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/video-channels" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4405,9 +4432,9 @@ export def "add-video-channel" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-channels" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "support": $support, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4443,7 +4470,7 @@ export def "del-video-channel" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4479,7 +4506,7 @@ export def "get-video-channel" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4520,9 +4547,9 @@ export def "put-video-channel" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}") $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "support": $support, "bulkVideosSupportUpdate": $bulk_videos_support_update} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4557,7 +4584,7 @@ export def "delete-api-v1-video-channels-channel-handle-avatar" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4594,10 +4621,10 @@ export def "post-api-v1-video-channels-channel-handle-avatar-pick" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/avatar/pick") $auth.query)
   let req_body = {"avatarfile": $avatarfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["avatarfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -4633,7 +4660,7 @@ export def "delete-api-v1-video-channels-channel-handle-banner" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4670,10 +4697,10 @@ export def "post-api-v1-video-channels-channel-handle-banner-pick" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/banner/pick") $auth.query)
   let req_body = {"bannerfile": $bannerfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["bannerfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -4715,7 +4742,7 @@ export def "get-video-channel-followers" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/followers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4753,9 +4780,9 @@ export def "post-api-v1-video-channels-channel-handle-import-videos" [
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/import-videos") $auth.query)
   let req_body = {"externalChannelUrl": $external_channel_url, "videoChannelSyncId": $video_channel_sync_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4795,7 +4822,7 @@ export def "get-api-v1-video-channels-channel-handle-video-playlists" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/video-playlists") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4848,7 +4875,7 @@ export def "get-video-channel-videos" [
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_handle: (encode-path-segment $channel_handle)} | format pattern "/api/v1/video-channels/{channel_handle}/videos") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4887,7 +4914,7 @@ export def "get-playlists" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/video-playlists" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4927,10 +4954,10 @@ export def "add-playlist" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-playlists" $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -4965,7 +4992,7 @@ export def "get-playlist-privacy-policies" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-playlists/privacies" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5000,7 +5027,7 @@ export def "delete-api-v1-video-playlists-playlist-id" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5035,7 +5062,7 @@ export def "get-api-v1-video-playlists-playlist-id" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5076,10 +5103,10 @@ export def "put-api-v1-video-playlists-playlist-id" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}") $auth.query)
   let req_body = {"description": $description, "displayName": $display_name, "privacy": $privacy, "thumbnailfile": $thumbnailfile, "videoChannelId": $video_channel_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
@@ -5119,7 +5146,7 @@ export def "get-video-playlist-videos" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5159,9 +5186,9 @@ export def "add-video-playlist-video" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos") $auth.query)
   let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp, "videoId": $video_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5201,9 +5228,9 @@ export def "reorder-video-playlist" [
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/reorder") $auth.query)
   let req_body = {"insertAfterPosition": $insert_after_position, "reorderLength": $reorder_length, "startPosition": $start_position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5241,7 +5268,7 @@ export def "del-video-playlist-video" [
   if ($playlist_element_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistElementId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5282,9 +5309,9 @@ export def "put-video-playlist-video" [
   if ($playlist_element_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistElementId' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), playlist_element_id: (encode-path-segment $playlist_element_id)} | format pattern "/api/v1/video-playlists/{playlist_id}/videos/{playlist_element_id}") $auth.query)
   let req_body = {"startTimestamp": $start_timestamp, "stopTimestamp": $stop_timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5335,7 +5362,7 @@ export def "get-videos" [
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5375,7 +5402,7 @@ export def "get-video-blocks" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/blacklist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5409,7 +5436,7 @@ export def "get-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/categories" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5461,10 +5488,10 @@ export def "import-video" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/imports" $auth.query)
   let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -5500,7 +5527,7 @@ export def "delete-api-v1-videos-imports-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5535,7 +5562,7 @@ export def "post-api-v1-videos-imports-id-cancel" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/imports/{id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5569,7 +5596,7 @@ export def "get-languages" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/languages" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5603,7 +5630,7 @@ export def "get-licences" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/licences" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5655,10 +5682,10 @@ export def "add-live" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/live" $auth.query)
   let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "latencyMode": $latency_mode, "licence": $licence, "name": $name, "nsfw": $nsfw, "permanentLive": $permanent_live, "previewfile": $previewfile, "privacy": $privacy, "saveReplay": $save_replay, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -5695,7 +5722,7 @@ export def "get-live-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5735,9 +5762,9 @@ export def "update-live-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}") $auth.query)
   let req_body = {"latencyMode": $latency_mode, "permanentLive": $permanent_live, "saveReplay": $save_replay} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5772,7 +5799,7 @@ export def "get-api-v1-videos-live-id-sessions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/live/{id}/sessions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5805,7 +5832,7 @@ export def "get-api-v1-videos-ownership" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/ownership" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5840,7 +5867,7 @@ export def "post-api-v1-videos-ownership-id-accept" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/accept") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5875,7 +5902,7 @@ export def "post-api-v1-videos-ownership-id-refuse" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/ownership/{id}/refuse") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5909,7 +5936,7 @@ export def "get-privacy-policies" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/privacies" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5962,10 +5989,10 @@ export def "upload-legacy" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/upload" $auth.query)
   let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "videofile": $videofile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile" "videofile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -6005,9 +6032,9 @@ export def "upload-resumable-cancel" [
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Length": $content_length} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6064,11 +6091,11 @@ export def "upload-resumable-init" [
   if ($x_upload_content_type == null) { error make --unspanned { msg: "required header parameter 'X-Upload-Content-Type' missing: pass --x-upload-content-type" } }
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $auth.query)
   let req_body = {"category": $category, "channelId": $channel_id, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding, "filename": $filename} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Upload-Content-Length": $x_upload_content_length, "X-Upload-Content-Type": $x_upload_content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6111,11 +6138,11 @@ export def "upload-resumable" [
   let qp = [(serialize-qp "upload_id" $upload_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/videos/upload-resumable" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Range": $content_range, "Content-Length": $content_length} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6151,7 +6178,7 @@ export def "del-video" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6187,7 +6214,7 @@ export def "get-video" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6240,10 +6267,10 @@ export def "put-video" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}") $auth.query)
   let req_body = {"category": $category, "commentsEnabled": $comments_enabled, "description": $description, "downloadEnabled": $download_enabled, "language": $language, "licence": $licence, "name": $name, "nsfw": $nsfw, "originallyPublishedAt": $originally_published_at, "previewfile": $previewfile, "privacy": $privacy, "scheduleUpdate": $schedule_update, "support": $support, "tags": $tags, "thumbnailfile": $thumbnailfile, "waitTranscoding": $wait_transcoding} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["previewfile" "thumbnailfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
@@ -6280,7 +6307,7 @@ export def "del-video-block" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6316,7 +6343,7 @@ export def "add-video-block" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/blacklist") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6352,7 +6379,7 @@ export def "get-video-captions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/captions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6390,7 +6417,7 @@ export def "del-video-caption" [
   if ($caption_language | is-empty) { error make --unspanned { msg: "path parameter 'captionLanguage' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6430,10 +6457,10 @@ export def "add-video-caption" [
   if ($caption_language | is-empty) { error make --unspanned { msg: "path parameter 'captionLanguage' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), caption_language: (encode-path-segment $caption_language)} | format pattern "/api/v1/videos/{id}/captions/{caption_language}") $auth.query)
   let req_body = {"captionfile": $captionfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["captionfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "put"
@@ -6473,7 +6500,7 @@ export def "get-api-v1-videos-id-comment-threads" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6510,9 +6537,9 @@ export def "post-api-v1-videos-id-comment-threads" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/comment-threads") $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6549,7 +6576,7 @@ export def "get-api-v1-videos-id-comment-threads-thread-id" [
   if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'threadId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), thread_id: (encode-path-segment $thread_id)} | format pattern "/api/v1/videos/{id}/comment-threads/{thread_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6586,7 +6613,7 @@ export def "delete-api-v1-videos-id-comments-comment-id" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6625,9 +6652,9 @@ export def "post-api-v1-videos-id-comments-comment-id" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), comment_id: (encode-path-segment $comment_id)} | format pattern "/api/v1/videos/{id}/comments/{comment_id}") $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6663,7 +6690,7 @@ export def "get-video-desc" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/description") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6700,9 +6727,9 @@ export def "post-api-v1-videos-id-give-ownership" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/give-ownership") $auth.query)
   let req_body = {"username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6739,7 +6766,7 @@ export def "del-video-hls" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/hls") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6774,7 +6801,7 @@ export def "get-api-v1-videos-id-live-session" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/live-session") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6811,9 +6838,9 @@ export def "put-api-v1-videos-id-rate" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/rate") $auth.query)
   let req_body = {"rating": $rating} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6849,7 +6876,7 @@ export def "get-video-source" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/source") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6887,7 +6914,7 @@ export def "get-api-v1-videos-id-stats-overall" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/overall") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6922,7 +6949,7 @@ export def "get-api-v1-videos-id-stats-retention" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/stats/retention") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6962,7 +6989,7 @@ export def "get-api-v1-videos-id-stats-timeseries-metric" [
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), metric: (encode-path-segment $metric)} | format pattern "/api/v1/videos/{id}/stats/timeseries/{metric}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6999,9 +7026,9 @@ export def "post-api-v1-videos-id-studio-edit" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/studio/edit") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7038,7 +7065,7 @@ export def "request-video-token" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/token") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7076,9 +7103,9 @@ export def "create-video-transcoding" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/transcoding") $auth.query)
   let req_body = {"transcodingType": $transcoding_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7117,9 +7144,9 @@ export def "add-view" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/views") $auth.query)
   let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7159,9 +7186,9 @@ export def "put-api-v1-videos-id-watching" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/watching") $auth.query)
   let req_body = {"currentTime": $current_time, "viewEvent": $view_event} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7197,7 +7224,7 @@ export def "del-video-web-torrent" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/videos/{id}/webtorrent") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7229,7 +7256,7 @@ export def "get-syndicated-subscription-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --account-id: string # limit listing to a specific account (required)
-  --qp-token: string # private token allowing access (required)
+  --qp-token: string # private token allowing access (required) (spec name: token)
   --sort: string # Sort column (e.g. -createdAt)
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --is-local: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote videos
@@ -7246,7 +7273,7 @@ export def "get-syndicated-subscription-videos" [
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/subscriptions.{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7289,7 +7316,7 @@ export def "get-syndicated-comments" [
   let qp = [(serialize-qp "videoId" $video_id "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/video-comments.{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7338,7 +7365,7 @@ export def "get-syndicated-videos" [
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "accountName" $account_name "scalar") (serialize-qp "videoChannelId" $video_channel_id "scalar") (serialize-qp "videoChannelName" $video_channel_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/feeds/videos.{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/atom+xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7376,7 +7403,7 @@ export def "get-static-streaming-playlists-hls-private-filename" [
   let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar") (serialize-qp "reinjectVideoFileToken" $reinject_video_file_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/private/{filename}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7411,7 +7438,7 @@ export def "get-static-streaming-playlists-hls-filename" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/streaming-playlists/hls/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7448,7 +7475,7 @@ export def "get-static-webseed-private-filename" [
   let qp = [(serialize-qp "videoFileToken" $video_file_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/private/{filename}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7483,7 +7510,7 @@ export def "get-static-webseed-filename" [
   if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/static/webseed/{filename}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

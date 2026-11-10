@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -163,16 +190,16 @@ export def "baggage-trip-and-contact" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchID' must be non-empty" } }
   let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/baggage/baggagetripandcontact/{search_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -210,7 +237,7 @@ export def "all-fares" [
   --travelers: string # Specifies the type and number of travelers (e.g. '(adult=2;child=2;infant=1)') For LH only (adult=1) possible.
   --fare-family: string # Mandatory for 4U. Specifies, which fares to be returned, such as basic, smart, best, smartflex, bestflex . (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: smart)
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
-  --hdr-accept: string # Mandatory http header: application/xml or application/json (default: application/json)
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (default: application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -221,9 +248,9 @@ export def "all-fares" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/allfares" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -262,7 +289,7 @@ export def "best-fares" [
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex")
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -275,9 +302,9 @@ export def "best-fares" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "range" $range "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "fare-family" $fare_family "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/bestfares" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -325,7 +352,7 @@ export def "deep-links" [
   --fare-currency: string # Fare currency (e.g. 'EUR')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,9 +363,9 @@ export def "deep-links" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "origin-name" $origin_name "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "destination-name" $destination_name "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -379,7 +406,7 @@ export def "lh-deep-links-ffp" [
   --travelers: string # Type and number of travelers (e.g. '(adult=2;child=2;infant=1)')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,9 +420,9 @@ export def "lh-deep-links-ffp" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink/ffp" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -441,7 +468,7 @@ export def "lh-deep-links-itco" [
   --net-fare: string # Travel net fare. Total fare less taxes and charges (e.g. '1140')
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -458,9 +485,9 @@ export def "lh-deep-links-itco" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/deeplink/itco" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -494,7 +521,7 @@ export def "fares" [
   --carriers: string # Include fares for these carriers e.g. ('4U;LH') (required)
   --travelers: string # Type and number of travelers e.g. (adult=1;child=1;infant=1)
   --fare-types: string # Fares family: basic,smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -504,9 +531,9 @@ export def "fares" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "segments" $segments "scalar") (serialize-qp "carriers" $carriers "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-types" $fare_types "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/fares" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -544,7 +571,7 @@ export def "lowest-fares" [
   --travelers: string # Type and number of travelers e.g. '(adult=2;child=2;infant=1)'. For LH only (adult=1) possible
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -555,9 +582,9 @@ export def "lowest-fares" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/lowestfares" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -594,7 +621,7 @@ export def "fares-subscriptions" [
   --lang: string # 2-letter ISO 3166-1 language code (required)
   --country: string # 2-letter ISO 3166-1 country code
   --trackingid: string # Tracking parameter
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,9 +634,9 @@ export def "fares-subscriptions" [
   let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/fares/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -643,7 +670,7 @@ export def "ond-route" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
-  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -652,9 +679,9 @@ export def "ond-route" [
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/offers/ond/route/{origin}/{destination}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -686,16 +713,16 @@ export def "ond-status" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --new-routes: string # Enter if newly added routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --old-routes: string # Enter if old (deleted) routes should be returned in the response. (Acceptable values are: "", "true", "false")
-  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "new-routes" $new_routes "scalar") (serialize-qp "old-routes" $old_routes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/ond/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -726,16 +753,16 @@ export def "top-ond" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --origin: string # Enter the origin country code (e.g. 'DE'). Leave empty to search Top OND across all countries
-  --hdr-accept: string # Mandatory http header: application/xml or application/json (required)
+  --hdr-accept: string # Mandatory http header: application/xml or application/json (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/offers/ond/top" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -766,7 +793,7 @@ export def "orders" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,9 +801,9 @@ export def "orders" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id), name: (encode-path-segment $name)} | format pattern "/orders/orders/{order_id}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -807,7 +834,7 @@ export def "auto-check-in" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # Email address (required)
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -816,9 +843,9 @@ export def "auto-check-in" [
   let qp = [(serialize-qp "emailAddress" $email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ticketnumber: (encode-path-segment $ticketnumber)} | format pattern "/preflight/autocheckin/{ticketnumber}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -862,7 +889,7 @@ export def "price-offers" [
   let qp = [(serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "returnDate" $return_date "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({origin: (encode-path-segment $origin), destination: (encode-path-segment $destination)} | format pattern "/promotions/priceoffers/flights/ond/{origin}/{destination}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -894,7 +921,7 @@ export def "seat-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2-letter ISO 3166-1 language code
-  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required)
+  --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml") (required) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -903,9 +930,9 @@ export def "seat-details" [
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({aircraft_code: (encode-path-segment $aircraft_code), cabin_code: (encode-path-segment $cabin_code)} | format pattern "/references/seatdetails/{aircraft_code}/{cabin_code}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -216,7 +243,7 @@ export def "get-gift-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<IsPublic: bool, address: string, dateCreated: string, eventCity: string, eventDate: string, eventLocation: string, eventState: string, fileId: int, fileUrl: string, giftCardId: int, giftCardRechargeSkuId: int, giftListId: int, giftListMembers: table<clientId: string, giftListId: int, giftListMemberId: int, isActive: bool, isAdmin: bool, name: string, surname: string, text1: string, text2: string, title: string, userId: string>, giftListSkuIds: list<string>, giftListTypeId: int, giftListTypeName: string, isActive: bool, isAddressOk: bool, memberNames: string, message: string, name: string, profileSystemUserAddressName: string, profileSystemUserId: string, shipsToOwner: bool, telemarketingId: int, telemarketingObservation: string, urlFolder: string, userId: string, version: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -225,9 +252,9 @@ export def "get-gift-list" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/api/addon/pvt/giftlist/get/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -258,7 +285,7 @@ export def "review-rate-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<float, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -267,9 +294,9 @@ export def "review-rate-product" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/addon/pvt/review/GetProductRate/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -298,7 +325,7 @@ export def "post-api-catalog-pvt-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
   --is-active: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
   --is-required: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
@@ -311,15 +338,15 @@ export def "post-api-catalog-pvt-attachment" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/attachment" $auth.query)
   let req_body = {"Domains": $domains, "IsActive": $is_active, "IsRequired": $is_required, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsRequired") == null) { error make --unspanned { msg: "required body field 'IsRequired' missing: pass --is-required or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -349,7 +376,7 @@ export def "delete-api-catalog-pvt-attachment-attachmentid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -358,9 +385,9 @@ export def "delete-api-catalog-pvt-attachment-attachmentid" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({attachmentid: (encode-path-segment $attachmentid)} | format pattern "/api/catalog/pvt/attachment/{attachmentid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -390,7 +417,7 @@ export def "get-api-catalog-pvt-attachment-attachmentid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Domains: table<DomainValues: string, FieldName: string, MaxCaracters: string>, Id: int, IsActive: bool, IsRequired: bool, Name: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -399,9 +426,9 @@ export def "get-api-catalog-pvt-attachment-attachmentid" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({attachmentid: (encode-path-segment $attachmentid)} | format pattern "/api/catalog/pvt/attachment/{attachmentid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -431,7 +458,7 @@ export def "put-api-catalog-pvt-attachment-attachmentid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
   --is-active: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
   --is-required: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
@@ -445,15 +472,15 @@ export def "put-api-catalog-pvt-attachment-attachmentid" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({attachmentid: (encode-path-segment $attachmentid)} | format pattern "/api/catalog/pvt/attachment/{attachmentid}") $auth.query)
   let req_body = {"Domains": $domains, "IsActive": $is_active, "IsRequired": $is_required, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsRequired") == null) { error make --unspanned { msg: "required body field 'IsRequired' missing: pass --is-required or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -482,7 +509,7 @@ export def "get-api-catalog-pvt-attachments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Data: table<Domains: list, Id: int, IsActive: bool, IsRequired: bool, Name: string>, Page: int, Size: int, TotalPage: int, TotalRows: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -490,9 +517,9 @@ export def "get-api-catalog-pvt-attachments" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/attachments" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -523,7 +550,7 @@ export def "post-api-catalog-pvt-brand" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
   --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
   id: int # Brand's unique numerical identifier. (e.g. 2000003)
@@ -543,13 +570,13 @@ export def "post-api-catalog-pvt-brand" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/brand" $auth.query)
   let req_body = {"Active": $active, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Id": $id, "Keywords": $keywords, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MenuHome": $menu_home, "Name": $name, "Score": $score, "SiteTitle": $site_title, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -579,7 +606,7 @@ export def "delete-api-catalog-pvt-brand-brand-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -588,9 +615,9 @@ export def "delete-api-catalog-pvt-brand-brand-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({brand_id: (encode-path-segment $brand_id)} | format pattern "/api/catalog/pvt/brand/{brand_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -620,7 +647,7 @@ export def "get-api-catalog-pvt-brand-brand-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Active: bool, AdWordsRemarketingCode: string, Id: int, Keywords: string, LinkId: string, LomadeeCampaignCode: string, MenuHome: bool, Name: string, Score: int, SiteTitle: string, Text: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -629,9 +656,9 @@ export def "get-api-catalog-pvt-brand-brand-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({brand_id: (encode-path-segment $brand_id)} | format pattern "/api/catalog/pvt/brand/{brand_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "put-api-catalog-pvt-brand-brand-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
   --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
   id: int # Brand's unique numerical identifier. (e.g. 2000003)
@@ -684,13 +711,13 @@ export def "put-api-catalog-pvt-brand-brand-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({brand_id: (encode-path-segment $brand_id)} | format pattern "/api/catalog/pvt/brand/{brand_id}") $auth.query)
   let req_body = {"Active": $active, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Id": $id, "Keywords": $keywords, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MenuHome": $menu_home, "Name": $name, "Score": $score, "SiteTitle": $site_title, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -721,7 +748,7 @@ export def "post-api-catalog-pvt-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --active-store-front-link: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
   --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, nullable, e.g. Sale)
   description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
@@ -745,17 +772,17 @@ export def "post-api-catalog-pvt-category" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/category" $auth.query)
   let req_body = {"ActiveStoreFrontLink": $active_store_front_link, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Description": $description, "FatherCategoryId": $father_category_id, "GlobalCategoryId": $global_category_id, "Id": $id, "IsActive": $is_active, "Keywords": $keywords, "LomadeeCampaignCode": $lomadee_campaign_code, "Name": $name, "Score": $score, "ShowBrandFilter": $show_brand_filter, "ShowInStoreFront": $show_in_store_front, "StockKeepingUnitSelectionMode": $stock_keeping_unit_selection_mode, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "ActiveStoreFrontLink") == null) { error make --unspanned { msg: "required body field 'ActiveStoreFrontLink' missing: pass --active-store-front-link or pipe a record" } }
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "ShowBrandFilter") == null) { error make --unspanned { msg: "required body field 'ShowBrandFilter' missing: pass --show-brand-filter or pipe a record" } }
   if (($req_body | get -o "ShowInStoreFront") == null) { error make --unspanned { msg: "required body field 'ShowInStoreFront' missing: pass --show-in-store-front or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -785,7 +812,7 @@ export def "get-api-catalog-pvt-category-category-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ActiveStoreFrontLink: bool, AdWordsRemarketingCode: string, Description: string, FatherCategoryId: int, GlobalCategoryId: int, HasChildren: bool, Id: int, IsActive: bool, Keywords: string, LinkId: string, LomadeeCampaignCode: string, Name: string, Score: int, ShowBrandFilter: bool, ShowInStoreFront: bool, StockKeepingUnitSelectionMode: string, Title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -794,9 +821,9 @@ export def "get-api-catalog-pvt-category-category-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog/pvt/category/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -826,7 +853,7 @@ export def "put-api-catalog-pvt-category-category-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --active-store-front-link: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
   ad_words_remarketing_code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, e.g. Sale)
   description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
@@ -850,17 +877,17 @@ export def "put-api-catalog-pvt-category-category-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog/pvt/category/{category_id}") $auth.query)
   let req_body = {"ActiveStoreFrontLink": $active_store_front_link, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Description": $description, "FatherCategoryId": $father_category_id, "GlobalCategoryId": $global_category_id, "IsActive": $is_active, "Keywords": $keywords, "LomadeeCampaignCode": $lomadee_campaign_code, "Name": $name, "Score": $score, "ShowBrandFilter": $show_brand_filter, "ShowInStoreFront": $show_in_store_front, "StockKeepingUnitSelectionMode": $stock_keeping_unit_selection_mode, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "ActiveStoreFrontLink") == null) { error make --unspanned { msg: "required body field 'ActiveStoreFrontLink' missing: pass --active-store-front-link or pipe a record" } }
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "ShowBrandFilter") == null) { error make --unspanned { msg: "required body field 'ShowBrandFilter' missing: pass --show-brand-filter or pipe a record" } }
   if (($req_body | get -o "ShowInStoreFront") == null) { error make --unspanned { msg: "required body field 'ShowInStoreFront' missing: pass --show-in-store-front or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -889,7 +916,7 @@ export def "post-api-catalog-pvt-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   date_from: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
   date_to: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
   --highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not. (e.g. false)
@@ -903,15 +930,15 @@ export def "post-api-catalog-pvt-collection" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/collection" $auth.query)
   let req_body = {"DateFrom": $date_from, "DateTo": $date_to, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Highlight") == null) { error make --unspanned { msg: "required body field 'Highlight' missing: pass --highlight or pipe a record" } }
   if (($req_body | get -o "Searchable") == null) { error make --unspanned { msg: "required body field 'Searchable' missing: pass --searchable or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -941,7 +968,7 @@ export def "post-create-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   date_from: string # Collection start date and time. If a future date and time are set, the collection will have a scheduled status. (e.g. 2020-11-26T15:23:00)
   date_to: string # Collection end date and time. (e.g. 2069-11-26T15:23:00)
   description: string # Collection's description for internal use, with the collection's details. It will not be used for search engines. (e.g. HomeHalloween)
@@ -956,15 +983,15 @@ export def "post-create-collection" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/collection/" $auth.query)
   let req_body = {"DateFrom": $date_from, "DateTo": $date_to, "Description": $description, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Highlight") == null) { error make --unspanned { msg: "required body field 'Highlight' missing: pass --highlight or pipe a record" } }
   if (($req_body | get -o "Searchable") == null) { error make --unspanned { msg: "required body field 'Searchable' missing: pass --searchable or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -994,7 +1021,7 @@ export def "get-all-inactive-collections" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1002,9 +1029,9 @@ export def "get-all-inactive-collections" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/collection/inactive" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1034,7 +1061,7 @@ export def "get-importfileexample" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1042,9 +1069,9 @@ export def "get-importfileexample" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/collection/stockkeepingunit/importfileexample" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1074,7 +1101,7 @@ export def "delete-api-catalog-pvt-collection-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1083,9 +1110,9 @@ export def "delete-api-catalog-pvt-collection-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1115,7 +1142,7 @@ export def "get-api-catalog-pvt-collection-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<DateFrom: string, DateTo: string, Description: string, Highlight: bool, Id: int, Name: string, Searchable: bool, TotalProducts: int, Type: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1124,9 +1151,9 @@ export def "get-api-catalog-pvt-collection-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1156,7 +1183,7 @@ export def "put-api-catalog-pvt-collection-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   date_from: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
   date_to: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
   --highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not (e.g. false)
@@ -1171,15 +1198,15 @@ export def "put-api-catalog-pvt-collection-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}") $auth.query)
   let req_body = {"DateFrom": $date_from, "DateTo": $date_to, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "Highlight") == null) { error make --unspanned { msg: "required body field 'Highlight' missing: pass --highlight or pipe a record" } }
   if (($req_body | get -o "Searchable") == null) { error make --unspanned { msg: "required body field 'Searchable' missing: pass --searchable or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1209,7 +1236,7 @@ export def "post-api-catalog-pvt-collection-collection-id-position" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   position: int # SKU position. (e.g. 1)
   sku_id: int # SKU ID. (e.g. 1)
   sub_collection_id: int # Subcollection ID. (e.g. 17)
@@ -1222,13 +1249,13 @@ export def "post-api-catalog-pvt-collection-collection-id-position" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}/position") $auth.query)
   let req_body = {"position": $position, "skuId": $sku_id, "subCollectionId": $sub_collection_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1272,7 +1299,7 @@ export def "get-productsfromacollection" [
   --specification-product: string # Product Specification Field Value. You must also fill in `SpecificationFieldId` to use this parameter. (e.g. M)
   --specification-field-id: int # Product Specification Field unique identifier. (e.g. 40)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1282,9 +1309,9 @@ export def "get-productsfromacollection" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "Filter" $filter "scalar") (serialize-qp "Active" $active "scalar") (serialize-qp "Visible" $visible "scalar") (serialize-qp "CategoryId" $category_id "scalar") (serialize-qp "BrandId" $brand_id "scalar") (serialize-qp "SupplierId" $supplier_id "scalar") (serialize-qp "SalesChannelId" $sales_channel_id "scalar") (serialize-qp "ReleaseFrom" $release_from "scalar") (serialize-qp "ReleaseTo" $release_to "scalar") (serialize-qp "SpecificationProduct" $specification_product "scalar") (serialize-qp "SpecificationFieldId" $specification_field_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1315,7 +1342,7 @@ export def "post-removeproductsbyimportfile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: multipart/form-data)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --file: any # XLS file with information about products to be added to a Collection. The file must be an imported template from [Import Collection file example](https://developers.vtex.com/vtex-developer-docs/reference/get-importfileexample) endpoint. (format: binary)
 ]: any -> any {
   let input = $in
@@ -1326,15 +1353,15 @@ export def "post-removeproductsbyimportfile" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}/stockkeepingunit/importexclude") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let effective_ct = ($content_type | default "multipart/form-data")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1365,7 +1392,7 @@ export def "post-addproductsbyimportfile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: multipart/form-data)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --file: any # XLS file with information about products to be added to a Collection. The file must be an imported template from [Import Collection file example](https://developers.vtex.com/vtex-developer-docs/reference/get-importfileexample) endpoint. (format: binary)
 ]: any -> any {
   let input = $in
@@ -1376,15 +1403,15 @@ export def "post-addproductsbyimportfile" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}/stockkeepingunit/importinsert") $auth.query)
   let req_body = {"file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let effective_ct = ($content_type | default "multipart/form-data")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1414,7 +1441,7 @@ export def "get-api-catalog-pvt-collection-collection-id-subcollection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1423,9 +1450,9 @@ export def "get-api-catalog-pvt-collection-collection-id-subcollection" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/api/catalog/pvt/collection/{collection_id}/subcollection") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1457,7 +1484,7 @@ export def "post-api-catalog-pvt-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
   --brand-id: int # ID of an existing Brand that will be associated with this product. It is mandatory to use either this field or the `BrandName` field. (e.g. 12121219)
   --brand-name: string # Name of the brand that will be associated with this product. It is mandatory to use either this field or the `BrandId` field. If you wish to create a new brand, that is, in case the brand does not exist yet, use this field instead of `BrandId`. (e.g. Sample Brand)
@@ -1488,13 +1515,13 @@ export def "post-api-catalog-pvt-product" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/product" $auth.query)
   let req_body = {"AdWordsRemarketingCode": $ad_words_remarketing_code, "BrandId": $brand_id, "BrandName": $brand_name, "CategoryId": $category_id, "CategoryPath": $category_path, "Description": $description, "DescriptionShort": $description_short, "Id": $id, "IsActive": $is_active, "IsVisible": $is_visible, "KeyWords": $key_words, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MetaTagDescription": $meta_tag_description, "Name": $name, "RefId": $ref_id, "ReleaseDate": $release_date, "Score": $score, "ShowWithoutStock": $show_without_stock, "SupplierId": $supplier_id, "TaxCode": $tax_code, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1525,7 +1552,7 @@ export def "get-productbyid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, Score: int, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1534,9 +1561,9 @@ export def "get-productbyid" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1569,7 +1596,7 @@ export def "put-api-catalog-pvt-product-product-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
   brand_id: int # Brand ID associated with this product. (e.g. 12121219)
   category_id: int # Category ID associated with this product. (e.g. 2000090)
@@ -1599,13 +1626,13 @@ export def "put-api-catalog-pvt-product-product-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}") $auth.query)
   let req_body = {"AdWordsRemarketingCode": $ad_words_remarketing_code, "BrandId": $brand_id, "CategoryId": $category_id, "DepartmentId": $department_id, "Description": $description, "DescriptionShort": $description_short, "IsActive": $is_active, "IsVisible": $is_visible, "KeyWords": $key_words, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MetaTagDescription": $meta_tag_description, "Name": $name, "RefId": $ref_id, "ReleaseDate": $release_date, "Score": $score, "ShowWithoutStock": $show_without_stock, "SupplierId": $supplier_id, "TaxCode": $tax_code, "Title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1635,7 +1662,7 @@ export def "get-api-catalog-pvt-product-product-id-salespolicy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ProductId: int, StoreId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1644,9 +1671,9 @@ export def "get-api-catalog-pvt-product-product-id-salespolicy" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1677,7 +1704,7 @@ export def "delete-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1687,9 +1714,9 @@ export def "delete-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), tradepolicy_id: (encode-path-segment $tradepolicy_id)} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy/{tradepolicy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1720,7 +1747,7 @@ export def "post-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1730,9 +1757,9 @@ export def "post-api-catalog-pvt-product-product-id-salespolicy-tradepolicy-id" 
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), tradepolicy_id: (encode-path-segment $tradepolicy_id)} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy/{tradepolicy_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1762,7 +1789,7 @@ export def "get-api-catalog-pvt-product-product-id-similarcategory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<CategoryId: int, ProductId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1771,9 +1798,9 @@ export def "get-api-catalog-pvt-product-product-id-similarcategory" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1804,7 +1831,7 @@ export def "delete-api-catalog-pvt-product-product-id-similarcategory-category-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1814,9 +1841,9 @@ export def "delete-api-catalog-pvt-product-product-id-similarcategory-category-i
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1847,7 +1874,7 @@ export def "post-api-catalog-pvt-product-product-id-similarcategory-category-id"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ProductId: int, StoreId: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1857,9 +1884,9 @@ export def "post-api-catalog-pvt-product-product-id-similarcategory-category-id"
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1890,7 +1917,7 @@ export def "delete-all-product-specifications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1899,9 +1926,9 @@ export def "delete-all-product-specifications" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/specification") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1932,7 +1959,7 @@ export def "get-product-specificationby-product-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<FieldId: int, FieldValueId: int, Id: int, ProductId: int, Text: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1941,9 +1968,9 @@ export def "get-product-specificationby-product-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/specification") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1973,7 +2000,7 @@ export def "post-api-catalog-pvt-product-product-id-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification ID. (e.g. 19)
   --field-value-id: int # Specification Value ID. Mandatory for `FieldTypeId` `5`, `6` and `7`. Must not be used for any other field types (e.g. 12)
   --text: string # Value of specification. Only for `FieldTypeId` different from `5`, `6` and `7`. (e.g. Metal)
@@ -1986,13 +2013,13 @@ export def "post-api-catalog-pvt-product-product-id-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/specification") $auth.query)
   let req_body = {"FieldId": $field_id, "FieldValueId": $field_value_id, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2024,7 +2051,7 @@ export def "deletea-product-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2034,9 +2061,9 @@ export def "deletea-product-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id), specification_id: (encode-path-segment $specification_id)} | format pattern "/api/catalog/pvt/product/{product_id}/specification/{specification_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2066,7 +2093,7 @@ export def "put-api-catalog-pvt-product-product-id-specificationvalue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_name: string # Specification name. (e.g. Material)
   field_values: list<string> # Array of specification values. (e.g. [Cotton, Polyester])
   group_name: string # Group name. (e.g. Composition)
@@ -2080,14 +2107,14 @@ export def "put-api-catalog-pvt-product-product-id-specificationvalue" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog/pvt/product/{product_id}/specificationvalue") $auth.query)
   let req_body = {"FieldName": $field_name, "FieldValues": $field_values, "GroupName": $group_name, "RootLevelSpecification": $root_level_specification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "RootLevelSpecification") == null) { error make --unspanned { msg: "required body field 'RootLevelSpecification' missing: pass --root-level-specification or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -2118,7 +2145,7 @@ export def "delete-api-catalog-pvt-skuattachment" [
   --sku-id: int # SKU ID. By using this query param, you can dissociate all the attachments from an SKU based on its SKU ID. (format: int32, e.g. 1)
   --attachment-id: int # Attachment ID. By using this query param, you can dissociate the given attachment from all previously associated SKUs. (format: int32, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2127,9 +2154,9 @@ export def "delete-api-catalog-pvt-skuattachment" [
   let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "attachmentId" $attachment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/skuattachment" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2158,7 +2185,7 @@ export def "post-api-catalog-pvt-skuattachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   attachment_id: int # Attachment ID. (e.g. 1)
   sku_id: int # Unique identifier of an SKU. (e.g. 1)
 ]: any -> oneof<record<AttachmentId: int, Id: int, SkuId: int>, string, nothing> {
@@ -2169,13 +2196,13 @@ export def "post-api-catalog-pvt-skuattachment" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skuattachment" $auth.query)
   let req_body = {"AttachmentId": $attachment_id, "SkuId": $sku_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2205,7 +2232,7 @@ export def "delete-api-catalog-pvt-skuattachment-sku-attachment-association-id" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2214,9 +2241,9 @@ export def "delete-api-catalog-pvt-skuattachment-sku-attachment-association-id" 
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_attachment_association_id: (encode-path-segment $sku_attachment_association_id)} | format pattern "/api/catalog/pvt/skuattachment/{sku_attachment_association_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2246,7 +2273,7 @@ export def "create-sku-complement" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   complement_type_id: int # Complement Type ID. This represents the type of the complement. The possible values are: `1` for Accessory; `2` for Suggestion; `3` for Similar Product; `5` for Show Together. (e.g. 1)
   parent_sku_id: int # ID of the Parent SKU, where the Complement is inserted. (e.g. 1)
   sku_id: int # ID of the SKU which will be inserted as a Complement in the Parent SKU. (e.g. 1)
@@ -2258,13 +2285,13 @@ export def "create-sku-complement" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skucomplement" $auth.query)
   let req_body = {"ComplementTypeId": $complement_type_id, "ParentSkuId": $parent_sku_id, "SkuId": $sku_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2295,7 +2322,7 @@ export def "delete-sku-complementby-sku-complement-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2304,9 +2331,9 @@ export def "delete-sku-complementby-sku-complement-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_complement_id: (encode-path-segment $sku_complement_id)} | format pattern "/api/catalog/pvt/skucomplement/{sku_complement_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2337,7 +2364,7 @@ export def "get-sku-complementby-sku-complement-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2346,9 +2373,9 @@ export def "get-sku-complementby-sku-complement-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_complement_id: (encode-path-segment $sku_complement_id)} | format pattern "/api/catalog/pvt/skucomplement/{sku_complement_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2377,7 +2404,7 @@ export def "post-api-catalog-pvt-skuservice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-active: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
   name: string # SKU Service Name. Maximum of 50 characters. (e.g. Engraving)
   sku_id: int # SKU ID. (e.g. 1)
@@ -2392,14 +2419,14 @@ export def "post-api-catalog-pvt-skuservice" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skuservice" $auth.query)
   let req_body = {"IsActive": $is_active, "Name": $name, "SkuId": $sku_id, "SkuServiceTypeId": $sku_service_type_id, "SkuServiceValueId": $sku_service_value_id, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2429,7 +2456,7 @@ export def "delete-api-catalog-pvt-skuservice-sku-service-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2438,9 +2465,9 @@ export def "delete-api-catalog-pvt-skuservice-sku-service-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_id: (encode-path-segment $sku_service_id)} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2470,7 +2497,7 @@ export def "get-api-catalog-pvt-skuservice-sku-service-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Id: int, IsActive: bool, Name: string, SkuId: int, SkuServiceTypeId: int, SkuServiceValueId: int, Text: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2479,9 +2506,9 @@ export def "get-api-catalog-pvt-skuservice-sku-service-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_id: (encode-path-segment $sku_service_id)} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2511,7 +2538,7 @@ export def "put-api-catalog-pvt-skuservice-sku-service-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-active: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
   name: string # SKU Service Name. Maximum of 50 characters. (e.g. Test name)
   sku_id: int # SKU ID. (e.g. 1)
@@ -2527,14 +2554,14 @@ export def "put-api-catalog-pvt-skuservice-sku-service-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_id: (encode-path-segment $sku_service_id)} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}") $auth.query)
   let req_body = {"IsActive": $is_active, "Name": $name, "SkuId": $sku_id, "SkuServiceTypeId": $sku_service_type_id, "SkuServiceValueId": $sku_service_value_id, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -2564,7 +2591,7 @@ export def "post-api-catalog-pvt-skuservicetype" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-active: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
   --is-gift-card: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
   --is-required: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
@@ -2581,7 +2608,7 @@ export def "post-api-catalog-pvt-skuservicetype" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetype" $auth.query)
   let req_body = {"IsActive": $is_active, "IsGiftCard": $is_gift_card, "IsRequired": $is_required, "Name": $name, "ShowOnAttachmentFront": $show_on_attachment_front, "ShowOnCartFront": $show_on_cart_front, "ShowOnFileUpload": $show_on_file_upload, "ShowOnProductFront": $show_on_product_front} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsGiftCard") == null) { error make --unspanned { msg: "required body field 'IsGiftCard' missing: pass --is-gift-card or pipe a record" } }
   if (($req_body | get -o "IsRequired") == null) { error make --unspanned { msg: "required body field 'IsRequired' missing: pass --is-required or pipe a record" } }
@@ -2590,11 +2617,11 @@ export def "post-api-catalog-pvt-skuservicetype" [
   if (($req_body | get -o "ShowOnFileUpload") == null) { error make --unspanned { msg: "required body field 'ShowOnFileUpload' missing: pass --show-on-file-upload or pipe a record" } }
   if (($req_body | get -o "ShowOnProductFront") == null) { error make --unspanned { msg: "required body field 'ShowOnProductFront' missing: pass --show-on-product-front or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2624,7 +2651,7 @@ export def "delete-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2633,9 +2660,9 @@ export def "delete-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_type_id: (encode-path-segment $sku_service_type_id)} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2665,7 +2692,7 @@ export def "get-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Id: int, IsActive: bool, IsGiftCard: bool, IsRequired: bool, Name: string, ShowOnAttachmentFront: bool, ShowOnCartFront: bool, ShowOnFileUpload: bool, ShowOnProductFront: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2674,9 +2701,9 @@ export def "get-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_type_id: (encode-path-segment $sku_service_type_id)} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2707,7 +2734,7 @@ export def "put-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-active: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
   --is-gift-card: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
   --is-required: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
@@ -2725,7 +2752,7 @@ export def "put-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_type_id: (encode-path-segment $sku_service_type_id)} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}") $auth.query)
   let req_body = {"IsActive": $is_active, "IsGiftCard": $is_gift_card, "IsRequired": $is_required, "Name": $name, "ShowOnAttachmentFront": $show_on_attachment_front, "ShowOnCartFront": $show_on_cart_front, "ShowOnFileUpload": $show_on_file_upload, "ShowOnProductFront": $show_on_product_front} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsGiftCard") == null) { error make --unspanned { msg: "required body field 'IsGiftCard' missing: pass --is-gift-card or pipe a record" } }
   if (($req_body | get -o "IsRequired") == null) { error make --unspanned { msg: "required body field 'IsRequired' missing: pass --is-required or pipe a record" } }
@@ -2734,11 +2761,11 @@ export def "put-api-catalog-pvt-skuservicetype-sku-service-type-id" [
   if (($req_body | get -o "ShowOnFileUpload") == null) { error make --unspanned { msg: "required body field 'ShowOnFileUpload' missing: pass --show-on-file-upload or pipe a record" } }
   if (($req_body | get -o "ShowOnProductFront") == null) { error make --unspanned { msg: "required body field 'ShowOnProductFront' missing: pass --show-on-product-front or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -2769,7 +2796,7 @@ export def "delete-api-catalog-pvt-skuservicetypeattachment" [
   --attachment-id: int # SKU Service Attachment unique identifier. (e.g. 1)
   --sku-service-type-id: int # SKU Service Type unique identifier. (e.g. 1)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2778,9 +2805,9 @@ export def "delete-api-catalog-pvt-skuservicetypeattachment" [
   let qp = [(serialize-qp "attachmentId" $attachment_id "scalar") (serialize-qp "skuServiceTypeId" $sku_service_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetypeattachment" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2809,7 +2836,7 @@ export def "post-api-catalog-pvt-skuservicetypeattachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   attachment_id: int # Attachment ID. (e.g. 1)
   sku_service_type_id: int # An explanation about the purpose of this instance. (e.g. 1)
 ]: any -> oneof<record<AttachmentId: int, Id: int, SkuServiceTypeId: int>, string, nothing> {
@@ -2820,13 +2847,13 @@ export def "post-api-catalog-pvt-skuservicetypeattachment" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetypeattachment" $auth.query)
   let req_body = {"AttachmentId": $attachment_id, "SkuServiceTypeId": $sku_service_type_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2856,7 +2883,7 @@ export def "delete-api-catalog-pvt-skuservicetypeattachment-sku-service-type-att
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2865,9 +2892,9 @@ export def "delete-api-catalog-pvt-skuservicetypeattachment-sku-service-type-att
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_type_attachment_id: (encode-path-segment $sku_service_type_attachment_id)} | format pattern "/api/catalog/pvt/skuservicetypeattachment/{sku_service_type_attachment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2896,7 +2923,7 @@ export def "post-api-catalog-pvt-skuservicevalue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   cost: float # SKU Service Value cost. (e.g. 10.5)
   name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
   sku_service_type_id: int # SKU Service Type ID. (e.g. 2)
@@ -2909,13 +2936,13 @@ export def "post-api-catalog-pvt-skuservicevalue" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/skuservicevalue" $auth.query)
   let req_body = {"Cost": $cost, "Name": $name, "SkuServiceTypeId": $sku_service_type_id, "Value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2945,7 +2972,7 @@ export def "delete-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2954,9 +2981,9 @@ export def "delete-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_value_id: (encode-path-segment $sku_service_value_id)} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2986,7 +3013,7 @@ export def "get-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Cost: float, Id: int, Name: string, SkuServiceTypeId: int, Value: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -2995,9 +3022,9 @@ export def "get-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_value_id: (encode-path-segment $sku_service_value_id)} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3027,7 +3054,7 @@ export def "put-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   cost: float # SKU Service Value cost. (e.g. 10.5)
   name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
   sku_service_type_id: int # SKU Service Type ID. (e.g. 2)
@@ -3041,13 +3068,13 @@ export def "put-api-catalog-pvt-skuservicevalue-sku-service-value-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_service_value_id: (encode-path-segment $sku_service_value_id)} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}") $auth.query)
   let req_body = {"Cost": $cost, "Name": $name, "SkuServiceTypeId": $sku_service_type_id, "Value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3078,7 +3105,7 @@ export def "post-api-catalog-pvt-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --category-id: int # Category ID associated with this specification. (e.g. 1)
   --default-value: string # Specification default value. (e.g. Cotton)
   --description: string # DEPRECATED, nullable, e.g. Composition of the product.
@@ -3102,13 +3129,13 @@ export def "post-api-catalog-pvt-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/specification" $auth.query)
   let req_body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldTypeId": $field_type_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3138,7 +3165,7 @@ export def "delete-api-catalog-pvt-specification-nonstructured" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sku-id: int # SKU’s unique numerical identifier. (required, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3148,9 +3175,9 @@ export def "delete-api-catalog-pvt-specification-nonstructured" [
   let qp = [(serialize-qp "skuId" $sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/specification/nonstructured" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3180,7 +3207,7 @@ export def "get-api-catalog-pvt-specification-nonstructured" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sku-id: int # SKU’s unique numerical identifier. (required, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<Id: int, SkuId: int, SpecificationName: string, SpecificationValue: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3190,9 +3217,9 @@ export def "get-api-catalog-pvt-specification-nonstructured" [
   let qp = [(serialize-qp "skuId" $sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/specification/nonstructured" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3222,7 +3249,7 @@ export def "delete-api-catalog-pvt-specification-nonstructured-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3231,9 +3258,9 @@ export def "delete-api-catalog-pvt-specification-nonstructured-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/catalog/pvt/specification/nonstructured/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3263,7 +3290,7 @@ export def "get-api-catalog-pvt-specification-nonstructured-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<Id: int, SkuId: int, SpecificationName: string, SpecificationValue: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3272,9 +3299,9 @@ export def "get-api-catalog-pvt-specification-nonstructured-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/catalog/pvt/specification/nonstructured/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3304,7 +3331,7 @@ export def "get-api-catalog-pvt-specification-specification-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<CategoryId: int, DefaultValue: string, Description: string, FieldGroupId: int, FieldTypeId: int, Id: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3313,9 +3340,9 @@ export def "get-api-catalog-pvt-specification-specification-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({specification_id: (encode-path-segment $specification_id)} | format pattern "/api/catalog/pvt/specification/{specification_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3346,7 +3373,7 @@ export def "put-api-catalog-pvt-specification-specification-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   category_id: int # Specification Category ID. (e.g. 0)
   default_value: string # Specification Default Value. (e.g. Leather)
   description: string # Specification Description. (e.g. Composition of the product.)
@@ -3371,7 +3398,7 @@ export def "put-api-catalog-pvt-specification-specification-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({specification_id: (encode-path-segment $specification_id)} | format pattern "/api/catalog/pvt/specification/{specification_id}") $auth.query)
   let req_body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldTypeId": $field_type_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsFilter") == null) { error make --unspanned { msg: "required body field 'IsFilter' missing: pass --is-filter or pipe a record" } }
   if (($req_body | get -o "IsOnProductDetails") == null) { error make --unspanned { msg: "required body field 'IsOnProductDetails' missing: pass --is-on-product-details or pipe a record" } }
@@ -3381,11 +3408,11 @@ export def "put-api-catalog-pvt-specification-specification-id" [
   if (($req_body | get -o "IsTopMenuLinkActive") == null) { error make --unspanned { msg: "required body field 'IsTopMenuLinkActive' missing: pass --is-top-menu-link-active or pipe a record" } }
   if (($req_body | get -o "IsWizard") == null) { error make --unspanned { msg: "required body field 'IsWizard' missing: pass --is-wizard or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3415,7 +3442,7 @@ export def "specification-group-insert2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   category_id: int # Category ID. (format: int32)
   name: string # Specification Group Name.
 ]: any -> oneof<record<CategoryId: int, Id: int, Name: string, Position: int>, string, nothing> {
@@ -3426,13 +3453,13 @@ export def "specification-group-insert2" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/specificationgroup" $auth.query)
   let req_body = {"CategoryId": $category_id, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3462,7 +3489,7 @@ export def "put-api-catalog-pvt-specificationgroup-group-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   category_id: int # Category ID where the Specification Group is contained. (e.g. 1)
   id: int # Specification Group ID. (format: int32, e.g. 24)
   name: string # Specification Group Name. (e.g. Sizes)
@@ -3476,13 +3503,13 @@ export def "put-api-catalog-pvt-specificationgroup-group-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/catalog/pvt/specificationgroup/{group_id}") $auth.query)
   let req_body = {"CategoryId": $category_id, "Id": $id, "Name": $name, "Position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3512,7 +3539,7 @@ export def "post-api-catalog-pvt-specificationvalue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification ID associated with this specification value. (e.g. 193)
   --is-active: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
   name: string # Specification Value name. (e.g. Metal)
@@ -3526,13 +3553,13 @@ export def "post-api-catalog-pvt-specificationvalue" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/specificationvalue" $auth.query)
   let req_body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3562,7 +3589,7 @@ export def "get-api-catalog-pvt-specificationvalue-specification-value-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3571,9 +3598,9 @@ export def "get-api-catalog-pvt-specificationvalue-specification-value-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({specification_value_id: (encode-path-segment $specification_value_id)} | format pattern "/api/catalog/pvt/specificationvalue/{specification_value_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3604,7 +3631,7 @@ export def "put-api-catalog-pvt-specificationvalue-specification-value-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification ID associated with this specification value. (e.g. 193)
   --is-active: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
   name: string # Specification Value name. (e.g. Metal)
@@ -3619,13 +3646,13 @@ export def "put-api-catalog-pvt-specificationvalue-specification-value-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({specification_value_id: (encode-path-segment $specification_value_id)} | format pattern "/api/catalog/pvt/specificationvalue/{specification_value_id}") $auth.query)
   let req_body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3655,7 +3682,7 @@ export def "get-api-catalog-pvt-stockkeepingunit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ref-id: string # SKU Reference ID. (required, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: float, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: string, WeightKg: float, Width: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3665,9 +3692,9 @@ export def "get-api-catalog-pvt-stockkeepingunit" [
   let qp = [(serialize-qp "refId" $ref_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunit" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3696,7 +3723,7 @@ export def "post-api-catalog-pvt-stockkeepingunit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --activate-if-possible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. true)
   --commercial-condition-id: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
   --creation-date: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:29.2614605)
@@ -3732,13 +3759,13 @@ export def "post-api-catalog-pvt-stockkeepingunit" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunit" $auth.query)
   let req_body = {"ActivateIfPossible": $activate_if_possible, "CommercialConditionId": $commercial_condition_id, "CreationDate": $creation_date, "CubicWeight": $cubic_weight, "Ean": $ean, "EstimatedDateArrival": $estimated_date_arrival, "Height": $height, "Id": $id, "IsActive": $is_active, "IsKit": $is_kit, "KitItensSellApart": $kit_itens_sell_apart, "Length": $length, "ManufacturerCode": $manufacturer_code, "MeasurementUnit": $measurement_unit, "ModalType": $modal_type, "Name": $name, "PackagedHeight": $packaged_height, "PackagedLength": $packaged_length, "PackagedWeightKg": $packaged_weight_kg, "PackagedWidth": $packaged_width, "ProductId": $product_id, "RefId": $ref_id, "RewardValue": $reward_value, "UnitMultiplier": $unit_multiplier, "Videos": $videos, "WeightKg": $weight_kg, "Width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3769,7 +3796,7 @@ export def "put-api-catalog-pvt-stockkeepingunit-copy-sku-idfrom-sku-idto-file" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ArchiveId: int, Id: int, IsMain: bool, Label: string, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3779,9 +3806,9 @@ export def "put-api-catalog-pvt-stockkeepingunit-copy-sku-idfrom-sku-idto-file" 
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_idfrom: (encode-path-segment $sku_idfrom), sku_idto: (encode-path-segment $sku_idto)} | format pattern "/api/catalog/pvt/stockkeepingunit/copy/{sku_idfrom}/{sku_idto}/file/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3812,7 +3839,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-disassociate-sku-id-file-sku
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3822,9 +3849,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-disassociate-sku-id-file-sku
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), sku_file_id: (encode-path-segment $sku_file_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/disassociate/{sku_id}/file/{sku_file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3855,7 +3882,7 @@ export def "sku" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: int, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: list<string>, WeightKg: float, Width: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3864,9 +3891,9 @@ export def "sku" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3896,7 +3923,7 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --activate-if-possible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. false)
   --commercial-condition-id: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
   --creation-date: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:00)
@@ -3931,13 +3958,13 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}") $auth.query)
   let req_body = {"ActivateIfPossible": $activate_if_possible, "CommercialConditionId": $commercial_condition_id, "CreationDate": $creation_date, "CubicWeight": $cubic_weight, "EstimatedDateArrival": $estimated_date_arrival, "Height": $height, "IsActive": $is_active, "IsKit": $is_kit, "KitItensSellApart": $kit_itens_sell_apart, "Length": $length, "ManufacturerCode": $manufacturer_code, "MeasurementUnit": $measurement_unit, "ModalType": $modal_type, "Name": $name, "PackagedHeight": $packaged_height, "PackagedLength": $packaged_length, "PackagedWeightKg": $packaged_weight_kg, "PackagedWidth": $packaged_width, "ProductId": $product_id, "RefId": $ref_id, "RewardValue": $reward_value, "UnitMultiplier": $unit_multiplier, "Videos": $videos, "WeightKg": $weight_kg, "Width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3967,7 +3994,7 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<AttachmentId: int, Id: int, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -3976,9 +4003,9 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-attachment" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/attachment") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4009,7 +4036,7 @@ export def "get-sku-complementby-skuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4018,9 +4045,9 @@ export def "get-sku-complementby-skuid" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/complement") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4052,7 +4079,7 @@ export def "get-sku-complementsby-complement-type-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4062,9 +4089,9 @@ export def "get-sku-complementsby-complement-type-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), complement_type_id: (encode-path-segment $complement_type_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/complement/{complement_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4094,7 +4121,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4103,9 +4130,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4135,7 +4162,7 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4144,9 +4171,9 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-ean" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4177,7 +4204,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4187,9 +4214,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), ean: (encode-path-segment $ean)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean/{ean}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4220,7 +4247,7 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4230,9 +4257,9 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-ean-ean" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), ean: (encode-path-segment $ean)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean/{ean}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4262,7 +4289,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4271,9 +4298,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4303,7 +4330,7 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ArchiveId: int, Id: int, IsMain: bool, Label: string, Name: string, SkuId: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4312,9 +4339,9 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4344,7 +4371,7 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-main: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
   --label: string # SKU image label. (e.g. Main)
   name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
@@ -4359,13 +4386,13 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-file" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file") $auth.query)
   let req_body = {"IsMain": $is_main, "Label": $label, "Name": $name, "Text": $text, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4396,7 +4423,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4406,9 +4433,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), sku_file_id: (encode-path-segment $sku_file_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file/{sku_file_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4439,7 +4466,7 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --is-main: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
   --label: string # SKU image label. (e.g. Main)
   name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
@@ -4455,13 +4482,13 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-file-sku-file-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), sku_file_id: (encode-path-segment $sku_file_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file/{sku_file_id}") $auth.query)
   let req_body = {"IsMain": $is_main, "Label": $label, "Name": $name, "Text": $text, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -4491,7 +4518,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4500,9 +4527,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4532,7 +4559,7 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4541,9 +4568,9 @@ export def "get-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4573,7 +4600,7 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification ID. (e.g. 13)
   --field-value-id: int # Specification Value ID. Required only for `FieldTypeId` as `5`, `6` and `7`. (e.g. 101)
 ]: any -> oneof<record<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string>, string, nothing> {
@@ -4585,13 +4612,13 @@ export def "post-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification") $auth.query)
   let req_body = {"FieldId": $field_id, "FieldValueId": $field_value_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4621,11 +4648,11 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification unique identifier. This field cannot be updated. (e.g. 32)
   field_value_id: int # Specification value unique identifier. This field can only be updated with other values of the same `FieldId`. (e.g. 131)
   id: int # Specification and SKU association unique identifier. This field cannot be updated. (e.g. 65)
-  --body-sku-id: int # SKU unique identifier. This field cannot be updated. (e.g. 21)
+  --body-sku-id: int # SKU unique identifier. This field cannot be updated. (e.g. 21) (spec name: SkuId)
   --text: string # Specification Value Name. This field is automatically updated if the `FieldValue` is updated. Otherwise, the value cannot be modified. (e.g. Red)
 ]: any -> oneof<table<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string>, string, record, nothing> {
   let input = $in
@@ -4636,13 +4663,13 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification") $auth.query)
   let req_body = {"FieldId": $field_id, "FieldValueId": $field_value_id, "Id": $id, "SkuId": $body_sku_id, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -4673,7 +4700,7 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification-specifi
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4683,9 +4710,9 @@ export def "delete-api-catalog-pvt-stockkeepingunit-sku-id-specification-specifi
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id), specification_id: (encode-path-segment $specification_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification/{specification_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4715,7 +4742,7 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specificationvalue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_name: string # Specification name. (e.g. Material)
   field_values: list<string> # Array of specification values. SKU Specifications must contain only one value. (e.g. [M])
   group_name: string # Group name. (e.g. Composition)
@@ -4729,14 +4756,14 @@ export def "put-api-catalog-pvt-stockkeepingunit-sku-id-specificationvalue" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specificationvalue") $auth.query)
   let req_body = {"FieldName": $field_name, "FieldValues": $field_values, "GroupName": $group_name, "RootLevelSpecification": $root_level_specification} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "RootLevelSpecification") == null) { error make --unspanned { msg: "required body field 'RootLevelSpecification' missing: pass --root-level-specification or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -4767,7 +4794,7 @@ export def "delete-api-catalog-pvt-stockkeepingunitkit" [
   --sku-id: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
   --parent-sku-id: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4776,9 +4803,9 @@ export def "delete-api-catalog-pvt-stockkeepingunitkit" [
   let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "parentSkuId" $parent_sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4809,7 +4836,7 @@ export def "get-api-catalog-pvt-stockkeepingunitkit" [
   --sku-id: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
   --parent-sku-id: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Id: int, Quantity: int, StockKeepingUnitId: int, StockKeepingUnitParent: int, UnitPrice: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4818,9 +4845,9 @@ export def "get-api-catalog-pvt-stockkeepingunitkit" [
   let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "parentSkuId" $parent_sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4849,7 +4876,7 @@ export def "post-api-catalog-pvt-stockkeepingunitkit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   quantity: int # Component quantity. (e.g. 3)
   stock_keeping_unit_id: int # Component SKU ID. (e.g. 31018374)
   stock_keeping_unit_parent: int # SKU ID of the SKU Kit. (e.g. 31018373)
@@ -4862,13 +4889,13 @@ export def "post-api-catalog-pvt-stockkeepingunitkit" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit" $auth.query)
   let req_body = {"Quantity": $quantity, "StockKeepingUnitId": $stock_keeping_unit_id, "StockKeepingUnitParent": $stock_keeping_unit_parent, "UnitPrice": $unit_price} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4898,7 +4925,7 @@ export def "delete-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4907,9 +4934,9 @@ export def "delete-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({kit_id: (encode-path-segment $kit_id)} | format pattern "/api/catalog/pvt/stockkeepingunitkit/{kit_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4939,7 +4966,7 @@ export def "get-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Id: int, Quantity: int, StockKeepingUnitId: int, StockKeepingUnitParent: int, UnitPrice: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -4948,9 +4975,9 @@ export def "get-api-catalog-pvt-stockkeepingunitkit-kit-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({kit_id: (encode-path-segment $kit_id)} | format pattern "/api/catalog/pvt/stockkeepingunitkit/{kit_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4979,7 +5006,7 @@ export def "post-api-catalog-pvt-subcollection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   collection_id: int # SubCollection ID. (e.g. 17)
   name: string # SubCollection Name. (e.g. group 1)
   --pre-sale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
@@ -4993,15 +5020,15 @@ export def "post-api-catalog-pvt-subcollection" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/subcollection" $auth.query)
   let req_body = {"CollectionId": $collection_id, "Name": $name, "PreSale": $pre_sale, "Release": $release, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "PreSale") == null) { error make --unspanned { msg: "required body field 'PreSale' missing: pass --pre-sale or pipe a record" } }
   if (($req_body | get -o "Release") == null) { error make --unspanned { msg: "required body field 'Release' missing: pass --release or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5031,7 +5058,7 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5040,9 +5067,9 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5072,7 +5099,7 @@ export def "get-api-catalog-pvt-subcollection-sub-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5081,9 +5108,9 @@ export def "get-api-catalog-pvt-subcollection-sub-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5113,7 +5140,7 @@ export def "put-api-catalog-pvt-subcollection-sub-collection-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   collection_id: int # Collection ID. (e.g. 17)
   name: string # Subcollection Name. (e.g. group 1)
   --pre-sale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
@@ -5128,15 +5155,15 @@ export def "put-api-catalog-pvt-subcollection-sub-collection-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}") $auth.query)
   let req_body = {"CollectionId": $collection_id, "Name": $name, "PreSale": $pre_sale, "Release": $release, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "PreSale") == null) { error make --unspanned { msg: "required body field 'PreSale' missing: pass --pre-sale or pipe a record" } }
   if (($req_body | get -o "Release") == null) { error make --unspanned { msg: "required body field 'Release' missing: pass --release or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -5166,7 +5193,7 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-brand" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   brand_id: int # Unique identifier of a Brand. (e.g. 2000000)
 ]: any -> oneof<record<BrandId: int, SubCollectionId: int>, string, nothing> {
   let input = $in
@@ -5177,13 +5204,13 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-brand" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand") $auth.query)
   let req_body = {"BrandId": $brand_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5214,7 +5241,7 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-brand-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5224,9 +5251,9 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-brand-i
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand/{brand_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5257,7 +5284,7 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-categor
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5267,9 +5294,9 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-brand-categor
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id), category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5299,7 +5326,7 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   category_id: int # Unique identifier of a Category. (e.g. 0)
 ]: any -> oneof<record<CategoryId: int, SubCollectionId: int>, string, nothing> {
   let input = $in
@@ -5310,13 +5337,13 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-category" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/category") $auth.query)
   let req_body = {"CategoryId": $category_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5346,7 +5373,7 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-stockkeepinguni
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   sku_id: int # Unique identifier of an SKU. (e.g. 1)
 ]: any -> oneof<record<SkuId: int, SubCollectionId: int>, string, nothing> {
   let input = $in
@@ -5357,13 +5384,13 @@ export def "post-api-catalog-pvt-subcollection-sub-collection-id-stockkeepinguni
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/stockkeepingunit") $auth.query)
   let req_body = {"SkuId": $sku_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5394,7 +5421,7 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-stockkeepingu
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5404,9 +5431,9 @@ export def "delete-api-catalog-pvt-subcollection-sub-collection-id-stockkeepingu
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sub_collection_id: (encode-path-segment $sub_collection_id), sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/stockkeepingunit/{sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5435,7 +5462,7 @@ export def "post-api-catalog-pvt-supplier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   cell_phone: string # Supplier Cellphone. (e.g. 4444444444)
   cnpj: string # Corporate legal ID. (e.g. 33304981001272)
   corporate_name: string # Supplier Corporate Name. (e.g. TopStore)
@@ -5453,14 +5480,14 @@ export def "post-api-catalog-pvt-supplier" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog/pvt/supplier" $auth.query)
   let req_body = {"CellPhone": $cell_phone, "Cnpj": $cnpj, "CorporateName": $corporate_name, "CorportePhone": $corporte_phone, "Email": $email, "IsActive": $is_active, "Name": $name, "Phone": $phone, "StateInscription": $state_inscription} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5490,7 +5517,7 @@ export def "delete-api-catalog-pvt-supplier-supplier-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5499,9 +5526,9 @@ export def "delete-api-catalog-pvt-supplier-supplier-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({supplier_id: (encode-path-segment $supplier_id)} | format pattern "/api/catalog/pvt/supplier/{supplier_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5531,7 +5558,7 @@ export def "put-api-catalog-pvt-supplier-supplier-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   cell_phone: string # Supplier Cellphone. (e.g. 4444444444)
   cnpj: string # Corporate legal ID. (e.g. 33304981001272)
   corporate_name: string # Supplier Corporate Name. (e.g. TopStore)
@@ -5550,14 +5577,14 @@ export def "put-api-catalog-pvt-supplier-supplier-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({supplier_id: (encode-path-segment $supplier_id)} | format pattern "/api/catalog/pvt/supplier/{supplier_id}") $auth.query)
   let req_body = {"CellPhone": $cell_phone, "Cnpj": $cnpj, "CorporateName": $corporate_name, "CorportePhone": $corporte_phone, "Email": $email, "IsActive": $is_active, "Name": $name, "Phone": $phone, "StateInscription": $state_inscription} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -5588,7 +5615,7 @@ export def "category-tree" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<MetaTagDescription: string, Title: string, children: list<record>, hasChildren: bool, id: int, name: string, url: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5597,9 +5624,9 @@ export def "category-tree" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_levels: (encode-path-segment $category_levels)} | format pattern "/api/catalog_system/pub/category/tree/{category_levels}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5630,7 +5657,7 @@ export def "product-variations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<available: bool, dimensions: list<string>, dimensionsInputType: record, dimensionsMap: record, displayMode: string, name: string, productId: int, salesChannel: string, skus: table<available: bool, availablequantity: int, bestPrice: int, bestPriceFormated: string, cacheVersionUsedToCallCheckout: string, dimensions: record, image: string, installments: int, installmentsInsterestRate: int, installmentsValue: int, listPrice: int, listPriceFormated: string, measures: record, rewardValue: int, sellerId: string, sku: int, skuname: string, spotPrice: int, taxAsInt: int, taxFormated: string, unitMultiplier: float>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5639,9 +5666,9 @@ export def "product-variations" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pub/products/variations/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5672,7 +5699,7 @@ export def "sales-channelby-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ConditionRule: string, CountryCode: string, CultureInfo: string, CurrencyCode: string, CurrencyDecimalDigits: int, CurrencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, CurrencyLocale: int, CurrencySymbol: string, Id: int, IsActive: bool, Name: string, Origin: string, Position: int, ProductClusterId: int, TimeZone: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5681,9 +5708,9 @@ export def "sales-channelby-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sales_channel_id: (encode-path-segment $sales_channel_id)} | format pattern "/api/catalog_system/pub/saleschannel/{sales_channel_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5713,7 +5740,7 @@ export def "sku-idlistby-ref-idlist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: list
 ]: any -> oneof<record, string, nothing> {
   let input = $in
@@ -5723,13 +5750,13 @@ export def "sku-idlistby-ref-idlist" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pub/sku/stockkeepingunitidsbyrefids" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5760,7 +5787,7 @@ export def "specifications-by-category-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<CategoryId: int, FieldId: int, IsActive: bool, IsStockKeepingUnit: bool, Name: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5769,9 +5796,9 @@ export def "specifications-by-category-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog_system/pub/specification/field/listByCategoryId/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5802,7 +5829,7 @@ export def "specifications-tree-by-category-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<CategoryId: int, FieldId: int, IsActive: bool, IsStockKeepingUnit: bool, Name: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5811,9 +5838,9 @@ export def "specifications-tree-by-category-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog_system/pub/specification/field/listTreeByCategoryId/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5844,7 +5871,7 @@ export def "specifications-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<DefaultValue: string, Description: string, FieldGroupId: int, FieldGroupName: string, FieldId: int, FieldTypeId: int, FieldTypeName: string, FieldValueId: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5853,9 +5880,9 @@ export def "specifications-field" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/api/catalog_system/pub/specification/fieldGet/{field_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5886,7 +5913,7 @@ export def "specifications-values-by-field-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<FieldValueId: int, IsActive: bool, Position: int, Value: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5895,9 +5922,9 @@ export def "specifications-values-by-field-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/api/catalog_system/pub/specification/fieldvalue/{field_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5928,7 +5955,7 @@ export def "specifications-group-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<CategoryId: int, Id: int, Name: string, Position: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5937,9 +5964,9 @@ export def "specifications-group-get" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/api/catalog_system/pub/specification/groupGet/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5969,7 +5996,7 @@ export def "brand-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -5977,9 +6004,9 @@ export def "brand-list" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/brand/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6011,7 +6038,7 @@ export def "brand-list-per-page" [
   --page-size: int # Quantity of brands per page. (required, e.g. 5)
   --page: int # Page number of the brand list. (required, e.g. 1)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<items: table<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string>, paging: record<page: int, pages: int, perPage: int, total: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6022,9 +6049,9 @@ export def "brand-list-per-page" [
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/brand/pagedlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6055,7 +6082,7 @@ export def "brand" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6064,9 +6091,9 @@ export def "brand" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({brand_id: (encode-path-segment $brand_id)} | format pattern "/api/catalog_system/pvt/brand/{brand_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6099,7 +6126,7 @@ export def "get-all-collections" [
   --page-size: int # Number of the items of the page. (required, e.g. 15)
   --order-by-asc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (required, e.g. true)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6111,9 +6138,9 @@ export def "get-all-collections" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderByAsc" $order_by_asc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/collection/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6147,7 +6174,7 @@ export def "get-collectionsbyseachterms" [
   --page-size: int # Number of the items of the page. (e.g. 15)
   --order-by-asc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (e.g. true)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6157,9 +6184,9 @@ export def "get-collectionsbyseachterms" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderByAsc" $order_by_asc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({search_terms: (encode-path-segment $search_terms)} | format pattern "/api/catalog_system/pvt/collection/search/{search_terms}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6189,7 +6216,7 @@ export def "get-all-commercial-conditions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<Id: int, IsDefault: bool, Name: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6197,9 +6224,9 @@ export def "get-all-commercial-conditions" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/commercialcondition/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6230,7 +6257,7 @@ export def "get-commercial-conditions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<Id: int, IsDefault: bool, Name: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6239,9 +6266,9 @@ export def "get-commercial-conditions" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({commercial_condition_id: (encode-path-segment $commercial_condition_id)} | format pattern "/api/catalog_system/pvt/commercialcondition/{commercial_condition_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6272,7 +6299,7 @@ export def "indexed-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6281,9 +6308,9 @@ export def "indexed-info" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pvt/products/GetIndexedInfo/{product_id}") $auth.query)
   let accept_val = "xml"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6316,7 +6343,7 @@ export def "product-and-sku-ids" [
   --from: int # Insert the ID that will start the request result. (format: int32, e.g. 1)
   --to: int # Insert the ID that will end the request result. (format: int32, e.g. 10)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<data: record<Product_ID: list<any>>, range: record<from: int, to: int, total: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6325,9 +6352,9 @@ export def "product-and-sku-ids" [
   let qp = [(serialize-qp "categoryId" $category_id "scalar") (serialize-qp "_from" $from "scalar") (serialize-qp "_to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/products/GetProductAndSkuIds" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6358,7 +6385,7 @@ export def "productand-trade-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, ListStoreId: list<any>, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6367,9 +6394,9 @@ export def "productand-trade-policy" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pvt/products/productget/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6400,7 +6427,7 @@ export def "productby-ref-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, ListStoreId: list<int>, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6409,9 +6436,9 @@ export def "productby-ref-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({ref_id: (encode-path-segment $ref_id)} | format pattern "/api/catalog_system/pvt/products/productgetbyrefid/{ref_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6442,7 +6469,7 @@ export def "get-product-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<Id: int, Name: string, Value: list<string>>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6451,9 +6478,9 @@ export def "get-product-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pvt/products/{product_id}/specification") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6484,7 +6511,7 @@ export def "update-product-specification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --body: list
 ]: any -> any {
   let input = $in
@@ -6495,13 +6522,13 @@ export def "update-product-specification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pvt/products/{product_id}/specification") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -6531,7 +6558,7 @@ export def "sales-channel-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ConditionRule: string, CountryCode: string, CultureInfo: string, CurrencyCode: string, CurrencyDecimalDigits: int, CurrencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, CurrencyLocale: int, CurrencySymbol: string, Id: int, IsActive: bool, Name: string, Origin: string, Position: int, ProductClusterId: int, TimeZone: string>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6539,9 +6566,9 @@ export def "sales-channel-list" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/saleschannel/list" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6571,7 +6598,7 @@ export def "create-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   archive_id: int # Seller archive ID. (e.g. 1)
   cnpj: string # Company registration number. (e.g. 12035072751)
   csc_identification: string # CSC identification. (e.g. pedrostore)
@@ -6605,16 +6632,16 @@ export def "create-seller" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/seller" $auth.query)
   let req_body = {"ArchiveId": $archive_id, "CNPJ": $cnpj, "CSCIdentification": $csc_identification, "CatalogSystemEndpoint": $catalog_system_endpoint, "CategoryCommissionPercentage": $category_commission_percentage, "DeliveryPolicy": $delivery_policy, "Description": $description, "Email": $email, "ExchangeReturnPolicy": $exchange_return_policy, "FreightCommissionPercentage": $freight_commission_percentage, "FulfillmentEndpoint": $fulfillment_endpoint, "FulfillmentSellerId": $fulfillment_seller_id, "IsActive": $is_active, "IsBetterScope": $is_better_scope, "MerchantName": $merchant_name, "Name": $name, "Password": $password, "ProductCommissionPercentage": $product_commission_percentage, "SecutityPrivacyPolicy": $secutity_privacy_policy, "SellerId": $seller_id, "SellerType": $seller_type, "TrustPolicy": $trust_policy, "UrlLogo": $url_logo, "UseHybridPaymentOptions": $use_hybrid_payment_options, "UserName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsBetterScope") == null) { error make --unspanned { msg: "required body field 'IsBetterScope' missing: pass --is-better-scope or pipe a record" } }
   if (($req_body | get -o "UseHybridPaymentOptions") == null) { error make --unspanned { msg: "required body field 'UseHybridPaymentOptions' missing: pass --use-hybrid-payment-options or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -6644,7 +6671,7 @@ export def "update-seller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   archive_id: int # Seller archive ID. (e.g. 1)
   cnpj: string # Company registration number. (e.g. 12035072751)
   csc_identification: string # CSC identification. (e.g. pedrostore)
@@ -6678,16 +6705,16 @@ export def "update-seller" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/seller" $auth.query)
   let req_body = {"ArchiveId": $archive_id, "CNPJ": $cnpj, "CSCIdentification": $csc_identification, "CatalogSystemEndpoint": $catalog_system_endpoint, "CategoryCommissionPercentage": $category_commission_percentage, "DeliveryPolicy": $delivery_policy, "Description": $description, "Email": $email, "ExchangeReturnPolicy": $exchange_return_policy, "FreightCommissionPercentage": $freight_commission_percentage, "FulfillmentEndpoint": $fulfillment_endpoint, "FulfillmentSellerId": $fulfillment_seller_id, "IsActive": $is_active, "IsBetterScope": $is_better_scope, "MerchantName": $merchant_name, "Name": $name, "Password": $password, "ProductCommissionPercentage": $product_commission_percentage, "SecutityPrivacyPolicy": $secutity_privacy_policy, "SellerId": $seller_id, "SellerType": $seller_type, "TrustPolicy": $trust_policy, "UrlLogo": $url_logo, "UseHybridPaymentOptions": $use_hybrid_payment_options, "UserName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsBetterScope") == null) { error make --unspanned { msg: "required body field 'IsBetterScope' missing: pass --is-better-scope or pipe a record" } }
   if (($req_body | get -o "UseHybridPaymentOptions") == null) { error make --unspanned { msg: "required body field 'UseHybridPaymentOptions' missing: pass --use-hybrid-payment-options or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -6720,7 +6747,7 @@ export def "seller-list" [
   --seller-type: int # Seller type. (format: int32, e.g. 1)
   --is-better-scope: oneof<nothing, bool> # If the seller is better scope. (e.g. false)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6729,9 +6756,9 @@ export def "seller-list" [
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/seller/list" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6762,7 +6789,7 @@ export def "get-sellerby-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6771,9 +6798,9 @@ export def "get-sellerby-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/api/catalog_system/pvt/seller/{seller_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6804,7 +6831,7 @@ export def "get-sellersby-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6813,9 +6840,9 @@ export def "get-sellersby-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id)} | format pattern "/api/catalog_system/pvt/sellers/{seller_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6845,7 +6872,7 @@ export def "associateattachmentsto-sku" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   attachment_names: list<string> # Array with all the names of the attachments that you need to associate to the SKU.
   sku_id: int # Unique identifier of the SKU. (e.g. 1)
 ]: any -> any {
@@ -6856,13 +6883,13 @@ export def "associateattachmentsto-sku" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/associateattachments" $auth.query)
   let req_body = {"AttachmentNames": $attachment_names, "SkuId": $sku_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -6894,7 +6921,7 @@ export def "get-sk-ucomplementsbytype" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ComplementSkuIds: list<int>, ParentSkuId: int, Type: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6904,9 +6931,9 @@ export def "get-sk-ucomplementsbytype" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({parent_sku_id: (encode-path-segment $parent_sku_id), type: (encode-path-segment $type)} | format pattern "/api/catalog_system/pvt/sku/complements/{parent_sku_id}/{type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6937,7 +6964,7 @@ export def "skulistby-product-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<ActivateIfPossible: bool, CommercialConditionId: int, CubicWeight: float, DateUpdated: string, EstimatedDateArrival: string, FlagKitItensSellApart: bool, Height: float, Id: int, InternalNote: string, IsActive: bool, IsDynamicKit: string, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsPersisted: bool, IsRemoved: bool, IsTransported: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalId: int, ModalType: string, Name: string, Position: int, ProductId: int, RealHeight: float, RealLength: float, RealWeightKg: float, RealWidth: float, RefId: string, ReferenceStockKeepingUnitId: string, RewardValue: float, UnitMultiplier: float, WeightKg: float, Width: float, isKitOptimized: bool>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6946,9 +6973,9 @@ export def "skulistby-product-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitByProductId/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6979,7 +7006,7 @@ export def "skuby-alternate-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, CategoriesFullPath: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsDirectCategoryActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, PositionsInClusters: record, ProductCategories: record, ProductCategoryIds: string, ProductClusterHighlights: record, ProductClusterNames: record, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -6988,9 +7015,9 @@ export def "skuby-alternate-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({alternate_id: (encode-path-segment $alternate_id)} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyalternateId/{alternate_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7021,7 +7048,7 @@ export def "skuby-ean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, CategoriesFullPath: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsDirectCategoryActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, PositionsInClusters: record, ProductCategories: record, ProductCategoryIds: string, ProductClusterHighlights: record, ProductClusterNames: record, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7030,9 +7057,9 @@ export def "skuby-ean" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({ean: (encode-path-segment $ean)} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyean/{ean}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7064,7 +7091,7 @@ export def "sku-context" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade Policy's unique identifier number. (e.g. 1)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, ProductCategories: record, ProductCategoryIds: string, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7074,9 +7101,9 @@ export def "sku-context" [
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyid/{sku_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7107,7 +7134,7 @@ export def "sku-idby-ref-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7116,9 +7143,9 @@ export def "sku-idby-ref-id" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({ref_id: (encode-path-segment $ref_id)} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitidbyrefid/{ref_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7150,7 +7177,7 @@ export def "listall-skui-ds" [
   --page: int # Number of the page from where you need to retrieve SKU IDs. (required, e.g. 1)
   --pagesize: int # Size of the page from where you need retrieve SKU IDs. The maximum value is `1000`. (required, e.g. 25)
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7161,9 +7188,9 @@ export def "listall-skui-ds" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/stockkeepingunitids" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7196,7 +7223,7 @@ export def "get-api-catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel" [
   --page-size: int # Number of items in the page. (e.g. 1)
   --only-assigned: oneof<nothing, bool> # If set as `false`, it allows the user to decide if the SKUs that are not assigned to a specific trade policy should be also returned. (e.g. true)
   --content-type: string # Type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7206,9 +7233,9 @@ export def "get-api-catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel" [
   let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "onlyAssigned" $only_assigned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/stockkeepingunitidsbysaleschannel" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7239,7 +7266,7 @@ export def "post-api-catalog-system-pvt-skuseller-changenotification-seller-id-s
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7249,9 +7276,9 @@ export def "post-api-catalog-system-pvt-skuseller-changenotification-seller-id-s
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/api/catalog_system/pvt/skuseller/changenotification/{seller_id}/{seller_sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7282,7 +7309,7 @@ export def "change-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7291,9 +7318,9 @@ export def "change-notification" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({sku_id: (encode-path-segment $sku_id)} | format pattern "/api/catalog_system/pvt/skuseller/changenotification/{sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7325,7 +7352,7 @@ export def "delete-sk-usellerassociation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7335,9 +7362,9 @@ export def "delete-sk-usellerassociation" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/api/catalog_system/pvt/skuseller/remove/{seller_id}/{seller_sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7369,7 +7396,7 @@ export def "get-sk-useller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<IsActive: bool, IsPersisted: bool, IsRemoved: bool, RequestedUpdateDate: string, SellerId: string, SellerStockKeepingUnitId: string, SkuSellerId: int, StockKeepingUnitId: int, UpdateDate: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7379,9 +7406,9 @@ export def "get-sk-useller" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({seller_id: (encode-path-segment $seller_id), seller_sku_id: (encode-path-segment $seller_sku_id)} | format pattern "/api/catalog_system/pvt/skuseller/{seller_id}/{seller_sku_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7412,7 +7439,7 @@ export def "specifications-insert-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --category-id: int # Category ID. (nullable)
   --default-value: string # Specification Field default Value. (nullable)
   --description: string # Specification Field Description. (nullable)
@@ -7439,7 +7466,7 @@ export def "specifications-insert-field" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/field" $auth.query)
   let req_body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldGroupName": $field_group_name, "FieldId": $field_id, "FieldTypeId": $field_type_id, "FieldValueId": $field_value_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsFilter") == null) { error make --unspanned { msg: "required body field 'IsFilter' missing: pass --is-filter or pipe a record" } }
   if (($req_body | get -o "IsOnProductDetails") == null) { error make --unspanned { msg: "required body field 'IsOnProductDetails' missing: pass --is-on-product-details or pipe a record" } }
@@ -7449,11 +7476,11 @@ export def "specifications-insert-field" [
   if (($req_body | get -o "IsTopMenuLinkActive") == null) { error make --unspanned { msg: "required body field 'IsTopMenuLinkActive' missing: pass --is-top-menu-link-active or pipe a record" } }
   if (($req_body | get -o "IsWizard") == null) { error make --unspanned { msg: "required body field 'IsWizard' missing: pass --is-wizard or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -7484,7 +7511,7 @@ export def "specifications-insert-field-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --category-id: int # Category ID. (nullable)
   --default-value: string # Specification Field default Value. (nullable)
   --description: string # Specification Field Description. (nullable)
@@ -7511,7 +7538,7 @@ export def "specifications-insert-field-update" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/field" $auth.query)
   let req_body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldGroupName": $field_group_name, "FieldId": $field_id, "FieldTypeId": $field_type_id, "FieldValueId": $field_value_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   if (($req_body | get -o "IsFilter") == null) { error make --unspanned { msg: "required body field 'IsFilter' missing: pass --is-filter or pipe a record" } }
   if (($req_body | get -o "IsOnProductDetails") == null) { error make --unspanned { msg: "required body field 'IsOnProductDetails' missing: pass --is-on-product-details or pipe a record" } }
@@ -7521,11 +7548,11 @@ export def "specifications-insert-field-update" [
   if (($req_body | get -o "IsTopMenuLinkActive") == null) { error make --unspanned { msg: "required body field 'IsTopMenuLinkActive' missing: pass --is-top-menu-link-active or pipe a record" } }
   if (($req_body | get -o "IsWizard") == null) { error make --unspanned { msg: "required body field 'IsWizard' missing: pass --is-wizard or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -7555,7 +7582,7 @@ export def "specifications-insert-field-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   field_id: int # Specification Field ID. (format: int32)
   --is-active: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
   name: string # Specification Field Value Name.
@@ -7569,14 +7596,14 @@ export def "specifications-insert-field-value" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/fieldValue" $auth.query)
   let req_body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -7606,7 +7633,7 @@ export def "specifications-update-field-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
   --field-id: int # Specification Field ID. (nullable)
   --is-active: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
   name: string # Specification Field Value Name.
@@ -7620,14 +7647,14 @@ export def "specifications-update-field-value" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/fieldValue" $auth.query)
   let req_body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "IsActive") == null) { error make --unspanned { msg: "required body field 'IsActive' missing: pass --is-active or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -7658,7 +7685,7 @@ export def "specifications-get-field-value" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7667,9 +7694,9 @@ export def "specifications-get-field-value" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({field_value_id: (encode-path-segment $field_value_id)} | format pattern "/api/catalog_system/pvt/specification/fieldValue/{field_value_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7700,7 +7727,7 @@ export def "specifications-group-listby-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent. (required, default: application/json)
-  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (required, default: application/json) (spec name: Accept)
 ]: nothing -> oneof<table<CategoryId: int, Id: int, Name: string, Position: int>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CATALOG_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CATALOG_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -7709,9 +7736,9 @@ export def "specifications-group-listby-category" [
   let hdr_accept = ($hdr_accept | default "application/json")
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/api/catalog_system/pvt/specification/groupbycategory/{category_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

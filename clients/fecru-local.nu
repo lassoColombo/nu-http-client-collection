@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -179,7 +206,7 @@ export def "get-rest-service-fecru-admin-groups" [
   let qp = [(serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -212,7 +239,7 @@ export def "post-rest-service-fecru-admin-groups" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/groups/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -247,7 +274,7 @@ export def "delete-rest-service-fecru-admin-groups-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -282,7 +309,7 @@ export def "get-rest-service-fecru-admin-groups-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -317,7 +344,7 @@ export def "put-rest-service-fecru-admin-groups-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -352,7 +379,7 @@ export def "delete-rest-service-fecru-admin-groups-name-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -388,7 +415,7 @@ export def "list-group-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -423,7 +450,7 @@ export def "put-rest-service-fecru-admin-groups-name-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/groups/{name}/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -458,7 +485,7 @@ export def "get-rest-service-fecru-admin-permission-schemes" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/permission-schemes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -493,7 +520,7 @@ export def "post-rest-service-fecru-admin-permission-schemes" [
   let qp = [(serialize-qp "copyFrom" $copy_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/permission-schemes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -528,7 +555,7 @@ export def "delete-rest-service-fecru-admin-permission-schemes-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -563,7 +590,7 @@ export def "get-rest-service-fecru-admin-permission-schemes-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -598,7 +625,7 @@ export def "put-rest-service-fecru-admin-permission-schemes-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -634,7 +661,7 @@ export def "delete-permission-scheme-anonymous-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -672,7 +699,7 @@ export def "list-anonymous-users-principal-association" [
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -708,7 +735,7 @@ export def "add-permission-scheme-anonymous-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -744,7 +771,7 @@ export def "delete-permission-scheme-group" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -774,7 +801,7 @@ export def "list-group-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-name: string # group name
+  --qp-name: string # group name (spec name: name)
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -783,7 +810,7 @@ export def "list-group-principal-association" [
   let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -819,7 +846,7 @@ export def "add-permission-scheme-group" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -855,7 +882,7 @@ export def "delete-permission-scheme-logged-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -893,7 +920,7 @@ export def "list-logged-users-principal-association" [
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -929,7 +956,7 @@ export def "add-permission-scheme-logged-users" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -965,7 +992,7 @@ export def "list-projects" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/projects") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1001,7 +1028,7 @@ export def "delete-permission-scheme-role" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1031,7 +1058,7 @@ export def "list-roles-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-name: string # role name
+  --qp-name: string # role name (spec name: name)
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1040,7 +1067,7 @@ export def "list-roles-principal-association" [
   let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1076,7 +1103,7 @@ export def "add-permission-scheme-review-role" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1112,7 +1139,7 @@ export def "delete-permission-scheme-user" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1142,7 +1169,7 @@ export def "list-user-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-name: string # permission scheme name
+  --qp-name: string # permission scheme name (spec name: name)
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1151,7 +1178,7 @@ export def "list-user-principal-association" [
   let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1187,7 +1214,7 @@ export def "add-permission-scheme-user" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1225,7 +1252,7 @@ export def "get-rest-service-fecru-admin-projects" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "defaultRepositoryName" $default_repository_name "scalar") (serialize-qp "permissionSchemeName" $permission_scheme_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/projects" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1258,7 +1285,7 @@ export def "post-rest-service-fecru-admin-projects" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/projects" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1295,7 +1322,7 @@ export def "delete-rest-service-fecru-admin-projects-key" [
   let qp = [(serialize-qp "deleteProjectReviews" $delete_project_reviews "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1330,7 +1357,7 @@ export def "get-rest-service-fecru-admin-projects-key" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1365,7 +1392,7 @@ export def "put-rest-service-fecru-admin-projects-key" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1401,7 +1428,7 @@ export def "delete-allowed-reviewer-group" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1437,7 +1464,7 @@ export def "allowed-reviewer-groups" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1473,7 +1500,7 @@ export def "add-allowed-reviewer-group" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1509,7 +1536,7 @@ export def "delete-allowed-reviewer-user" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1545,7 +1572,7 @@ export def "allowed-reviewer-users" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1581,7 +1608,7 @@ export def "add-allowed-reviewer-user" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1617,7 +1644,7 @@ export def "delete-default-reviewer-group" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1653,7 +1680,7 @@ export def "default-reviewer-groups" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1689,7 +1716,7 @@ export def "add-default-reviewer-group" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1725,7 +1752,7 @@ export def "delete-default-reviewer-user" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1761,7 +1788,7 @@ export def "list-default-reviewer-users" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1797,7 +1824,7 @@ export def "add-default-reviewer-user" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1835,7 +1862,7 @@ export def "move-all-reviews" [
   if ($destination_project_key | is-empty) { error make --unspanned { msg: "path parameter 'destinationProjectKey' must be non-empty" } }
   let full_url = (build-url $base ({source_project_key: (encode-path-segment $source_project_key), destination_project_key: (encode-path-segment $destination_project_key)} | format pattern "/rest-service-fecru/admin/projects/{source_project_key}/move-reviews/{destination_project_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1872,7 +1899,7 @@ export def "get-rest-service-fecru-admin-repositories" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "started" $started "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1905,7 +1932,7 @@ export def "post-rest-service-fecru-admin-repositories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1939,7 +1966,7 @@ export def "add-repository" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories-v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1974,7 +2001,7 @@ export def "get-rest-service-fecru-admin-repositories-v1-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2010,7 +2037,7 @@ export def "delete-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2046,7 +2073,7 @@ export def "disable-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2082,7 +2109,7 @@ export def "enable-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/enable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2118,7 +2145,7 @@ export def "reindex-changeset-comments" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-discussions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2153,7 +2180,7 @@ export def "post-rest-service-fecru-admin-repositories-v1-repository-reindex-lin
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-linecount") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2191,7 +2218,7 @@ export def "do-review-revision-reindex" [
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-reviews") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2227,7 +2254,7 @@ export def "rebuild-search-index" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-search") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2264,7 +2291,7 @@ export def "post-rest-service-fecru-admin-repositories-v1-repository-reindex-sou
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-source") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2302,7 +2329,7 @@ export def "post-rest-service-fecru-admin-repositories-v1-repository-rescan-meta
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2340,7 +2367,7 @@ export def "scan" [
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2376,7 +2403,7 @@ export def "scan-cvs" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan-cvs") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2412,7 +2439,7 @@ export def "start-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2448,7 +2475,7 @@ export def "stop-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/stop") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2483,7 +2510,7 @@ export def "delete-rest-service-fecru-admin-repositories-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2518,7 +2545,7 @@ export def "get-rest-service-fecru-admin-repositories-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2553,7 +2580,7 @@ export def "put-rest-service-fecru-admin-repositories-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2589,7 +2616,7 @@ export def "full-incremental-index" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/full-incremental-index") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2627,7 +2654,7 @@ export def "incremental-index" [
   let qp = [(serialize-qp "wait" $wait "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/incremental-index") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2663,7 +2690,7 @@ export def "permissions" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2699,7 +2726,7 @@ export def "update-permissions" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2735,7 +2762,7 @@ export def "remove-group-to-permissions" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2771,7 +2798,7 @@ export def "permissions-groups" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2807,7 +2834,7 @@ export def "add-group-to-permissions" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2843,7 +2870,7 @@ export def "reindex-changeset-discussion" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-changeset-discussion") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2878,7 +2905,7 @@ export def "put-rest-service-fecru-admin-repositories-repository-reindex-linecou
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-linecount") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2914,7 +2941,7 @@ export def "reindex-reviews" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-reviews") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2950,7 +2977,7 @@ export def "reindex-search" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-search") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2987,7 +3014,7 @@ export def "put-rest-service-fecru-admin-repositories-repository-reindex-source"
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-source") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3025,7 +3052,7 @@ export def "put-rest-service-fecru-admin-repositories-repository-rescan-metadata
   let qp = [(serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/rescan-metadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3061,7 +3088,7 @@ export def "put-rest-service-fecru-admin-repositories-repository-start" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3097,7 +3124,7 @@ export def "stop" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/stop") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3133,7 +3160,7 @@ export def "repository-updates" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3168,7 +3195,7 @@ export def "update-repository-updates" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3202,7 +3229,7 @@ export def "default-permissions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories/~defaults/permissions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3236,7 +3263,7 @@ export def "update-default-permissions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/repositories/~defaults/permissions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3269,7 +3296,7 @@ export def "get-rest-service-fecru-admin-users" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/users/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3302,7 +3329,7 @@ export def "post-rest-service-fecru-admin-users" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/admin/users/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3337,7 +3364,7 @@ export def "delete-rest-service-fecru-admin-users-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3372,7 +3399,7 @@ export def "get-rest-service-fecru-admin-users-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3407,7 +3434,7 @@ export def "put-rest-service-fecru-admin-users-name" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3442,7 +3469,7 @@ export def "delete-rest-service-fecru-admin-users-name-groups" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3478,7 +3505,7 @@ export def "list-user-groups" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3513,7 +3540,7 @@ export def "put-rest-service-fecru-admin-users-name-groups" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/users/{name}/groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3547,7 +3574,7 @@ export def "login" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/auth/login" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3582,7 +3609,7 @@ export def "get-rest-service-fecru-indexing-status-v1-status-repository" [
   if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service-fecru/indexing-status-v1/status/{repository}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3616,7 +3643,7 @@ export def "get-recent" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3650,7 +3677,7 @@ export def "get-recent-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3684,7 +3711,7 @@ export def "get-recent-projects" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/projects" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3718,7 +3745,7 @@ export def "get-recent-projects-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/projects/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3752,7 +3779,7 @@ export def "get-recent-repositories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/repositories" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3786,7 +3813,7 @@ export def "get-recent-repositories-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/repositories/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3820,7 +3847,7 @@ export def "get-recent-reviews" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/reviews" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3854,7 +3881,7 @@ export def "get-recent-reviews-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/reviews/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3888,7 +3915,7 @@ export def "get-recent-snippets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/snippets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3922,7 +3949,7 @@ export def "get-recent-snippets-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/snippets/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3956,7 +3983,7 @@ export def "get-recent-users" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/users" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3990,7 +4017,7 @@ export def "get-recent-users-detailed" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/recently-visited-v1/users/detailed" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4024,7 +4051,7 @@ export def "get-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/server-v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4057,7 +4084,7 @@ export def "do-share-content" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/share-content-v1/share" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4091,7 +4118,7 @@ export def "set-pref" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest-service-fecru/user-prefs-v1" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4127,7 +4154,7 @@ export def "get-global-pref" [
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let full_url = (build-url $base ({property: (encode-path-segment $property)} | format pattern "/rest-service-fecru/user-prefs-v1/{property}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4165,7 +4192,7 @@ export def "get-repo-pref" [
   if ($property | is-empty) { error make --unspanned { msg: "path parameter 'property' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), property: (encode-path-segment $property)} | format pattern "/rest-service-fecru/user-prefs-v1/{repository}/{property}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

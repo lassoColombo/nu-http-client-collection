@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -277,11 +304,11 @@ export def "accept-portfolio-share" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AcceptPortfolioShare")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PortfolioShareType": $portfolio_share_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -327,11 +354,11 @@ export def "associate-budget-with-resource" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AssociateBudgetWithResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BudgetName": $budget_name, "ResourceId": $resource_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -379,11 +406,11 @@ export def "associate-principal-with-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AssociatePrincipalWithPortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PrincipalARN": $principal_arn, "PrincipalType": $principal_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -431,11 +458,11 @@ export def "associate-product-with-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AssociateProductWithPortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PortfolioId": $portfolio_id, "SourcePortfolioId": $source_portfolio_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -483,11 +510,11 @@ export def "associate-service-action-with-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AssociateServiceActionWithProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "ServiceActionId": $service_action_id, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -533,11 +560,11 @@ export def "associate-tag-option-with-resource" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.AssociateTagOptionWithResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagOptionId": $tag_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -583,11 +610,11 @@ export def "batch-associate-service-action-with-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.BatchAssociateServiceActionWithProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceActionAssociations": $service_action_associations, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -633,11 +660,11 @@ export def "batch-disassociate-service-action-from-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.BatchDisassociateServiceActionFromProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ServiceActionAssociations": $service_action_associations, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -688,11 +715,11 @@ export def "copy-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CopyProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "SourceProductArn": $source_product_arn, "TargetProductId": $target_product_id, "TargetProductName": $target_product_name, "SourceProvisioningArtifactIdentifiers": $source_provisioning_artifact_identifiers, "CopyOptions": $copy_options, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -743,11 +770,11 @@ export def "create-constraint" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateConstraint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "ProductId": $product_id, "Parameters": $parameters, "Type": $type, "Description": $description, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -797,11 +824,11 @@ export def "create-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreatePortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "DisplayName": $display_name, "Description": $description, "ProviderName": $provider_name, "Tags": $tags, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -851,11 +878,11 @@ export def "create-portfolio-share" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreatePortfolioShare")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "AccountId": $account_id, "OrganizationNode": $organization_node, "ShareTagOptions": $share_tag_options, "SharePrincipals": $share_principals} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -912,11 +939,11 @@ export def "create-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Name": $name, "Owner": $owner, "Description": $description, "Distributor": $distributor, "SupportDescription": $support_description, "SupportEmail": $support_email, "SupportUrl": $support_url, "ProductType": $product_type, "Tags": $tags, "ProvisioningArtifactParameters": $provisioning_artifact_parameters, "IdempotencyToken": $idempotency_token, "SourceConnection": $source_connection} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -971,11 +998,11 @@ export def "create-provisioned-product-plan" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateProvisionedProductPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PlanName": $plan_name, "PlanType": $plan_type, "NotificationArns": $notification_arns, "PathId": $path_id, "ProductId": $product_id, "ProvisionedProductName": $provisioned_product_name, "ProvisioningArtifactId": $provisioning_artifact_id, "ProvisioningParameters": $provisioning_parameters, "IdempotencyToken": $idempotency_token, "Tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1023,11 +1050,11 @@ export def "create-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "Parameters": $parameters, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1077,11 +1104,11 @@ export def "create-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateServiceAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Name": $name, "DefinitionType": $definition_type, "Definition": $definition, "Description": $description, "AcceptLanguage": $accept_language, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1127,11 +1154,11 @@ export def "create-tag-option" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.CreateTagOption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Key": $key, "Value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1177,11 +1204,11 @@ export def "delete-constraint" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteConstraint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1227,11 +1254,11 @@ export def "delete-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeletePortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1279,11 +1306,11 @@ export def "delete-portfolio-share" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeletePortfolioShare")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "AccountId": $account_id, "OrganizationNode": $organization_node} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1329,11 +1356,11 @@ export def "delete-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1380,11 +1407,11 @@ export def "delete-provisioned-product-plan" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteProvisionedProductPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PlanId": $plan_id, "IgnoreErrors": $ignore_errors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1431,11 +1458,11 @@ export def "delete-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1481,11 +1508,11 @@ export def "delete-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteServiceAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1530,11 +1557,11 @@ export def "delete-tag-option" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DeleteTagOption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1580,11 +1607,11 @@ export def "describe-constraint" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeConstraint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1630,11 +1657,11 @@ export def "describe-copy-product-status" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeCopyProductStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "CopyProductToken": $copy_product_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1680,11 +1707,11 @@ export def "describe-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribePortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1729,11 +1756,11 @@ export def "describe-portfolio-share-status" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribePortfolioShareStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"PortfolioShareToken": $portfolio_share_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1774,8 +1801,8 @@ export def "describe-portfolio-shares" [
   --x-amz-target: string@x-amz-target-completer-29 # required
   portfolio_id: string # The unique identifier of the portfolio for which shares will be retrieved.
   type: string@type-completer # The type of portfolio share to summarize. This field acts as a filter on the type of portfolio share, which can be one of the following: 1. ACCOUNT - Represents an external account to account share. 2. ORGANIZATION - Represents a share to an organization. This share is available to every account in the organization. 3. ORGANIZATIONAL_UNIT - Represents a share to an organizational unit. 4. ORGANIZATION_MEMBER_ACCOUNT - Represents a share to an account in the organization.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
 ]: any -> oneof<record<NextPageToken: string, PortfolioShareDetails: table<PrincipalId: string, Type: string, Accepted: bool, ShareTagOptions: bool, SharePrincipals: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1783,12 +1810,12 @@ export def "describe-portfolio-shares" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribePortfolioShares")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"PortfolioId": $portfolio_id, "Type": $type, "PageToken": $page_token_body, "PageSize": $page_size_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"PortfolioId": $portfolio_id, "Type": $type, "PageToken": $body_page_token, "PageSize": $body_page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1835,11 +1862,11 @@ export def "describe-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1887,11 +1914,11 @@ export def "describe-product-as-admin" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProductAsAdmin")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "Name": $name, "SourcePortfolioId": $source_portfolio_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1937,11 +1964,11 @@ export def "describe-product-view" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProductView")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1988,11 +2015,11 @@ export def "describe-provisioned-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProvisionedProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2040,11 +2067,11 @@ export def "describe-provisioned-product-plan" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProvisionedProductPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PlanId": $plan_id, "PageSize": $page_size, "PageToken": $page_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2094,11 +2121,11 @@ export def "describe-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProvisioningArtifactId": $provisioning_artifact_id, "ProductId": $product_id, "ProvisioningArtifactName": $provisioning_artifact_name, "ProductName": $product_name, "Verbose": $verbose} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2149,11 +2176,11 @@ export def "describe-provisioning-parameters" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeProvisioningParameters")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "ProductName": $product_name, "ProvisioningArtifactId": $provisioning_artifact_id, "ProvisioningArtifactName": $provisioning_artifact_name, "PathId": $path_id, "PathName": $path_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2201,11 +2228,11 @@ export def "describe-record" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeRecord")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "PageToken": $page_token, "PageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2251,11 +2278,11 @@ export def "describe-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeServiceAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2302,11 +2329,11 @@ export def "describe-service-action-execution-parameters" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeServiceActionExecutionParameters")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProvisionedProductId": $provisioned_product_id, "ServiceActionId": $service_action_id, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2351,11 +2378,11 @@ export def "describe-tag-option" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DescribeTagOption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2400,11 +2427,11 @@ export def "disable-aws-organizations-access" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisableAWSOrganizationsAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2450,11 +2477,11 @@ export def "disassociate-budget-from-resource" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisassociateBudgetFromResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"BudgetName": $budget_name, "ResourceId": $resource_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2502,11 +2529,11 @@ export def "disassociate-principal-from-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisassociatePrincipalFromPortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PrincipalARN": $principal_arn, "PrincipalType": $principal_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2553,11 +2580,11 @@ export def "disassociate-product-from-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisassociateProductFromPortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PortfolioId": $portfolio_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2605,11 +2632,11 @@ export def "disassociate-service-action-from-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisassociateServiceActionFromProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "ServiceActionId": $service_action_id, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2655,11 +2682,11 @@ export def "disassociate-tag-option-from-resource" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.DisassociateTagOptionFromResource")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ResourceId": $resource_id, "TagOptionId": $tag_option_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2704,11 +2731,11 @@ export def "enable-aws-organizations-access" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.EnableAWSOrganizationsAccess")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2755,11 +2782,11 @@ export def "execute-provisioned-product-plan" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ExecuteProvisionedProductPlan")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PlanId": $plan_id, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2808,11 +2835,11 @@ export def "execute-provisioned-product-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ExecuteProvisionedProductServiceAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProvisionedProductId": $provisioned_product_id, "ServiceActionId": $service_action_id, "ExecuteToken": $execute_token, "AcceptLanguage": $accept_language, "Parameters": $parameters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2857,11 +2884,11 @@ export def "get-aws-organizations-access-status" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.GetAWSOrganizationsAccessStatus")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2904,8 +2931,8 @@ export def "get-provisioned-product-outputs" [
   --provisioned-product-id: string # The identifier of the provisioned product that you want the outputs from.
   --provisioned-product-name: string # The name of the provisioned product that you want the outputs from.
   --output-keys: list<string> # The list of keys that the API should return with their values. If none are provided, the API will return all outputs of the provisioned product.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<Outputs: table<OutputKey: string, OutputValue: string, Description: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2913,12 +2940,12 @@ export def "get-provisioned-product-outputs" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.GetProvisionedProductOutputs")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "ProvisionedProductId": $provisioned_product_id, "ProvisionedProductName": $provisioned_product_name, "OutputKeys": $output_keys, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "ProvisionedProductId": $provisioned_product_id, "ProvisionedProductName": $provisioned_product_name, "OutputKeys": $output_keys, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2968,11 +2995,11 @@ export def "import-as-provisioned-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ImportAsProvisionedProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "ProvisionedProductName": $provisioned_product_name, "PhysicalId": $physical_id, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3012,8 +3039,8 @@ export def "list-accepted-portfolio-shares" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
   --portfolio-share-type: string@portfolio-share-type-completer # The type of shared portfolios to list. The default is to list imported portfolios. AWS_ORGANIZATIONS - List portfolios accepted and shared via organizational sharing by the management account or delegated administrator of your organization. AWS_SERVICECATALOG - Deprecated type. IMPORTED - List imported portfolios that have been accepted and shared through account-to-account sharing.
 ]: any -> oneof<record<PortfolioDetails: table<Id: string, ARN: string, DisplayName: string, Description: string, CreatedTime: string, ProviderName: string>, NextPageToken: string>, string, nothing> {
   let input = $in
@@ -3022,12 +3049,12 @@ export def "list-accepted-portfolio-shares" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListAcceptedPortfolioShares")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PageToken": $page_token_body, "PageSize": $page_size_body, "PortfolioShareType": $portfolio_share_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PageToken": $body_page_token, "PageSize": $body_page_size, "PortfolioShareType": $portfolio_share_type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3068,8 +3095,8 @@ export def "list-budgets-for-resource" [
   --x-amz-target: string@x-amz-target-completer-54 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   resource_id: string # The resource identifier.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<Budgets: table<BudgetName: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3077,12 +3104,12 @@ export def "list-budgets-for-resource" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListBudgetsForResource")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "ResourceId": $resource_id, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "ResourceId": $resource_id, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3124,8 +3151,8 @@ export def "list-constraints-for-portfolio" [
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   portfolio_id: string # The portfolio identifier.
   --product-id: string # The product identifier.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<ConstraintDetails: table<ConstraintId: string, Type: string, Description: string, Owner: string, ProductId: string, PortfolioId: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3133,12 +3160,12 @@ export def "list-constraints-for-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListConstraintsForPortfolio")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "ProductId": $product_id, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "ProductId": $product_id, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3179,8 +3206,8 @@ export def "list-launch-paths" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   product_id: string # The product identifier.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<LaunchPathSummaries: table<Id: string, ConstraintSummaries: list, Tags: list, Name: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3188,12 +3215,12 @@ export def "list-launch-paths" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListLaunchPaths")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3235,8 +3262,8 @@ export def "list-organization-portfolio-access" [
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   portfolio_id: string # The portfolio identifier. For example, port-2abcdext3y5fk.
   organization_node_type: string@organization-node-type-completer # The organization node type that will be returned in the output. ORGANIZATION - Organization that has access to the portfolio. ORGANIZATIONAL_UNIT - Organizational unit that has access to the portfolio within your organization. ACCOUNT - Account that has access to the portfolio within your organization.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
 ]: any -> oneof<record<OrganizationNodes: table<Type: string, Value: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3244,12 +3271,12 @@ export def "list-organization-portfolio-access" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListOrganizationPortfolioAccess")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "OrganizationNodeType": $organization_node_type, "PageToken": $page_token_body, "PageSize": $page_size_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "OrganizationNodeType": $organization_node_type, "PageToken": $body_page_token, "PageSize": $body_page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3291,8 +3318,8 @@ export def "list-portfolio-access" [
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   portfolio_id: string # The portfolio identifier.
   --organization-parent-id: string # The ID of an organization node the portfolio is shared with. All children of this node with an inherited portfolio share will be returned.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
 ]: any -> oneof<record<AccountIds: list<string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3300,12 +3327,12 @@ export def "list-portfolio-access" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListPortfolioAccess")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "OrganizationParentId": $organization_parent_id, "PageToken": $page_token_body, "PageSize": $page_size_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "OrganizationParentId": $organization_parent_id, "PageToken": $body_page_token, "PageSize": $body_page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3345,8 +3372,8 @@ export def "list-portfolios" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-59 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
 ]: any -> oneof<record<PortfolioDetails: table<Id: string, ARN: string, DisplayName: string, Description: string, CreatedTime: string, ProviderName: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3354,12 +3381,12 @@ export def "list-portfolios" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListPortfolios")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PageToken": $page_token_body, "PageSize": $page_size_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PageToken": $body_page_token, "PageSize": $body_page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3400,8 +3427,8 @@ export def "list-portfolios-for-product" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   product_id: string # The product identifier.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
 ]: any -> oneof<record<PortfolioDetails: table<Id: string, ARN: string, DisplayName: string, Description: string, CreatedTime: string, ProviderName: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3409,12 +3436,12 @@ export def "list-portfolios-for-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListPortfoliosForProduct")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PageToken": $page_token_body, "PageSize": $page_size_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "PageToken": $body_page_token, "PageSize": $body_page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3455,8 +3482,8 @@ export def "list-principals-for-portfolio" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   portfolio_id: string # The portfolio identifier.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<Principals: table<PrincipalARN: string, PrincipalType: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3464,12 +3491,12 @@ export def "list-principals-for-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListPrincipalsForPortfolio")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3518,11 +3545,11 @@ export def "list-provisioned-product-plans" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListProvisionedProductPlans")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProvisionProductId": $provision_product_id, "PageSize": $page_size, "PageToken": $page_token, "AccessLevelFilter": $access_level_filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3568,11 +3595,11 @@ export def "list-provisioning-artifacts" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListProvisioningArtifacts")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3612,8 +3639,8 @@ export def "list-provisioning-artifacts-for-service-action" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-64 # required
   service_action_id: string # The self-service action identifier. For example, act-fs7abcd89wxyz.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
   --accept-language: string # The language code. jp - Japanese zh - Chinese
 ]: any -> oneof<record<ProvisioningArtifactViews: table<ProductViewSummary: record, ProvisioningArtifact: record>, NextPageToken: string>, string, nothing> {
   let input = $in
@@ -3622,12 +3649,12 @@ export def "list-provisioning-artifacts-for-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListProvisioningArtifactsForServiceAction")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ServiceActionId": $service_action_id, "PageSize": $page_size_body, "PageToken": $page_token_body, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ServiceActionId": $service_action_id, "PageSize": $body_page_size, "PageToken": $body_page_token, "AcceptLanguage": $accept_language} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3676,11 +3703,11 @@ export def "list-record-history" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListRecordHistory")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "AccessLevelFilter": $access_level_filter, "SearchFilter": $search_filter, "PageSize": $page_size, "PageToken": $page_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3721,8 +3748,8 @@ export def "list-resources-for-tag-option" [
   --x-amz-target: string@x-amz-target-completer-66 # required
   tag_option_id: string # The TagOption identifier.
   --resource-type: string # The resource type. Portfolio Product
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<ResourceDetails: table<Id: string, ARN: string, Name: string, Description: string, CreatedTime: string>, PageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3730,12 +3757,12 @@ export def "list-resources-for-tag-option" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListResourcesForTagOption")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"TagOptionId": $tag_option_id, "ResourceType": $resource_type, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"TagOptionId": $tag_option_id, "ResourceType": $resource_type, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3775,8 +3802,8 @@ export def "list-service-actions" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-67 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<ServiceActionSummaries: table<Id: string, Name: string, Description: string, DefinitionType: string>, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3784,12 +3811,12 @@ export def "list-service-actions" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListServiceActions")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3830,8 +3857,8 @@ export def "list-service-actions-for-provisioning-artifact" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   product_id: string # The product identifier. For example, prod-abcdzk7xy33qa.
   provisioning_artifact_id: string # The identifier of the provisioning artifact. For example, pa-4abcdjnxjj6ne.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
   --accept-language: string # The language code. jp - Japanese zh - Chinese
 ]: any -> oneof<record<ServiceActionSummaries: table<Id: string, Name: string, Description: string, DefinitionType: string>, NextPageToken: string>, string, nothing> {
   let input = $in
@@ -3840,12 +3867,12 @@ export def "list-service-actions-for-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListServiceActionsForProvisioningArtifact")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "PageSize": $page_size_body, "PageToken": $page_token_body, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "PageSize": $body_page_size, "PageToken": $body_page_token, "AcceptLanguage": $accept_language} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3893,11 +3920,11 @@ export def "list-stack-instances-for-provisioned-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListStackInstancesForProvisionedProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProvisionedProductId": $provisioned_product_id, "PageToken": $page_token, "PageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3937,8 +3964,8 @@ export def "list-tag-options" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-70 # required
   --filters: record # Filters to use when listing TagOptions. — shape: {Key?: string, Value?: string, Active?: bool}
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<TagOptionDetails: table<Key: string, Value: string, Active: bool, Id: string, Owner: string>, PageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3946,12 +3973,12 @@ export def "list-tag-options" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ListTagOptions")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"Filters": $filters, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"Filters": $filters, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4002,11 +4029,11 @@ export def "notify-provision-product-engine-workflow-result" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.NotifyProvisionProductEngineWorkflowResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowToken": $workflow_token, "RecordId": $record_id, "Status": $status, "FailureReason": $failure_reason, "ResourceIdentifier": $resource_identifier, "Outputs": $outputs, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4055,11 +4082,11 @@ export def "notify-terminate-provisioned-product-engine-workflow-result" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.NotifyTerminateProvisionedProductEngineWorkflowResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowToken": $workflow_token, "RecordId": $record_id, "Status": $status, "FailureReason": $failure_reason, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4109,11 +4136,11 @@ export def "notify-update-provisioned-product-engine-workflow-result" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.NotifyUpdateProvisionedProductEngineWorkflowResult")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"WorkflowToken": $workflow_token, "RecordId": $record_id, "Status": $status, "FailureReason": $failure_reason, "Outputs": $outputs, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4170,11 +4197,11 @@ export def "provision-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ProvisionProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "ProductName": $product_name, "ProvisioningArtifactId": $provisioning_artifact_id, "ProvisioningArtifactName": $provisioning_artifact_name, "PathId": $path_id, "PathName": $path_name, "ProvisionedProductName": $provisioned_product_name, "ProvisioningParameters": $provisioning_parameters, "ProvisioningPreferences": $provisioning_preferences, "Tags": $tags, "NotificationArns": $notification_arns, "ProvisionToken": $provision_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4221,11 +4248,11 @@ export def "reject-portfolio-share" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.RejectPortfolioShare")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "PortfolioShareType": $portfolio_share_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4273,11 +4300,11 @@ export def "scan-provisioned-products" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.ScanProvisionedProducts")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "AccessLevelFilter": $access_level_filter, "PageSize": $page_size, "PageToken": $page_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4318,10 +4345,10 @@ export def "search-products" [
   --x-amz-target: string@x-amz-target-completer-77 # required
   --accept-language: string # The language code. jp - Japanese zh - Chinese
   --filters: record # The search filters. If no search filters are specified, the output includes all products to which the caller has access.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
   --sort-by: string@sort-by-completer # The sort field. If no value is specified, the results are not sorted.
   --sort-order: string@sort-order-completer # The sort order. If no value is specified, the results are not sorted.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<ProductViewSummaries: table<Id: string, ProductId: string, Name: string, Owner: string, ShortDescription: string, Type: string, Distributor: string, HasDefaultPath: bool, SupportEmail: string, SupportDescription: string, SupportUrl: string>, ProductViewAggregations: record, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4329,12 +4356,12 @@ export def "search-products" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.SearchProducts")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "Filters": $filters, "PageSize": $page_size_body, "SortBy": $sort_by, "SortOrder": $sort_order, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "Filters": $filters, "PageSize": $body_page_size, "SortBy": $sort_by, "SortOrder": $sort_order, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4378,8 +4405,8 @@ export def "search-products-as-admin" [
   --filters: record # The search filters. If no search filters are specified, the output includes all products to which the administrator has access.
   --sort-by: string@sort-by-completer # The sort field. If no value is specified, the results are not sorted.
   --sort-order: string@sort-order-completer # The sort order. If no value is specified, the results are not sorted.
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
   --product-source: string@product-source-completer # Access level of the source of the product.
 ]: any -> oneof<record<ProductViewDetails: table<ProductViewSummary: record, Status: string, ProductARN: string, CreatedTime: string, SourceConnection: record>, NextPageToken: string>, string, nothing> {
   let input = $in
@@ -4388,12 +4415,12 @@ export def "search-products-as-admin" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.SearchProductsAsAdmin")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order, "PageToken": $page_token_body, "PageSize": $page_size_body, "ProductSource": $product_source} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order, "PageToken": $body_page_token, "PageSize": $body_page_size, "ProductSource": $product_source} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4437,8 +4464,8 @@ export def "search-provisioned-products" [
   --filters: record # The search filters. When the key is SearchQuery, the searchable fields are arn, createdTime, id, lastRecordId, idempotencyToken, name, physicalId, productId, provisioningArtifact, type, status, tags, userArn, userArnSession, lastProvisioningRecordId, lastSuccessfulProvisioningRecordId, productName, and provisioningArtifactName. Example: "SearchQuery":["status:AVAILABLE"]
   --sort-by: string # The sort field. If no value is specified, the results are not sorted. The valid values are arn, id, name, and lastRecordId.
   --sort-order: string@sort-order-completer # The sort order. If no value is specified, the results are not sorted.
-  --page-size-body: int # The maximum number of items to return with this call. (body field)
-  --page-token-body: string # The page token for the next set of results. To retrieve the first set of results, use null. (body field)
+  --body-page-size: int # The maximum number of items to return with this call. (spec name: PageSize)
+  --body-page-token: string # The page token for the next set of results. To retrieve the first set of results, use null. (spec name: PageToken)
 ]: any -> oneof<record<ProvisionedProducts: table<Name: string, Arn: string, Type: string, Id: string, Status: string, StatusMessage: string, CreatedTime: string, IdempotencyToken: string, LastRecordId: string, LastProvisioningRecordId: string, LastSuccessfulProvisioningRecordId: string, Tags: list, PhysicalId: string, ProductId: string, ProductName: string, ProvisioningArtifactId: string, ProvisioningArtifactName: string, UserArn: string, UserArnSession: string>, TotalResultsCount: int, NextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4446,12 +4473,12 @@ export def "search-provisioned-products" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.SearchProvisionedProducts")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp $auth.query)
-  let req_body = {"AcceptLanguage": $accept_language, "AccessLevelFilter": $access_level_filter, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order, "PageSize": $page_size_body, "PageToken": $page_token_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"AcceptLanguage": $accept_language, "AccessLevelFilter": $access_level_filter, "Filters": $filters, "SortBy": $sort_by, "SortOrder": $sort_order, "PageSize": $body_page_size, "PageToken": $body_page_token} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4501,11 +4528,11 @@ export def "terminate-provisioned-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.TerminateProvisionedProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"ProvisionedProductName": $provisioned_product_name, "ProvisionedProductId": $provisioned_product_id, "TerminateToken": $terminate_token, "IgnoreErrors": $ignore_errors, "AcceptLanguage": $accept_language, "RetainPhysicalResources": $retain_physical_resources} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4553,11 +4580,11 @@ export def "update-constraint" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateConstraint")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "Description": $description, "Parameters": $parameters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4608,11 +4635,11 @@ export def "update-portfolio" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdatePortfolio")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "DisplayName": $display_name, "Description": $description, "ProviderName": $provider_name, "AddTags": $add_tags, "RemoveTags": $remove_tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4662,11 +4689,11 @@ export def "update-portfolio-share" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdatePortfolioShare")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "PortfolioId": $portfolio_id, "AccountId": $account_id, "OrganizationNode": $organization_node, "ShareTagOptions": $share_tag_options, "SharePrincipals": $share_principals} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4722,11 +4749,11 @@ export def "update-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "Id": $id, "Name": $name, "Owner": $owner, "Description": $description, "Distributor": $distributor, "SupportDescription": $support_description, "SupportEmail": $support_email, "SupportUrl": $support_url, "AddTags": $add_tags, "RemoveTags": $remove_tags, "SourceConnection": $source_connection} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4783,11 +4810,11 @@ export def "update-provisioned-product" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateProvisionedProduct")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProvisionedProductName": $provisioned_product_name, "ProvisionedProductId": $provisioned_product_id, "ProductId": $product_id, "ProductName": $product_name, "ProvisioningArtifactId": $provisioning_artifact_id, "ProvisioningArtifactName": $provisioning_artifact_name, "PathId": $path_id, "PathName": $path_name, "ProvisioningParameters": $provisioning_parameters, "ProvisioningPreferences": $provisioning_preferences, "Tags": $tags, "UpdateToken": $update_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4835,11 +4862,11 @@ export def "update-provisioned-product-properties" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateProvisionedProductProperties")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProvisionedProductId": $provisioned_product_id, "ProvisionedProductProperties": $provisioned_product_properties, "IdempotencyToken": $idempotency_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4890,11 +4917,11 @@ export def "update-provisioning-artifact" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateProvisioningArtifact")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"AcceptLanguage": $accept_language, "ProductId": $product_id, "ProvisioningArtifactId": $provisioning_artifact_id, "Name": $name, "Description": $description, "Active": $active, "Guidance": $guidance} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4943,11 +4970,11 @@ export def "update-service-action" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateServiceAction")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Name": $name, "Definition": $definition, "Description": $description, "AcceptLanguage": $accept_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4994,11 +5021,11 @@ export def "update-tag-option" [
   let x_amz_target = ($x_amz_target | default "AWS242ServiceCatalogService.UpdateTagOption")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"Id": $id, "Value": $value, "Active": $active} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

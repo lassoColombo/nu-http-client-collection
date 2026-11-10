@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -185,7 +212,7 @@ export def "list-management-image-lists-get-all-image-lists" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/imagelists" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -224,13 +251,13 @@ export def "list-management-image-lists-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/imagelists" $auth.query)
   let req_body = {"Description": $description, "Metadata": $metadata, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -266,7 +293,7 @@ export def "list-management-image-lists-delete" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -302,7 +329,7 @@ export def "list-management-image-lists-get-details" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -343,13 +370,13 @@ export def "list-management-image-lists-update" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}") $auth.query)
   let req_body = {"Description": $description, "Metadata": $metadata, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -385,7 +412,7 @@ export def "list-management-image-lists-refresh-index" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/RefreshIndex") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -421,7 +448,7 @@ export def "list-management-image-delete-all-images" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -457,7 +484,7 @@ export def "list-management-image-get-all-image-ids" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -496,7 +523,7 @@ export def "list-management-image-add-image" [
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "label" $label "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -534,7 +561,7 @@ export def "list-management-image-delete-image" [
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'ImageId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), image_id: (encode-path-segment $image_id)} | format pattern "/contentmoderator/lists/v1.0/imagelists/{list_id}/images/{image_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -568,7 +595,7 @@ export def "list-management-term-lists-get-all-term-lists" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/termlists" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -607,13 +634,13 @@ export def "list-management-term-lists-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/lists/v1.0/termlists" $auth.query)
   let req_body = {"Description": $description, "Metadata": $metadata, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -649,7 +676,7 @@ export def "list-management-term-lists-delete" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -685,7 +712,7 @@ export def "list-management-term-lists-get-details" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -726,13 +753,13 @@ export def "list-management-term-lists-update" [
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'listId' must be non-empty" } }
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}") $auth.query)
   let req_body = {"Description": $description, "Metadata": $metadata, "Name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -771,7 +798,7 @@ export def "list-management-term-lists-refresh-index" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/RefreshIndex") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -810,7 +837,7 @@ export def "list-management-term-delete-all-terms" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -851,7 +878,7 @@ export def "list-management-term-get-all-terms" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -892,7 +919,7 @@ export def "list-management-term-delete-term" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -933,7 +960,7 @@ export def "list-management-term-add-term" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), term: (encode-path-segment $term)} | format pattern "/contentmoderator/lists/v1.0/termlists/{list_id}/terms/{term}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -969,7 +996,7 @@ export def "image-moderation-evaluate" [
   let qp = [(serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/Evaluate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1005,7 +1032,7 @@ export def "image-moderation-find-faces" [
   let qp = [(serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/FindFaces" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1042,7 +1069,7 @@ export def "image-moderation-match" [
   let qp = [(serialize-qp "listId" $list_id "scalar") (serialize-qp "CacheImage" $cache_image "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/Match" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1081,7 +1108,7 @@ export def "image-moderation-ocr" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "CacheImage" $cache_image "scalar") (serialize-qp "enhanced" $enhanced "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessImage/OCR" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1118,13 +1145,13 @@ export def "text-moderation-detect-language" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessText/DetectLanguage" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/plain")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1167,13 +1194,13 @@ export def "text-moderation-screen-text" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "autocorrect" $autocorrect "scalar") (serialize-qp "PII" $pii "scalar") (serialize-qp "listId" $list_id "scalar") (serialize-qp "classify" $classify "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contentmoderator/moderate/v1.0/ProcessText/Screen/" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/plain")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1208,7 +1235,7 @@ export def "reviews-create-job" [
   --content-id: string # Id/Name to identify the content submitted. (required)
   --workflow-name: string # Workflow Name that you want to invoke. (required)
   --call-back-endpoint: string # Callback endpoint for posting the create job result.
-  --content-type-2: string@content-type-completer-2 # The content type. (required) (disambiguated-2)
+  --hdr-content-type: string@content-type-completer-2 # The content type. (required) (spec name: Content-Type)
   content_value: string # Content to evaluate for a job.
 ]: any -> oneof<record<JobId: string>, string, nothing> {
   let input = $in
@@ -1221,13 +1248,13 @@ export def "reviews-create-job" [
   let qp = [(serialize-qp "ContentType" $content_type "scalar") (serialize-qp "ContentId" $content_id "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "CallBackEndpoint" $call_back_endpoint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/jobs") $qp $auth.query)
   let req_body = {"ContentValue": $content_value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Content-Type": $content_type_2} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let effective_ct = ($content_type_2 | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Content-Type": $hdr_content_type} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let effective_ct = ($hdr_content_type | default "application/json")
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1265,7 +1292,7 @@ export def "reviews-get-job-details" [
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), job_id: (encode-path-segment $job_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/jobs/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1307,11 +1334,11 @@ export def "reviews-create-reviews" [
   let qp = [(serialize-qp "subTeam" $sub_team "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"UrlContentType": $url_content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1349,7 +1376,7 @@ export def "reviews-get-review" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1391,7 +1418,7 @@ export def "reviews-get-video-frames" [
   let qp = [(serialize-qp "startSeed" $start_seed "scalar") (serialize-qp "noOfRecords" $no_of_records "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/frames") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1431,7 +1458,7 @@ export def "reviews-add-video-frame" [
   let qp = [(serialize-qp "timescale" $timescale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/frames") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1469,7 +1496,7 @@ export def "reviews-publish-video-review" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/publish") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1511,13 +1538,13 @@ export def "reviews-add-video-transcript" [
   let content_type = ($content_type | default "text/plain")
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/transcript") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "text/plain")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -1558,13 +1585,13 @@ export def "reviews-add-video-transcript-moderation-result" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({team_name: (encode-path-segment $team_name), review_id: (encode-path-segment $review_id)} | format pattern "/contentmoderator/review/v1.0/teams/{team_name}/reviews/{review_id}/transcriptmoderationresult") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url

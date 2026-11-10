@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -181,7 +208,7 @@ export def "get-countries-dict" [
   let qp = [(serialize-qp "tax_supported" $tax_supported "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/dictionaries/countries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -215,7 +242,7 @@ export def "get-currencies-dict" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dictionaries/currencies" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -249,7 +276,7 @@ export def "get-product-types-dict" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dictionaries/product_types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "locate-my-ip" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/geoip" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -319,7 +346,7 @@ export def "locate-given-ip" [
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'ip' must be non-empty" } }
   let full_url = (build-url $base ({ip: (encode-path-segment $ip)} | format pattern "/api/v1/geoip/{ip}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -363,7 +390,7 @@ export def "get-domestic-summary-report" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "fx_date_type" $fx_date_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/reports/domestic/summary" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -411,7 +438,7 @@ export def "get-eu-vies-report" [
   let qp = [(serialize-qp "period_length" $period_length "scalar") (serialize-qp "lff_sequence_number" $lff_sequence_number "scalar") (serialize-qp "transformation" $transformation "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "tax_id" $tax_id "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "eu_country_code" $eu_country_code "scalar") (serialize-qp "fx_date_type" $fx_date_type "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/reports/eu/vies" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -452,7 +479,7 @@ export def "get-detailed-refunds" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "country_codes" $country_codes "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/settlement/detailed_refunds" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -492,7 +519,7 @@ export def "get-refunds" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "tax_region" $tax_region "scalar") (serialize-qp "date_from" $date_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/settlement/refunds" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -533,7 +560,7 @@ export def "get-settlement-summary" [
   let qp = [(serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "tax_region" $tax_region "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "end_month" $end_month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({quarter: (encode-path-segment $quarter)} | format pattern "/api/v1/settlement/summary/{quarter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -579,7 +606,7 @@ export def "get-settlement" [
   let qp = [(serialize-qp "moss_tax_id" $moss_tax_id "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "end_month" $end_month "scalar") (serialize-qp "tax_id" $tax_id "scalar") (serialize-qp "refund_date_kind_override" $refund_date_kind_override "scalar") (serialize-qp "start_month" $start_month "scalar") (serialize-qp "moss_country_code" $moss_country_code "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "tax_country_code" $tax_country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({quarter: (encode-path-segment $quarter)} | format pattern "/api/v1/settlement/{quarter}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -618,7 +645,7 @@ export def "get-settlement-stats-by-country" [
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/by_country" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -657,7 +684,7 @@ export def "get-settlement-stats-by-taxation-type" [
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/by_taxation_type" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -698,7 +725,7 @@ export def "get-daily-settlement-stats" [
   let qp = [(serialize-qp "interval" $interval "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/settlement/daily" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -738,7 +765,7 @@ export def "get-transactions-stats" [
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -778,7 +805,7 @@ export def "get-transactions-stats-by-country" [
   let qp = [(serialize-qp "global_currency_code" $global_currency_code "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/stats/transactions/by_country" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -829,7 +856,7 @@ export def "calculate-simple-tax" [
   let qp = [(serialize-qp "product_type" $product_type "scalar") (serialize-qp "invoice_address_city" $invoice_address_city "scalar") (serialize-qp "buyer_credit_card_prefix" $buyer_credit_card_prefix "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "invoice_address_region" $invoice_address_region "scalar") (serialize-qp "unit_price" $unit_price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "buyer_tax_number" $buyer_tax_number "scalar") (serialize-qp "force_country_code" $force_country_code "scalar") (serialize-qp "order_date" $order_date "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "billing_country_code" $billing_country_code "scalar") (serialize-qp "invoice_address_postal_code" $invoice_address_postal_code "scalar") (serialize-qp "total_amount" $total_amount "scalar") (serialize-qp "tax_deducted" $tax_deducted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tax/calculate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -865,9 +892,9 @@ export def "calculate-tax" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/tax/calculate" $auth.query)
   let req_body = {"transaction": $transaction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -904,7 +931,7 @@ export def "calculate-tax-location" [
   let qp = [(serialize-qp "billing_country_code" $billing_country_code "scalar") (serialize-qp "buyer_credit_card_prefix" $buyer_credit_card_prefix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/tax/location/calculate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -942,7 +969,7 @@ export def "validate-tax-number" [
   let qp = [(serialize-qp "country_code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tax_number: (encode-path-segment $tax_number)} | format pattern "/api/v1/tax/vat_numbers/{tax_number}/validate") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -994,7 +1021,7 @@ export def "list-transactions" [
   let qp = [(serialize-qp "filter_text" $filter_text "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "has_note" $has_note "scalar") (serialize-qp "key_or_custom_id" $key_or_custom_id "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "order_date_to" $order_date_to "scalar") (serialize-qp "sort_reverse" $sort_reverse "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "invoice_number" $invoice_number "scalar") (serialize-qp "tax_country_codes" $tax_country_codes "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "original_transaction_key" $original_transaction_key "scalar") (serialize-qp "order_date_from" $order_date_from "scalar") (serialize-qp "total_amount_greater_than" $total_amount_greater_than "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "total_amount_less_than" $total_amount_less_than "scalar") (serialize-qp "tax_country_code" $tax_country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1031,9 +1058,9 @@ export def "create-transaction" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/transactions" $auth.query)
   let req_body = {"manual_mode": $manual_mode, "transaction": $transaction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1069,7 +1096,7 @@ export def "cancel-transaction" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1105,7 +1132,7 @@ export def "get-transaction" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1143,9 +1170,9 @@ export def "update-transaction" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}") $auth.query)
   let req_body = {"transaction": $transaction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1183,9 +1210,9 @@ export def "confirm-transaction" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/confirm") $auth.query)
   let req_body = {"transaction": $transaction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1225,9 +1252,9 @@ export def "email-refund" [
   if ($refund_note_number | is-empty) { error make --unspanned { msg: "path parameter 'refund_note_number' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key), refund_note_number: (encode-path-segment $refund_note_number)} | format pattern "/api/v1/transactions/{key}/invoice/refunds/{refund_note_number}/send_email") $auth.query)
   let req_body = {"buyer_email": $buyer_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1265,9 +1292,9 @@ export def "email-invoice" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/invoice/send_email") $auth.query)
   let req_body = {"buyer_email": $buyer_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1306,7 +1333,7 @@ export def "list-payments" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1346,9 +1373,9 @@ export def "create-payment" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments") $auth.query)
   let req_body = {"amount": $amount, "payment_information": $payment_information, "payment_timestamp": $payment_timestamp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1384,7 +1411,7 @@ export def "capture-payment" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/payments/capture") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1420,7 +1447,7 @@ export def "list-refunds" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/refunds") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1462,9 +1489,9 @@ export def "create-refund" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/refunds") $auth.query)
   let req_body = {"amount": $amount, "custom_id": $custom_id, "line_key": $line_key, "refund_reason": $refund_reason, "total_amount": $total_amount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1502,9 +1529,9 @@ export def "unconfirm-transaction" [
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/api/v1/transactions/{key}/unconfirm") $auth.query)
   let req_body = {"transaction": $transaction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1541,9 +1568,9 @@ export def "create-sms-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/verification/sms" $auth.query)
   let req_body = {"country_code": $country_code, "recipient": $recipient} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1579,7 +1606,7 @@ export def "verify-sms-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/api/v1/verification/sms/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -168,9 +195,9 @@ export def "post-exports-activity-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/activity.json" $auth.query)
   let req_body = {"api_keys": $api_keys, "date_from": $date_from, "date_to": $date_to, "key": $key, "notify_email": $notify_email, "senders": $senders, "states": $states, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -206,9 +233,9 @@ export def "post-exports-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/info.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -243,9 +270,9 @@ export def "post-exports-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -281,9 +308,9 @@ export def "post-exports-rejects-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/rejects.json" $auth.query)
   let req_body = {"key": $key, "notify_email": $notify_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -319,9 +346,9 @@ export def "post-exports-whitelist-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/whitelist.json" $auth.query)
   let req_body = {"key": $key, "notify_email": $notify_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -357,9 +384,9 @@ export def "post-inbound-add-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/add-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -397,9 +424,9 @@ export def "post-inbound-add-route-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/add-route.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key, "pattern": $pattern, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -435,9 +462,9 @@ export def "post-inbound-check-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/check-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -473,9 +500,9 @@ export def "post-inbound-delete-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/delete-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -511,9 +538,9 @@ export def "post-inbound-delete-route-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/delete-route.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -548,9 +575,9 @@ export def "post-inbound-domains-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/domains.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -586,9 +613,9 @@ export def "post-inbound-routes-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/routes.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -628,9 +655,9 @@ export def "post-inbound-send-raw-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/send-raw.json" $auth.query)
   let req_body = {"client_address": $client_address, "helo": $helo, "key": $key, "mail_from": $mail_from, "raw_message": $raw_message, "to": $to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -668,9 +695,9 @@ export def "post-inbound-update-route-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/inbound/update-route.json" $auth.query)
   let req_body = {"id": $id, "key": $key, "pattern": $pattern, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -706,9 +733,9 @@ export def "post-ips-cancel-warmup-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/cancel-warmup.json" $auth.query)
   let req_body = {"ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -745,9 +772,9 @@ export def "post-ips-check-custom-dns-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/check-custom-dns.json" $auth.query)
   let req_body = {"domain": $domain, "ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -783,9 +810,9 @@ export def "post-ips-create-pool-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/create-pool.json" $auth.query)
   let req_body = {"key": $key, "pool": $pool} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -821,9 +848,9 @@ export def "post-ips-delete-pool-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/delete-pool.json" $auth.query)
   let req_body = {"key": $key, "pool": $pool} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -859,9 +886,9 @@ export def "post-ips-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/delete.json" $auth.query)
   let req_body = {"ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -897,9 +924,9 @@ export def "post-ips-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/info.json" $auth.query)
   let req_body = {"ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -934,9 +961,9 @@ export def "post-ips-list-pools-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/list-pools.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -971,9 +998,9 @@ export def "post-ips-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1009,9 +1036,9 @@ export def "post-ips-pool-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/pool-info.json" $auth.query)
   let req_body = {"key": $key, "pool": $pool} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1048,9 +1075,9 @@ export def "post-ips-provision-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/provision.json" $auth.query)
   let req_body = {"key": $key, "pool": $pool, "warmup": $warmup} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1087,9 +1114,9 @@ export def "post-ips-set-custom-dns-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/set-custom-dns.json" $auth.query)
   let req_body = {"domain": $domain, "ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1127,9 +1154,9 @@ export def "post-ips-set-pool-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/set-pool.json" $auth.query)
   let req_body = {"create_pool": $create_pool, "ip": $ip, "key": $key, "pool": $pool} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1165,9 +1192,9 @@ export def "post-ips-start-warmup-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ips/start-warmup.json" $auth.query)
   let req_body = {"ip": $ip, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1203,9 +1230,9 @@ export def "post-messages-cancel-scheduled-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/cancel-scheduled.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1241,9 +1268,9 @@ export def "post-messages-content-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/content.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1279,9 +1306,9 @@ export def "post-messages-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/info.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1317,9 +1344,9 @@ export def "post-messages-list-scheduled-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/list-scheduled.json" $auth.query)
   let req_body = {"key": $key, "to": $to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1355,9 +1382,9 @@ export def "post-messages-parse-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/parse.json" $auth.query)
   let req_body = {"key": $key, "raw_message": $raw_message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1394,9 +1421,9 @@ export def "post-messages-reschedule-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/reschedule.json" $auth.query)
   let req_body = {"id": $id, "key": $key, "send_at": $send_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1436,9 +1463,9 @@ export def "post-messages-search-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search-time-series.json" $auth.query)
   let req_body = {"date_from": $date_from, "date_to": $date_to, "key": $key, "query": $query, "senders": $senders, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1480,9 +1507,9 @@ export def "post-messages-search-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/search.json" $auth.query)
   let req_body = {"api_keys": $api_keys, "date_from": $date_from, "date_to": $date_to, "key": $key, "limit": $limit, "query": $query, "senders": $senders, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1525,9 +1552,9 @@ export def "post-messages-send-raw-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send-raw.json" $auth.query)
   let req_body = {"async": $async, "from_email": $from_email, "from_name": $from_name, "ip_pool": $ip_pool, "key": $key, "raw_message": $raw_message, "return_path_domain": $return_path_domain, "send_at": $send_at, "to": $to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1568,9 +1595,9 @@ export def "post-messages-send-template-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send-template.json" $auth.query)
   let req_body = {"async": $async, "ip_pool": $ip_pool, "key": $key, "message": $message, "send_at": $send_at, "template_content": $template_content, "template_name": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "post-messages-send-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/messages/send.json" $auth.query)
   let req_body = {"async": $async, "ip_pool": $ip_pool, "key": $key, "message": $message, "send_at": $send_at} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1648,9 +1675,9 @@ export def "post-metadata-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/add.json" $auth.query)
   let req_body = {"key": $key, "name": $name, "view_template": $view_template} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1686,9 +1713,9 @@ export def "post-metadata-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/delete.json" $auth.query)
   let req_body = {"key": $key, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1723,9 +1750,9 @@ export def "post-metadata-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1762,9 +1789,9 @@ export def "post-metadata-update-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/update.json" $auth.query)
   let req_body = {"key": $key, "name": $name, "view_template": $view_template} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1802,9 +1829,9 @@ export def "post-rejects-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/add.json" $auth.query)
   let req_body = {"comment": $comment, "email": $email, "key": $key, "subaccount": $subaccount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1841,9 +1868,9 @@ export def "post-rejects-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/delete.json" $auth.query)
   let req_body = {"email": $email, "key": $key, "subaccount": $subaccount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1881,9 +1908,9 @@ export def "post-rejects-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rejects/list.json" $auth.query)
   let req_body = {"email": $email, "include_expired": $include_expired, "key": $key, "subaccount": $subaccount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1919,9 +1946,9 @@ export def "post-senders-add-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/add-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1957,9 +1984,9 @@ export def "post-senders-check-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/check-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1994,9 +2021,9 @@ export def "post-senders-domains-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/domains.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2032,9 +2059,9 @@ export def "post-senders-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/info.json" $auth.query)
   let req_body = {"address": $address, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2069,9 +2096,9 @@ export def "post-senders-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2107,9 +2134,9 @@ export def "post-senders-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/time-series.json" $auth.query)
   let req_body = {"address": $address, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2146,9 +2173,9 @@ export def "post-senders-verify-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/senders/verify-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key, "mailbox": $mailbox} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2187,9 +2214,9 @@ export def "post-subaccounts-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/add.json" $auth.query)
   let req_body = {"custom_quota": $custom_quota, "id": $id, "key": $key, "name": $name, "notes": $notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2225,9 +2252,9 @@ export def "post-subaccounts-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/delete.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2263,9 +2290,9 @@ export def "post-subaccounts-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/info.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2301,9 +2328,9 @@ export def "post-subaccounts-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/list.json" $auth.query)
   let req_body = {"key": $key, "q": $q} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2339,9 +2366,9 @@ export def "post-subaccounts-pause-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/pause.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2377,9 +2404,9 @@ export def "post-subaccounts-resume-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/resume.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2418,9 +2445,9 @@ export def "post-subaccounts-update-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subaccounts/update.json" $auth.query)
   let req_body = {"custom_quota": $custom_quota, "id": $id, "key": $key, "name": $name, "notes": $notes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2455,9 +2482,9 @@ export def "post-tags-all-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/all-time-series.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2493,9 +2520,9 @@ export def "post-tags-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/delete.json" $auth.query)
   let req_body = {"key": $key, "tag": $tag} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2531,9 +2558,9 @@ export def "post-tags-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/info.json" $auth.query)
   let req_body = {"key": $key, "tag": $tag} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2568,9 +2595,9 @@ export def "post-tags-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2606,9 +2633,9 @@ export def "post-tags-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags/time-series.json" $auth.query)
   let req_body = {"key": $key, "tag": $tag} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2651,9 +2678,9 @@ export def "post-templates-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/add.json" $auth.query)
   let req_body = {"code": $code, "from_email": $from_email, "from_name": $from_name, "key": $key, "labels": $labels, "name": $name, "publish": $publish, "subject": $subject, "text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2689,9 +2716,9 @@ export def "post-templates-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/delete.json" $auth.query)
   let req_body = {"key": $key, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2727,9 +2754,9 @@ export def "post-templates-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/info.json" $auth.query)
   let req_body = {"key": $key, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2765,9 +2792,9 @@ export def "post-templates-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/list.json" $auth.query)
   let req_body = {"key": $key, "label": $label} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2803,9 +2830,9 @@ export def "post-templates-publish-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/publish.json" $auth.query)
   let req_body = {"key": $key, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2843,9 +2870,9 @@ export def "post-templates-render-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/render.json" $auth.query)
   let req_body = {"key": $key, "merge_vars": $merge_vars, "template_content": $template_content, "template_name": $template_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2881,9 +2908,9 @@ export def "post-templates-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/time-series.json" $auth.query)
   let req_body = {"key": $key, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2926,9 +2953,9 @@ export def "post-templates-update-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates/update.json" $auth.query)
   let req_body = {"code": $code, "from_email": $from_email, "from_name": $from_name, "key": $key, "labels": $labels, "name": $name, "publish": $publish, "subject": $subject, "text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2964,9 +2991,9 @@ export def "post-urls-add-tracking-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/add-tracking-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3002,9 +3029,9 @@ export def "post-urls-check-tracking-domain-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/check-tracking-domain.json" $auth.query)
   let req_body = {"domain": $domain, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3039,9 +3066,9 @@ export def "post-urls-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3077,9 +3104,9 @@ export def "post-urls-search-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/search.json" $auth.query)
   let req_body = {"key": $key, "q": $q} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3115,9 +3142,9 @@ export def "post-urls-time-series-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/time-series.json" $auth.query)
   let req_body = {"key": $key, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3152,9 +3179,9 @@ export def "post-urls-tracking-domains-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/urls/tracking-domains.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3189,9 +3216,9 @@ export def "post-users-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/info.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3226,9 +3253,9 @@ export def "post-users-ping-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/ping.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3263,9 +3290,9 @@ export def "post-users-ping2-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/ping2.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3300,9 +3327,9 @@ export def "post-users-senders-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/senders.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3340,9 +3367,9 @@ export def "post-webhooks-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/add.json" $auth.query)
   let req_body = {"description": $description, "events": $events, "key": $key, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3378,9 +3405,9 @@ export def "post-webhooks-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/delete.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3416,9 +3443,9 @@ export def "post-webhooks-info-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/info.json" $auth.query)
   let req_body = {"id": $id, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3453,9 +3480,9 @@ export def "post-webhooks-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/list.json" $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3494,9 +3521,9 @@ export def "post-webhooks-update-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/update.json" $auth.query)
   let req_body = {"description": $description, "events": $events, "id": $id, "key": $key, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3532,9 +3559,9 @@ export def "post-whitelists-add-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/add.json" $auth.query)
   let req_body = {"email": $email, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3570,9 +3597,9 @@ export def "post-whitelists-delete-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/delete.json" $auth.query)
   let req_body = {"email": $email, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3608,9 +3635,9 @@ export def "post-whitelists-list-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/whitelists/list.json" $auth.query)
   let req_body = {"email": $email, "key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

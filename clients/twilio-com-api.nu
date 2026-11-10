@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -223,7 +250,7 @@ export def "list-account" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/2010-04-01/Accounts.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -259,9 +286,9 @@ export def "create-account" [
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base "/2010-04-01/Accounts.json" $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -304,7 +331,7 @@ export def "list-address" [
   let qp = [(serialize-qp "CustomerName" $customer_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -350,9 +377,9 @@ export def "create-address" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses.json") $auth.query)
   let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -394,7 +421,7 @@ export def "list-dependent-phone-number" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), address_sid: (encode-path-segment $address_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{address_sid}/DependentPhoneNumbers.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -431,7 +458,7 @@ export def "delete-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -468,7 +495,7 @@ export def "fetch-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -515,9 +542,9 @@ export def "update-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Addresses/{sid}.json") $auth.query)
   let req_body = {"AutoCorrectAddress": $auto_correct_address, "City": $city, "CustomerName": $customer_name, "EmergencyEnabled": $emergency_enabled, "FriendlyName": $friendly_name, "PostalCode": $postal_code, "Region": $region, "Street": $street, "StreetSecondary": $street_secondary} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -559,7 +586,7 @@ export def "list-application" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -612,9 +639,9 @@ export def "create-application" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications.json") $auth.query)
   let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -653,7 +680,7 @@ export def "delete-application" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -691,7 +718,7 @@ export def "fetch-application" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -746,9 +773,9 @@ export def "update-application" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Applications/{sid}.json") $auth.query)
   let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "MessageStatusCallback": $message_status_callback, "PublicApplicationConnectEnabled": $public_application_connect_enabled, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsStatusCallback": $sms_status_callback, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -789,7 +816,7 @@ export def "list-authorized-connect-app" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -827,7 +854,7 @@ export def "fetch-authorized-connect-app" [
   if ($connect_app_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConnectAppSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), connect_app_sid: (encode-path-segment $connect_app_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AuthorizedConnectApps/{connect_app_sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -866,7 +893,7 @@ export def "list-available-phone-number-country" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -903,7 +930,7 @@ export def "fetch-available-phone-number-country" [
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'CountryCode' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -962,7 +989,7 @@ export def "list-available-phone-number-local" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Local.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1021,7 +1048,7 @@ export def "list-available-phone-number-machine-to-machine" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/MachineToMachine.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1080,7 +1107,7 @@ export def "list-available-phone-number-mobile" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Mobile.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1139,7 +1166,7 @@ export def "list-available-phone-number-national" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/National.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1198,7 +1225,7 @@ export def "list-available-phone-number-shared-cost" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/SharedCost.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1257,7 +1284,7 @@ export def "list-available-phone-number-toll-free" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/TollFree.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1316,7 +1343,7 @@ export def "list-available-phone-number-voip" [
   let qp = [(serialize-qp "AreaCode" $area_code "scalar") (serialize-qp "Contains" $contains "scalar") (serialize-qp "SmsEnabled" $sms_enabled "scalar") (serialize-qp "MmsEnabled" $mms_enabled "scalar") (serialize-qp "VoiceEnabled" $voice_enabled "scalar") (serialize-qp "ExcludeAllAddressRequired" $exclude_all_address_required "scalar") (serialize-qp "ExcludeLocalAddressRequired" $exclude_local_address_required "scalar") (serialize-qp "ExcludeForeignAddressRequired" $exclude_foreign_address_required "scalar") (serialize-qp "Beta" $beta "scalar") (serialize-qp "NearNumber" $near_number "scalar") (serialize-qp "NearLatLong" $near_lat_long "scalar") (serialize-qp "Distance" $distance "scalar") (serialize-qp "InPostalCode" $in_postal_code "scalar") (serialize-qp "InRegion" $in_region "scalar") (serialize-qp "InRateCenter" $in_rate_center "scalar") (serialize-qp "InLata" $in_lata "scalar") (serialize-qp "InLocality" $in_locality "scalar") (serialize-qp "FaxEnabled" $fax_enabled "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), country_code: (encode-path-segment $country_code)} | format pattern "/2010-04-01/Accounts/{account_sid}/AvailablePhoneNumbers/{country_code}/Voip.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1352,7 +1379,7 @@ export def "fetch-balance" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Balance.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1387,11 +1414,11 @@ export def "list-call" [
   --parent-call-sid: string # Only include calls spawned by calls with this SID.
   --status: string@status-completer-1 # The status of the calls to include. Can be: `queued`, `ringing`, `in-progress`, `canceled`, `completed`, `failed`, `busy`, or `no-answer`.
   --start-time: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that started on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read calls that started on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read calls that started on or after midnight of this date. (format: date-time)
-  --start-time-2: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that started on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read calls that started on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read calls that started on or after midnight of this date. (format: date-time) (disambiguated-2)
-  --start-time-3: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that started on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read calls that started on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read calls that started on or after midnight of this date. (format: date-time) (disambiguated-3)
+  --qp-start-time: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that started on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read calls that started on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read calls that started on or after midnight of this date. (format: date-time) (spec name: StartTime<)
+  --qp-start-time-2: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that started on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read calls that started on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read calls that started on or after midnight of this date. (format: date-time) (spec name: StartTime>)
   --end-time: string # Only include calls that ended on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that ended on this date. You can also specify an inequality, such as `EndTime<=YYYY-MM-DD`, to read calls that ended on or before midnight of this date, and `EndTime>=YYYY-MM-DD` to read calls that ended on or after midnight of this date. (format: date-time)
-  --end-time-2: string # Only include calls that ended on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that ended on this date. You can also specify an inequality, such as `EndTime<=YYYY-MM-DD`, to read calls that ended on or before midnight of this date, and `EndTime>=YYYY-MM-DD` to read calls that ended on or after midnight of this date. (format: date-time) (disambiguated-2)
-  --end-time-3: string # Only include calls that ended on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that ended on this date. You can also specify an inequality, such as `EndTime<=YYYY-MM-DD`, to read calls that ended on or before midnight of this date, and `EndTime>=YYYY-MM-DD` to read calls that ended on or after midnight of this date. (format: date-time) (disambiguated-3)
+  --qp-end-time: string # Only include calls that ended on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that ended on this date. You can also specify an inequality, such as `EndTime<=YYYY-MM-DD`, to read calls that ended on or before midnight of this date, and `EndTime>=YYYY-MM-DD` to read calls that ended on or after midnight of this date. (format: date-time) (spec name: EndTime<)
+  --qp-end-time-2: string # Only include calls that ended on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read only calls that ended on this date. You can also specify an inequality, such as `EndTime<=YYYY-MM-DD`, to read calls that ended on or before midnight of this date, and `EndTime>=YYYY-MM-DD` to read calls that ended on or after midnight of this date. (format: date-time) (spec name: EndTime>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -1399,14 +1426,14 @@ export def "list-call" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "ParentCallSid" $parent_call_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "StartTime<" $start_time_2 "scalar") (serialize-qp "StartTime>" $start_time_3 "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "EndTime<" $end_time_2 "scalar") (serialize-qp "EndTime>" $end_time_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "ParentCallSid" $parent_call_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "StartTime<" $qp_start_time "scalar") (serialize-qp "StartTime>" $qp_start_time_2 "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "EndTime<" $qp_end_time "scalar") (serialize-qp "EndTime>" $qp_end_time_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"To": $to, "From": $from, "ParentCallSid": $parent_call_sid, "Status": $status, "StartTime": $start_time, "StartTime<": $start_time_2, "StartTime>": $start_time_3, "EndTime": $end_time, "EndTime<": $end_time_2, "EndTime>": $end_time_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"To": $to, "From": $from, "ParentCallSid": $parent_call_sid, "Status": $status, "StartTime": $start_time, "StartTime<": $qp_start_time, "StartTime>": $qp_start_time_2, "EndTime": $end_time, "EndTime<": $qp_end_time, "EndTime>": $qp_end_time_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1474,9 +1501,9 @@ export def "create-call" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls.json") $auth.query)
   let req_body = {"ApplicationSid": $application_sid, "AsyncAmd": $async_amd, "AsyncAmdStatusCallback": $async_amd_status_callback, "AsyncAmdStatusCallbackMethod": $async_amd_status_callback_method, "Byoc": $byoc, "CallReason": $call_reason, "CallToken": $call_token, "CallerId": $caller_id, "FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "From": $from, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "Method": $method, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "SendDigits": $send_digits, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $to, "Trim": $trim, "Twiml": $twiml, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1519,9 +1546,9 @@ export def "create-call-feedback-summary" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary.json") $auth.query)
   let req_body = {"EndDate": $end_date, "IncludeSubaccounts": $include_subaccounts, "StartDate": $start_date, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1560,7 +1587,7 @@ export def "delete-call-feedback-summary" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1598,7 +1625,7 @@ export def "fetch-call-feedback-summary" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/FeedbackSummary/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1640,7 +1667,7 @@ export def "list-call-event" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Events.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1678,7 +1705,7 @@ export def "fetch-call-feedback" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1719,9 +1746,9 @@ export def "update-call-feedback" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Feedback.json") $auth.query)
   let req_body = {"Issue": $issue, "QualityScore": $quality_score} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1754,8 +1781,8 @@ export def "list-call-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --log: int # Only read notifications of the specified log level. Can be: `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
-  --message-date-2: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (disambiguated-2)
-  --message-date-3: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (disambiguated-3)
+  --qp-message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (spec name: MessageDate<)
+  --qp-message-date-2: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (spec name: MessageDate>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -1764,14 +1791,14 @@ export def "list-call-notification" [
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $message_date_2 "scalar") (serialize-qp "MessageDate>" $message_date_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $qp_message_date "scalar") (serialize-qp "MessageDate>" $qp_message_date_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $message_date_2, "MessageDate>": $message_date_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $qp_message_date, "MessageDate>": $qp_message_date_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1806,7 +1833,7 @@ export def "fetch-call-notification" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Notifications/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1842,7 +1869,7 @@ export def "create-payments" [
   --currency: string # The currency of the `charge_amount`, formatted as [ISO 4127](http://www.iso.org/iso/home/standards/currency_codes.htm) format. The default value is `USD` and all values allowed from the Pay Connector are accepted.
   --description: string # The description can be used to provide more details regarding the transaction. This information is submitted along with the payment details to the Payment Connector which are then posted on the transactions.
   idempotency_key: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
-  --body-input: string # A list of inputs that should be accepted. Currently only `dtmf` is supported. All digits captured during a pay session are redacted from the logs.
+  --body-input: string # A list of inputs that should be accepted. Currently only `dtmf` is supported. All digits captured during a pay session are redacted from the logs. (spec name: Input)
   --min-postal-code-length: int # A positive integer that is used to validate the length of the `PostalCode` inputted by the user. User must enter this many digits.
   --parameter: any # A single-level JSON object used to pass custom parameters to payment processors. (Required for ACH payments). The information that has to be included here depends on the Connector. [Read more](https://www.twilio.com/console/voice/pay-connectors).
   --payment-connector: string # This is the unique name corresponding to the Pay Connector installed in the Twilio Add-ons. Learn more about [ Connectors](https://www.twilio.com/console/voice/pay-connectors). The default value is `Default`.
@@ -1861,9 +1888,9 @@ export def "create-payments" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments.json") $auth.query)
   let req_body = {"BankAccountType": $bank_account_type, "ChargeAmount": $charge_amount, "Currency": $currency, "Description": $description, "IdempotencyKey": $idempotency_key, "Input": $body_input, "MinPostalCodeLength": $min_postal_code_length, "Parameter": $parameter, "PaymentConnector": $payment_connector, "PaymentMethod": $payment_method, "PostalCode": $postal_code, "SecurityCode": $security_code, "StatusCallback": $status_callback, "Timeout": $timeout, "TokenType": $token_type, "ValidCardTypes": $valid_card_types} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1909,9 +1936,9 @@ export def "update-payments" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Payments/{sid}.json") $auth.query)
   let req_body = {"Capture": $capture, "IdempotencyKey": $idempotency_key, "Status": $status, "StatusCallback": $status_callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1944,8 +1971,8 @@ export def "list-call-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
-  --date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (disambiguated-2)
-  --date-created-3: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (disambiguated-3)
+  --qp-date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (spec name: DateCreated<)
+  --qp-date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (spec name: DateCreated>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -1954,14 +1981,14 @@ export def "list-call-recording" [
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created_2 "scalar") (serialize-qp "DateCreated>" $date_created_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $date_created_2, "DateCreated>": $date_created_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2002,9 +2029,9 @@ export def "create-call-recording" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings.json") $auth.query)
   let req_body = {"RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Trim": $trim} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2045,7 +2072,7 @@ export def "delete-call-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2085,7 +2112,7 @@ export def "fetch-call-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2128,9 +2155,9 @@ export def "update-call-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Recordings/{sid}.json") $auth.query)
   let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2373,9 +2400,9 @@ export def "create-siprec" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec.json") $auth.query)
   let req_body = {"ConnectorName": $connector_name, "Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2418,9 +2445,9 @@ export def "update-siprec" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Siprec/{sid}.json") $auth.query)
   let req_body = {"Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2663,9 +2690,9 @@ export def "create-stream" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams.json") $auth.query)
   let req_body = {"Name": $name, "Parameter1.Name": $parameter1_name, "Parameter1.Value": $parameter1_value, "Parameter10.Name": $parameter10_name, "Parameter10.Value": $parameter10_value, "Parameter11.Name": $parameter11_name, "Parameter11.Value": $parameter11_value, "Parameter12.Name": $parameter12_name, "Parameter12.Value": $parameter12_value, "Parameter13.Name": $parameter13_name, "Parameter13.Value": $parameter13_value, "Parameter14.Name": $parameter14_name, "Parameter14.Value": $parameter14_value, "Parameter15.Name": $parameter15_name, "Parameter15.Value": $parameter15_value, "Parameter16.Name": $parameter16_name, "Parameter16.Value": $parameter16_value, "Parameter17.Name": $parameter17_name, "Parameter17.Value": $parameter17_value, "Parameter18.Name": $parameter18_name, "Parameter18.Value": $parameter18_value, "Parameter19.Name": $parameter19_name, "Parameter19.Value": $parameter19_value, "Parameter2.Name": $parameter2_name, "Parameter2.Value": $parameter2_value, "Parameter20.Name": $parameter20_name, "Parameter20.Value": $parameter20_value, "Parameter21.Name": $parameter21_name, "Parameter21.Value": $parameter21_value, "Parameter22.Name": $parameter22_name, "Parameter22.Value": $parameter22_value, "Parameter23.Name": $parameter23_name, "Parameter23.Value": $parameter23_value, "Parameter24.Name": $parameter24_name, "Parameter24.Value": $parameter24_value, "Parameter25.Name": $parameter25_name, "Parameter25.Value": $parameter25_value, "Parameter26.Name": $parameter26_name, "Parameter26.Value": $parameter26_value, "Parameter27.Name": $parameter27_name, "Parameter27.Value": $parameter27_value, "Parameter28.Name": $parameter28_name, "Parameter28.Value": $parameter28_value, "Parameter29.Name": $parameter29_name, "Parameter29.Value": $parameter29_value, "Parameter3.Name": $parameter3_name, "Parameter3.Value": $parameter3_value, "Parameter30.Name": $parameter30_name, "Parameter30.Value": $parameter30_value, "Parameter31.Name": $parameter31_name, "Parameter31.Value": $parameter31_value, "Parameter32.Name": $parameter32_name, "Parameter32.Value": $parameter32_value, "Parameter33.Name": $parameter33_name, "Parameter33.Value": $parameter33_value, "Parameter34.Name": $parameter34_name, "Parameter34.Value": $parameter34_value, "Parameter35.Name": $parameter35_name, "Parameter35.Value": $parameter35_value, "Parameter36.Name": $parameter36_name, "Parameter36.Value": $parameter36_value, "Parameter37.Name": $parameter37_name, "Parameter37.Value": $parameter37_value, "Parameter38.Name": $parameter38_name, "Parameter38.Value": $parameter38_value, "Parameter39.Name": $parameter39_name, "Parameter39.Value": $parameter39_value, "Parameter4.Name": $parameter4_name, "Parameter4.Value": $parameter4_value, "Parameter40.Name": $parameter40_name, "Parameter40.Value": $parameter40_value, "Parameter41.Name": $parameter41_name, "Parameter41.Value": $parameter41_value, "Parameter42.Name": $parameter42_name, "Parameter42.Value": $parameter42_value, "Parameter43.Name": $parameter43_name, "Parameter43.Value": $parameter43_value, "Parameter44.Name": $parameter44_name, "Parameter44.Value": $parameter44_value, "Parameter45.Name": $parameter45_name, "Parameter45.Value": $parameter45_value, "Parameter46.Name": $parameter46_name, "Parameter46.Value": $parameter46_value, "Parameter47.Name": $parameter47_name, "Parameter47.Value": $parameter47_value, "Parameter48.Name": $parameter48_name, "Parameter48.Value": $parameter48_value, "Parameter49.Name": $parameter49_name, "Parameter49.Value": $parameter49_value, "Parameter5.Name": $parameter5_name, "Parameter5.Value": $parameter5_value, "Parameter50.Name": $parameter50_name, "Parameter50.Value": $parameter50_value, "Parameter51.Name": $parameter51_name, "Parameter51.Value": $parameter51_value, "Parameter52.Name": $parameter52_name, "Parameter52.Value": $parameter52_value, "Parameter53.Name": $parameter53_name, "Parameter53.Value": $parameter53_value, "Parameter54.Name": $parameter54_name, "Parameter54.Value": $parameter54_value, "Parameter55.Name": $parameter55_name, "Parameter55.Value": $parameter55_value, "Parameter56.Name": $parameter56_name, "Parameter56.Value": $parameter56_value, "Parameter57.Name": $parameter57_name, "Parameter57.Value": $parameter57_value, "Parameter58.Name": $parameter58_name, "Parameter58.Value": $parameter58_value, "Parameter59.Name": $parameter59_name, "Parameter59.Value": $parameter59_value, "Parameter6.Name": $parameter6_name, "Parameter6.Value": $parameter6_value, "Parameter60.Name": $parameter60_name, "Parameter60.Value": $parameter60_value, "Parameter61.Name": $parameter61_name, "Parameter61.Value": $parameter61_value, "Parameter62.Name": $parameter62_name, "Parameter62.Value": $parameter62_value, "Parameter63.Name": $parameter63_name, "Parameter63.Value": $parameter63_value, "Parameter64.Name": $parameter64_name, "Parameter64.Value": $parameter64_value, "Parameter65.Name": $parameter65_name, "Parameter65.Value": $parameter65_value, "Parameter66.Name": $parameter66_name, "Parameter66.Value": $parameter66_value, "Parameter67.Name": $parameter67_name, "Parameter67.Value": $parameter67_value, "Parameter68.Name": $parameter68_name, "Parameter68.Value": $parameter68_value, "Parameter69.Name": $parameter69_name, "Parameter69.Value": $parameter69_value, "Parameter7.Name": $parameter7_name, "Parameter7.Value": $parameter7_value, "Parameter70.Name": $parameter70_name, "Parameter70.Value": $parameter70_value, "Parameter71.Name": $parameter71_name, "Parameter71.Value": $parameter71_value, "Parameter72.Name": $parameter72_name, "Parameter72.Value": $parameter72_value, "Parameter73.Name": $parameter73_name, "Parameter73.Value": $parameter73_value, "Parameter74.Name": $parameter74_name, "Parameter74.Value": $parameter74_value, "Parameter75.Name": $parameter75_name, "Parameter75.Value": $parameter75_value, "Parameter76.Name": $parameter76_name, "Parameter76.Value": $parameter76_value, "Parameter77.Name": $parameter77_name, "Parameter77.Value": $parameter77_value, "Parameter78.Name": $parameter78_name, "Parameter78.Value": $parameter78_value, "Parameter79.Name": $parameter79_name, "Parameter79.Value": $parameter79_value, "Parameter8.Name": $parameter8_name, "Parameter8.Value": $parameter8_value, "Parameter80.Name": $parameter80_name, "Parameter80.Value": $parameter80_value, "Parameter81.Name": $parameter81_name, "Parameter81.Value": $parameter81_value, "Parameter82.Name": $parameter82_name, "Parameter82.Value": $parameter82_value, "Parameter83.Name": $parameter83_name, "Parameter83.Value": $parameter83_value, "Parameter84.Name": $parameter84_name, "Parameter84.Value": $parameter84_value, "Parameter85.Name": $parameter85_name, "Parameter85.Value": $parameter85_value, "Parameter86.Name": $parameter86_name, "Parameter86.Value": $parameter86_value, "Parameter87.Name": $parameter87_name, "Parameter87.Value": $parameter87_value, "Parameter88.Name": $parameter88_name, "Parameter88.Value": $parameter88_value, "Parameter89.Name": $parameter89_name, "Parameter89.Value": $parameter89_value, "Parameter9.Name": $parameter9_name, "Parameter9.Value": $parameter9_value, "Parameter90.Name": $parameter90_name, "Parameter90.Value": $parameter90_value, "Parameter91.Name": $parameter91_name, "Parameter91.Value": $parameter91_value, "Parameter92.Name": $parameter92_name, "Parameter92.Value": $parameter92_value, "Parameter93.Name": $parameter93_name, "Parameter93.Value": $parameter93_value, "Parameter94.Name": $parameter94_name, "Parameter94.Value": $parameter94_value, "Parameter95.Name": $parameter95_name, "Parameter95.Value": $parameter95_value, "Parameter96.Name": $parameter96_name, "Parameter96.Value": $parameter96_value, "Parameter97.Name": $parameter97_name, "Parameter97.Value": $parameter97_value, "Parameter98.Name": $parameter98_name, "Parameter98.Value": $parameter98_value, "Parameter99.Name": $parameter99_name, "Parameter99.Value": $parameter99_value, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "Track": $track, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2708,9 +2735,9 @@ export def "update-stream" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/Streams/{sid}.json") $auth.query)
   let req_body = {"Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2753,9 +2780,9 @@ export def "create-user-defined-message-subscription" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions.json") $auth.query)
   let req_body = {"Callback": $callback, "IdempotencyKey": $idempotency_key, "Method": $method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2796,7 +2823,7 @@ export def "delete-user-defined-message-subscription" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessageSubscriptions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2837,9 +2864,9 @@ export def "create-user-defined-message" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}/UserDefinedMessages.json") $auth.query)
   let req_body = {"Content": $content, "IdempotencyKey": $idempotency_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2878,7 +2905,7 @@ export def "delete-call" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2916,7 +2943,7 @@ export def "fetch-call" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2964,9 +2991,9 @@ export def "update-call" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Calls/{sid}.json") $auth.query)
   let req_body = {"FallbackMethod": $fallback_method, "FallbackUrl": $fallback_url, "Method": $method, "Status": $status, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Twiml": $twiml, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2998,11 +3025,11 @@ export def "list-conference" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date)
-  --date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date) (disambiguated-2)
-  --date-created-3: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date) (disambiguated-3)
+  --qp-date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date) (spec name: DateCreated<)
+  --qp-date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that started on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that started on or after midnight on a date, use `>=YYYY-MM-DD`. (format: date) (spec name: DateCreated>)
   --date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date)
-  --date-updated-2: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date) (disambiguated-2)
-  --date-updated-3: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date) (disambiguated-3)
+  --qp-date-updated: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date) (spec name: DateUpdated<)
+  --qp-date-updated-2: string # The `date_updated` value, specified as `YYYY-MM-DD`, of the resources to read. To read conferences that were last updated on or before midnight on a date, use `<=YYYY-MM-DD`, and to specify conferences that were last updated on or after midnight on a given date, use `>=YYYY-MM-DD`. (format: date) (spec name: DateUpdated>)
   --friendly-name: string # The string that identifies the Conference resources to read.
   --status: string@status-completer-6 # The status of the resources to read. Can be: `init`, `in-progress`, or `completed`.
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
@@ -3012,14 +3039,14 @@ export def "list-conference" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created_2 "scalar") (serialize-qp "DateCreated>" $date_created_3 "scalar") (serialize-qp "DateUpdated" $date_updated "scalar") (serialize-qp "DateUpdated<" $date_updated_2 "scalar") (serialize-qp "DateUpdated>" $date_updated_3 "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "DateUpdated" $date_updated "scalar") (serialize-qp "DateUpdated<" $qp_date_updated "scalar") (serialize-qp "DateUpdated>" $qp_date_updated_2 "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $date_created_2, "DateCreated>": $date_created_3, "DateUpdated": $date_updated, "DateUpdated<": $date_updated_2, "DateUpdated>": $date_updated_3, "FriendlyName": $friendly_name, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "DateUpdated": $date_updated, "DateUpdated<": $qp_date_updated, "DateUpdated>": $qp_date_updated_2, "FriendlyName": $friendly_name, "Status": $status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3060,7 +3087,7 @@ export def "list-participant" [
   let qp = [(serialize-qp "Muted" $muted "scalar") (serialize-qp "Hold" $hold "scalar") (serialize-qp "Coaching" $coaching "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3144,9 +3171,9 @@ export def "create-participant" [
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json") $auth.query)
   let req_body = {"AmdStatusCallback": $amd_status_callback, "AmdStatusCallbackMethod": $amd_status_callback_method, "Beep": $beep, "Byoc": $byoc, "CallReason": $call_reason, "CallSidToCoach": $call_sid_to_coach, "CallerId": $caller_id, "Coaching": $coaching, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackEvent": $conference_recording_status_callback_event, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "EarlyMedia": $early_media, "EndConferenceOnExit": $end_conference_on_exit, "From": $from, "JitterBufferSize": $jitter_buffer_size, "Label": $label, "MachineDetection": $machine_detection, "MachineDetectionSilenceTimeout": $machine_detection_silence_timeout, "MachineDetectionSpeechEndThreshold": $machine_detection_speech_end_threshold, "MachineDetectionSpeechThreshold": $machine_detection_speech_threshold, "MachineDetectionTimeout": $machine_detection_timeout, "MaxParticipants": $max_participants, "Muted": $muted, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackEvent": $recording_status_callback_event, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RecordingTrack": $recording_track, "Region": $region, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "TimeLimit": $time_limit, "Timeout": $timeout, "To": $to, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3187,7 +3214,7 @@ export def "delete-participant" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3227,7 +3254,7 @@ export def "fetch-participant" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3280,9 +3307,9 @@ export def "update-participant" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{call_sid}.json") $auth.query)
   let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "BeepOnExit": $beep_on_exit, "CallSidToCoach": $call_sid_to_coach, "Coaching": $coaching, "EndConferenceOnExit": $end_conference_on_exit, "Hold": $hold, "HoldMethod": $hold_method, "HoldUrl": $hold_url, "Muted": $muted, "WaitMethod": $wait_method, "WaitUrl": $wait_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3315,8 +3342,8 @@ export def "list-conference-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
-  --date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (disambiguated-2)
-  --date-created-3: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (disambiguated-3)
+  --qp-date-created: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (spec name: DateCreated<)
+  --qp-date-created-2: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date) (spec name: DateCreated>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -3325,14 +3352,14 @@ export def "list-conference-recording" [
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created_2 "scalar") (serialize-qp "DateCreated>" $date_created_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $date_created_2, "DateCreated>": $date_created_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3368,7 +3395,7 @@ export def "delete-conference-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3408,7 +3435,7 @@ export def "fetch-conference-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3451,9 +3478,9 @@ export def "update-conference-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), conference_sid: (encode-path-segment $conference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Recordings/{sid}.json") $auth.query)
   let req_body = {"PauseBehavior": $pause_behavior, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3492,7 +3519,7 @@ export def "fetch-conference" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3533,9 +3560,9 @@ export def "update-conference" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Conferences/{sid}.json") $auth.query)
   let req_body = {"AnnounceMethod": $announce_method, "AnnounceUrl": $announce_url, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3576,7 +3603,7 @@ export def "list-connect-app" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3614,7 +3641,7 @@ export def "delete-connect-app" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3652,7 +3679,7 @@ export def "fetch-connect-app" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3699,9 +3726,9 @@ export def "update-connect-app" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/ConnectApps/{sid}.json") $auth.query)
   let req_body = {"AuthorizeRedirectUrl": $authorize_redirect_url, "CompanyName": $company_name, "DeauthorizeCallbackMethod": $deauthorize_callback_method, "DeauthorizeCallbackUrl": $deauthorize_callback_url, "Description": $description, "FriendlyName": $friendly_name, "HomepageUrl": $homepage_url, "Permissions": $permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3746,7 +3773,7 @@ export def "list-incoming-phone-number" [
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3807,9 +3834,9 @@ export def "create-incoming-phone-number" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers.json") $auth.query)
   let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "AreaCode": $area_code, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3853,7 +3880,7 @@ export def "list-incoming-phone-number-local" [
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3912,9 +3939,9 @@ export def "create-incoming-phone-number-local" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Local.json") $auth.query)
   let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3958,7 +3985,7 @@ export def "list-incoming-phone-number-mobile" [
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4017,9 +4044,9 @@ export def "create-incoming-phone-number-mobile" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/Mobile.json") $auth.query)
   let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4063,7 +4090,7 @@ export def "list-incoming-phone-number-toll-free" [
   let qp = [(serialize-qp "Beta" $beta "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "Origin" $origin "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4122,9 +4149,9 @@ export def "create-incoming-phone-number-toll-free" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/TollFree.json") $auth.query)
   let req_body = {"AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "PhoneNumber": $phone_number, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4167,7 +4194,7 @@ export def "list-incoming-phone-number-assigned-add-on" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4207,9 +4234,9 @@ export def "create-incoming-phone-number-assigned-add-on" [
   if ($resource_sid | is-empty) { error make --unspanned { msg: "path parameter 'ResourceSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns.json") $auth.query)
   let req_body = {"InstalledAddOnSid": $installed_add_on_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4254,7 +4281,7 @@ export def "list-incoming-phone-number-assigned-add-on-extension" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4296,7 +4323,7 @@ export def "fetch-incoming-phone-number-assigned-add-on-extension" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), assigned_add_on_sid: (encode-path-segment $assigned_add_on_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{assigned_add_on_sid}/Extensions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4336,7 +4363,7 @@ export def "delete-incoming-phone-number-assigned-add-on" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4376,7 +4403,7 @@ export def "fetch-incoming-phone-number-assigned-add-on" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), resource_sid: (encode-path-segment $resource_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{resource_sid}/AssignedAddOns/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4414,7 +4441,7 @@ export def "delete-incoming-phone-number" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4452,7 +4479,7 @@ export def "fetch-incoming-phone-number" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4483,7 +4510,7 @@ export def "update-incoming-phone-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-account-sid: string # The SID of the [Account](https://www.twilio.com/docs/iam/api/account) that created the IncomingPhoneNumber resource to update. For more information, see [Exchanging Numbers Between Subaccounts](https://www.twilio.com/docs/iam/api/subaccounts#exchanging-numbers).
+  --body-account-sid: string # The SID of the [Account](https://www.twilio.com/docs/iam/api/account) that created the IncomingPhoneNumber resource to update. For more information, see [Exchanging Numbers Between Subaccounts](https://www.twilio.com/docs/iam/api/subaccounts#exchanging-numbers). (spec name: AccountSid)
   --address-sid: string # The SID of the Address resource we should associate with the phone number. Some regions require addresses to meet local regulations.
   --api-version: string # The API version to use for incoming calls made to the phone number. The default is `2010-04-01`.
   --bundle-sid: string # The SID of the Bundle resource that you associate with the phone number. Some regions require a Bundle to meet local Regulations.
@@ -4514,9 +4541,9 @@ export def "update-incoming-phone-number" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/IncomingPhoneNumbers/{sid}.json") $auth.query)
   let req_body = {"AccountSid": $body_account_sid, "AddressSid": $address_sid, "ApiVersion": $api_version, "BundleSid": $bundle_sid, "EmergencyAddressSid": $emergency_address_sid, "EmergencyStatus": $emergency_status, "FriendlyName": $friendly_name, "IdentitySid": $identity_sid, "SmsApplicationSid": $sms_application_sid, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method, "TrunkSid": $trunk_sid, "VoiceApplicationSid": $voice_application_sid, "VoiceCallerIdLookup": $voice_caller_id_lookup, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceReceiveMode": $voice_receive_mode, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4556,7 +4583,7 @@ export def "list-key" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4593,9 +4620,9 @@ export def "create-new-key" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4633,7 +4660,7 @@ export def "delete-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4670,7 +4697,7 @@ export def "fetch-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4709,9 +4736,9 @@ export def "update-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Keys/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4745,8 +4772,8 @@ export def "list-message" [
   --to: string # Read messages sent to only this phone number. (format: phone-number)
   --from: string # Read messages sent from only this phone number or alphanumeric sender ID. (format: phone-number)
   --date-sent: string # The date of the messages to show. Specify a date as `YYYY-MM-DD` in GMT to read only messages sent on this date. For example: `2009-07-06`. You can also specify an inequality, such as `DateSent<=YYYY-MM-DD`, to read messages sent on or before midnight on a date, and `DateSent>=YYYY-MM-DD` to read messages sent on or after midnight on a date. (format: date-time)
-  --date-sent-2: string # The date of the messages to show. Specify a date as `YYYY-MM-DD` in GMT to read only messages sent on this date. For example: `2009-07-06`. You can also specify an inequality, such as `DateSent<=YYYY-MM-DD`, to read messages sent on or before midnight on a date, and `DateSent>=YYYY-MM-DD` to read messages sent on or after midnight on a date. (format: date-time) (disambiguated-2)
-  --date-sent-3: string # The date of the messages to show. Specify a date as `YYYY-MM-DD` in GMT to read only messages sent on this date. For example: `2009-07-06`. You can also specify an inequality, such as `DateSent<=YYYY-MM-DD`, to read messages sent on or before midnight on a date, and `DateSent>=YYYY-MM-DD` to read messages sent on or after midnight on a date. (format: date-time) (disambiguated-3)
+  --qp-date-sent: string # The date of the messages to show. Specify a date as `YYYY-MM-DD` in GMT to read only messages sent on this date. For example: `2009-07-06`. You can also specify an inequality, such as `DateSent<=YYYY-MM-DD`, to read messages sent on or before midnight on a date, and `DateSent>=YYYY-MM-DD` to read messages sent on or after midnight on a date. (format: date-time) (spec name: DateSent<)
+  --qp-date-sent-2: string # The date of the messages to show. Specify a date as `YYYY-MM-DD` in GMT to read only messages sent on this date. For example: `2009-07-06`. You can also specify an inequality, such as `DateSent<=YYYY-MM-DD`, to read messages sent on or before midnight on a date, and `DateSent>=YYYY-MM-DD` to read messages sent on or after midnight on a date. (format: date-time) (spec name: DateSent>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -4754,14 +4781,14 @@ export def "list-message" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "DateSent" $date_sent "scalar") (serialize-qp "DateSent<" $date_sent_2 "scalar") (serialize-qp "DateSent>" $date_sent_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "To" $to "scalar") (serialize-qp "From" $from "scalar") (serialize-qp "DateSent" $date_sent "scalar") (serialize-qp "DateSent<" $qp_date_sent "scalar") (serialize-qp "DateSent>" $qp_date_sent_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"To": $to, "From": $from, "DateSent": $date_sent, "DateSent<": $date_sent_2, "DateSent>": $date_sent_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"To": $to, "From": $from, "DateSent": $date_sent, "DateSent<": $qp_date_sent, "DateSent>": $qp_date_sent_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4816,9 +4843,9 @@ export def "create-message" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages.json") $auth.query)
   let req_body = {"AddressRetention": $address_retention, "ApplicationSid": $application_sid, "Attempt": $attempt, "Body": $body, "ContentRetention": $content_retention, "ContentSid": $content_sid, "ContentVariables": $content_variables, "ForceDelivery": $force_delivery, "From": $from, "MaxPrice": $max_price, "MediaUrl": $media_url, "MessagingServiceSid": $messaging_service_sid, "PersistentAction": $persistent_action, "ProvideFeedback": $provide_feedback, "ScheduleType": $schedule_type, "SendAsMms": $send_as_mms, "SendAt": $send_at, "ShortenUrls": $shorten_urls, "SmartEncoded": $smart_encoded, "StatusCallback": $status_callback, "To": $to, "ValidityPeriod": $validity_period} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4858,9 +4885,9 @@ export def "create-message-feedback" [
   if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Feedback.json") $auth.query)
   let req_body = {"Outcome": $outcome} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4893,8 +4920,8 @@ export def "list-media" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-created: string # Only include media that was created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read media that was created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read media that was created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read media that was created on or after midnight of this date. (format: date-time)
-  --date-created-2: string # Only include media that was created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read media that was created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read media that was created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read media that was created on or after midnight of this date. (format: date-time) (disambiguated-2)
-  --date-created-3: string # Only include media that was created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read media that was created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read media that was created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read media that was created on or after midnight of this date. (format: date-time) (disambiguated-3)
+  --qp-date-created: string # Only include media that was created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read media that was created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read media that was created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read media that was created on or after midnight of this date. (format: date-time) (spec name: DateCreated<)
+  --qp-date-created-2: string # Only include media that was created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read media that was created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read media that was created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read media that was created on or after midnight of this date. (format: date-time) (spec name: DateCreated>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -4903,14 +4930,14 @@ export def "list-media" [
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   if ($message_sid | is-empty) { error make --unspanned { msg: "path parameter 'MessageSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created_2 "scalar") (serialize-qp "DateCreated>" $date_created_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $date_created_2, "DateCreated>": $date_created_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4946,7 +4973,7 @@ export def "delete-media" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4986,7 +5013,7 @@ export def "fetch-media" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{message_sid}/Media/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5024,7 +5051,7 @@ export def "delete-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5062,7 +5089,7 @@ export def "fetch-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5103,9 +5130,9 @@ export def "update-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Messages/{sid}.json") $auth.query)
   let req_body = {"Body": $body, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5138,8 +5165,8 @@ export def "list-notification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --log: int # Only read notifications of the specified log level. Can be: `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
-  --message-date-2: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (disambiguated-2)
-  --message-date-3: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (disambiguated-3)
+  --qp-message-date: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (spec name: MessageDate<)
+  --qp-message-date-2: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date) (spec name: MessageDate>)
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
@@ -5147,14 +5174,14 @@ export def "list-notification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $message_date_2 "scalar") (serialize-qp "MessageDate>" $message_date_3 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Log" $log "scalar") (serialize-qp "MessageDate" $message_date "scalar") (serialize-qp "MessageDate<" $qp_message_date "scalar") (serialize-qp "MessageDate>" $qp_message_date_2 "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $message_date_2, "MessageDate>": $message_date_3, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"Log": $log, "MessageDate": $message_date, "MessageDate<": $qp_message_date, "MessageDate>": $qp_message_date_2, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5188,7 +5215,7 @@ export def "fetch-notification" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Notifications/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5230,7 +5257,7 @@ export def "list-outgoing-caller-id" [
   let qp = [(serialize-qp "PhoneNumber" $phone_number "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5272,9 +5299,9 @@ export def "create-validation-request" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds.json") $auth.query)
   let req_body = {"CallDelay": $call_delay, "Extension": $extension, "FriendlyName": $friendly_name, "PhoneNumber": $phone_number, "StatusCallback": $status_callback, "StatusCallbackMethod": $status_callback_method} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5313,7 +5340,7 @@ export def "delete-outgoing-caller-id" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5351,7 +5378,7 @@ export def "fetch-outgoing-caller-id" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5391,9 +5418,9 @@ export def "update-outgoing-caller-id" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/OutgoingCallerIds/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5434,7 +5461,7 @@ export def "list-queue" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5473,9 +5500,9 @@ export def "create-queue" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5518,7 +5545,7 @@ export def "list-member" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5558,7 +5585,7 @@ export def "fetch-member" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5601,9 +5628,9 @@ export def "update-member" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), queue_sid: (encode-path-segment $queue_sid), call_sid: (encode-path-segment $call_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{queue_sid}/Members/{call_sid}.json") $auth.query)
   let req_body = {"Method": $method, "Url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5642,7 +5669,7 @@ export def "delete-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5680,7 +5707,7 @@ export def "fetch-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5721,9 +5748,9 @@ export def "update-queue" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Queues/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "MaxSize": $max_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5755,8 +5782,8 @@ export def "list-recording" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-created: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time)
-  --date-created-2: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time) (disambiguated-2)
-  --date-created-3: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time) (disambiguated-3)
+  --qp-date-created: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time) (spec name: DateCreated<)
+  --qp-date-created-2: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time) (spec name: DateCreated>)
   --call-sid: string # The [Call](https://www.twilio.com/docs/voice/api/call-resource) SID of the resources to read.
   --conference-sid: string # The Conference SID that identifies the conference associated with the recording to read.
   --include-soft-deleted: oneof<nothing, bool> # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
@@ -5767,14 +5794,14 @@ export def "list-recording" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
-  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $date_created_2 "scalar") (serialize-qp "DateCreated>" $date_created_3 "scalar") (serialize-qp "CallSid" $call_sid "scalar") (serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "DateCreated" $date_created "scalar") (serialize-qp "DateCreated<" $qp_date_created "scalar") (serialize-qp "DateCreated>" $qp_date_created_2 "scalar") (serialize-qp "CallSid" $call_sid "scalar") (serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"DateCreated": $date_created, "DateCreated<": $date_created_2, "DateCreated>": $date_created_3, "CallSid": $call_sid, "ConferenceSid": $conference_sid, "IncludeSoftDeleted": $include_soft_deleted, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
+    query: ({"DateCreated": $date_created, "DateCreated<": $qp_date_created, "DateCreated>": $qp_date_created_2, "CallSid": $call_sid, "ConferenceSid": $conference_sid, "IncludeSoftDeleted": $include_soft_deleted, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5811,7 +5838,7 @@ export def "list-recording-transcription" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5850,7 +5877,7 @@ export def "delete-recording-transcription" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5889,7 +5916,7 @@ export def "fetch-recording-transcription" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), recording_sid: (encode-path-segment $recording_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{recording_sid}/Transcriptions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5931,7 +5958,7 @@ export def "list-recording-add-on-result" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5975,7 +6002,7 @@ export def "list-recording-add-on-result-payload" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6017,7 +6044,7 @@ export def "delete-recording-add-on-result-payload" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6059,7 +6086,7 @@ export def "fetch-recording-add-on-result-payload" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), add_on_result_sid: (encode-path-segment $add_on_result_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{add_on_result_sid}/Payloads/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6099,7 +6126,7 @@ export def "delete-recording-add-on-result" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6139,7 +6166,7 @@ export def "fetch-recording-add-on-result" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), reference_sid: (encode-path-segment $reference_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{reference_sid}/AddOnResults/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6177,7 +6204,7 @@ export def "delete-recording" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6217,7 +6244,7 @@ export def "fetch-recording" [
   let qp = [(serialize-qp "IncludeSoftDeleted" $include_soft_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Recordings/{sid}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6257,7 +6284,7 @@ export def "list-sip-credential-list" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6295,9 +6322,9 @@ export def "create-sip-credential-list" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6340,7 +6367,7 @@ export def "list-sip-credential" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6381,9 +6408,9 @@ export def "create-sip-credential" [
   if ($credential_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'CredentialListSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials.json") $auth.query)
   let req_body = {"Password": $password, "Username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6424,7 +6451,7 @@ export def "delete-sip-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6464,7 +6491,7 @@ export def "fetch-sip-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6506,9 +6533,9 @@ export def "update-sip-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), credential_list_sid: (encode-path-segment $credential_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{credential_list_sid}/Credentials/{sid}.json") $auth.query)
   let req_body = {"Password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6547,7 +6574,7 @@ export def "delete-sip-credential-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6585,7 +6612,7 @@ export def "fetch-sip-credential-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6625,9 +6652,9 @@ export def "update-sip-credential-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/CredentialLists/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6668,7 +6695,7 @@ export def "list-sip-domain" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6718,9 +6745,9 @@ export def "create-sip-domain" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains.json") $auth.query)
   let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6763,7 +6790,7 @@ export def "list-sip-auth-calls-credential-list-mapping" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6803,9 +6830,9 @@ export def "create-sip-auth-calls-credential-list-mapping" [
   if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings.json") $auth.query)
   let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -6846,7 +6873,7 @@ export def "delete-sip-auth-calls-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6886,7 +6913,7 @@ export def "fetch-sip-auth-calls-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6928,7 +6955,7 @@ export def "list-sip-auth-calls-ip-access-control-list-mapping" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6968,9 +6995,9 @@ export def "create-sip-auth-calls-ip-access-control-list-mapping" [
   if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings.json") $auth.query)
   let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7011,7 +7038,7 @@ export def "delete-sip-auth-calls-ip-access-control-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7051,7 +7078,7 @@ export def "fetch-sip-auth-calls-ip-access-control-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Calls/IpAccessControlListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7093,7 +7120,7 @@ export def "list-sip-auth-registrations-credential-list-mapping" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7133,9 +7160,9 @@ export def "create-sip-auth-registrations-credential-list-mapping" [
   if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings.json") $auth.query)
   let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7176,7 +7203,7 @@ export def "delete-sip-auth-registrations-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7216,7 +7243,7 @@ export def "fetch-sip-auth-registrations-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/Auth/Registrations/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7258,7 +7285,7 @@ export def "list-sip-credential-list-mapping" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7298,9 +7325,9 @@ export def "create-sip-credential-list-mapping" [
   if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings.json") $auth.query)
   let req_body = {"CredentialListSid": $credential_list_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7341,7 +7368,7 @@ export def "delete-sip-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7381,7 +7408,7 @@ export def "fetch-sip-credential-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/CredentialListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7423,7 +7450,7 @@ export def "list-sip-ip-access-control-list-mapping" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7463,9 +7490,9 @@ export def "create-sip-ip-access-control-list-mapping" [
   if ($domain_sid | is-empty) { error make --unspanned { msg: "path parameter 'DomainSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings.json") $auth.query)
   let req_body = {"IpAccessControlListSid": $ip_access_control_list_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7506,7 +7533,7 @@ export def "delete-sip-ip-access-control-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7546,7 +7573,7 @@ export def "fetch-sip-ip-access-control-list-mapping" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), domain_sid: (encode-path-segment $domain_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{domain_sid}/IpAccessControlListMappings/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7584,7 +7611,7 @@ export def "delete-sip-domain" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7622,7 +7649,7 @@ export def "fetch-sip-domain" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7674,9 +7701,9 @@ export def "update-sip-domain" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/Domains/{sid}.json") $auth.query)
   let req_body = {"ByocTrunkSid": $byoc_trunk_sid, "DomainName": $domain_name, "EmergencyCallerSid": $emergency_caller_sid, "EmergencyCallingEnabled": $emergency_calling_enabled, "FriendlyName": $friendly_name, "Secure": $secure, "SipRegistration": $sip_registration, "VoiceFallbackMethod": $voice_fallback_method, "VoiceFallbackUrl": $voice_fallback_url, "VoiceMethod": $voice_method, "VoiceStatusCallbackMethod": $voice_status_callback_method, "VoiceStatusCallbackUrl": $voice_status_callback_url, "VoiceUrl": $voice_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7717,7 +7744,7 @@ export def "list-sip-ip-access-control-list" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7755,9 +7782,9 @@ export def "create-sip-ip-access-control-list" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7800,7 +7827,7 @@ export def "list-sip-ip-address" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7842,9 +7869,9 @@ export def "create-sip-ip-address" [
   if ($ip_access_control_list_sid | is-empty) { error make --unspanned { msg: "path parameter 'IpAccessControlListSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses.json") $auth.query)
   let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -7885,7 +7912,7 @@ export def "delete-sip-ip-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7925,7 +7952,7 @@ export def "fetch-sip-ip-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7969,9 +7996,9 @@ export def "update-sip-ip-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), ip_access_control_list_sid: (encode-path-segment $ip_access_control_list_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{ip_access_control_list_sid}/IpAddresses/{sid}.json") $auth.query)
   let req_body = {"CidrPrefixLength": $cidr_prefix_length, "FriendlyName": $friendly_name, "IpAddress": $ip_address} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8010,7 +8037,7 @@ export def "delete-sip-ip-access-control-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8048,7 +8075,7 @@ export def "fetch-sip-ip-access-control-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8088,9 +8115,9 @@ export def "update-sip-ip-access-control-list" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SIP/IpAccessControlLists/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8133,7 +8160,7 @@ export def "list-short-code" [
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "ShortCode" $short_code "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8171,7 +8198,7 @@ export def "fetch-short-code" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8216,9 +8243,9 @@ export def "update-short-code" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SMS/ShortCodes/{sid}.json") $auth.query)
   let req_body = {"ApiVersion": $api_version, "FriendlyName": $friendly_name, "SmsFallbackMethod": $sms_fallback_method, "SmsFallbackUrl": $sms_fallback_url, "SmsMethod": $sms_method, "SmsUrl": $sms_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8258,7 +8285,7 @@ export def "list-signing-key" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8296,9 +8323,9 @@ export def "create-new-signing-key" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8336,7 +8363,7 @@ export def "delete-signing-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8373,7 +8400,7 @@ export def "fetch-signing-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8412,9 +8439,9 @@ export def "update-signing-key" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/SigningKeys/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8453,9 +8480,9 @@ export def "create-token" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Tokens.json") $auth.query)
   let req_body = {"Ttl": $ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -8496,7 +8523,7 @@ export def "list-transcription" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8534,7 +8561,7 @@ export def "delete-transcription" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8572,7 +8599,7 @@ export def "fetch-transcription" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Transcriptions/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8616,7 +8643,7 @@ export def "list-usage-record" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8659,7 +8686,7 @@ export def "list-usage-record-all-time" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/AllTime.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8702,7 +8729,7 @@ export def "list-usage-record-daily" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Daily.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8745,7 +8772,7 @@ export def "list-usage-record-last-month" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/LastMonth.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8788,7 +8815,7 @@ export def "list-usage-record-monthly" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Monthly.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8831,7 +8858,7 @@ export def "list-usage-record-this-month" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/ThisMonth.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8874,7 +8901,7 @@ export def "list-usage-record-today" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Today.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8917,7 +8944,7 @@ export def "list-usage-record-yearly" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yearly.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8960,7 +8987,7 @@ export def "list-usage-record-yesterday" [
   let qp = [(serialize-qp "Category" $category "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "IncludeSubaccounts" $include_subaccounts "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Records/Yesterday.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9003,7 +9030,7 @@ export def "list-usage-trigger" [
   let qp = [(serialize-qp "Recurring" $recurring "scalar") (serialize-qp "TriggerBy" $trigger_by "scalar") (serialize-qp "UsageCategory" $usage_category "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9047,9 +9074,9 @@ export def "create-usage-trigger" [
   if ($account_sid | is-empty) { error make --unspanned { msg: "path parameter 'AccountSid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers.json") $auth.query)
   let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name, "Recurring": $recurring, "TriggerBy": $trigger_by, "TriggerValue": $trigger_value, "UsageCategory": $usage_category} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9087,7 +9114,7 @@ export def "delete-usage-trigger" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9125,7 +9152,7 @@ export def "fetch-usage-trigger" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9167,9 +9194,9 @@ export def "update-usage-trigger" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({account_sid: (encode-path-segment $account_sid), sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{account_sid}/Usage/Triggers/{sid}.json") $auth.query)
   let req_body = {"CallbackMethod": $callback_method, "CallbackUrl": $callback_url, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -9206,7 +9233,7 @@ export def "fetch-account" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9245,9 +9272,9 @@ export def "update-account" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/2010-04-01/Accounts/{sid}.json") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "Status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

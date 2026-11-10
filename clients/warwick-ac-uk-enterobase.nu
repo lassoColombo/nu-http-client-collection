@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -177,7 +204,7 @@ export def "get-api-v2-0" [
   let qp = [(serialize-qp "prefix" $prefix "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2.0" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -213,7 +240,7 @@ export def "get-api-v2-0-login" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2.0/login" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -248,7 +275,7 @@ export def "get-api-v2-0-lookup" [
   let qp = [(serialize-qp "barcode" $barcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2.0/lookup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "get-api-v2-0-lookup-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/lookup/{barcode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -312,7 +339,7 @@ export def "post-api-v2-0-lookup-barcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-barcode: string
+  --body-barcode: string # (spec name: barcode)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -320,9 +347,9 @@ export def "post-api-v2-0-lookup-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/lookup/{barcode}") $auth.query)
   let req_body = {"barcode": $body_barcode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -370,7 +397,7 @@ export def "get-api-v2-0-database-assemblies" [
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "barcode" $barcode "multi") (serialize-qp "n50" $n50 "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "sortorder" $sortorder "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/assemblies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -407,7 +434,7 @@ export def "get-api-v2-0-database-assemblies-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -438,7 +465,7 @@ export def "post-api-v2-0-database-assemblies-barcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assembly-status: string
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --limit: int # format: int32, default: 50
   --n50: int # format: int32
   --offset: int # format: int32, default: 0
@@ -457,9 +484,9 @@ export def "post-api-v2-0-database-assemblies-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}") $auth.query)
   let req_body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -490,7 +517,7 @@ export def "put-api-v2-0-database-assemblies-barcode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --assembly-status: string
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --limit: int # format: int32, default: 50
   --n50: int # format: int32
   --offset: int # format: int32, default: 0
@@ -509,9 +536,9 @@ export def "put-api-v2-0-database-assemblies-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}") $auth.query)
   let req_body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -558,7 +585,7 @@ export def "get-api-v2-0-database-schemes" [
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "scheme_name" $scheme_name "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "lastmodified" $lastmodified "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "label" $label "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/schemes") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -595,7 +622,7 @@ export def "get-api-v2-0-database-schemes-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -625,7 +652,7 @@ export def "post-api-v2-0-database-schemes-barcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --created: string # format: date-time
   --label: string
   --lastmodified: string # format: date-time
@@ -644,9 +671,9 @@ export def "post-api-v2-0-database-schemes-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}") $auth.query)
   let req_body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -676,7 +703,7 @@ export def "put-api-v2-0-database-schemes-barcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --created: string # format: date-time
   --label: string
   --lastmodified: string # format: date-time
@@ -695,9 +722,9 @@ export def "put-api-v2-0-database-schemes-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}") $auth.query)
   let req_body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -770,7 +797,7 @@ export def "get-api-v2-0-database-straindata" [
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "n50" $n50 "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "custom_fields" $custom_fields "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/straindata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -841,7 +868,7 @@ export def "get-api-v2-0-database-strains" [
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/strains") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -878,7 +905,7 @@ export def "get-api-v2-0-database-strains-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -910,7 +937,7 @@ export def "post-api-v2-0-database-strains-barcode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --antigenic-formulas: string
   --assembly-barcode: string
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --city: string
   --collection-date: int # format: int32
   --collection-month: int # format: int32
@@ -951,9 +978,9 @@ export def "post-api-v2-0-database-strains-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}") $auth.query)
   let req_body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -985,7 +1012,7 @@ export def "put-api-v2-0-database-strains-barcode" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --antigenic-formulas: string
   --assembly-barcode: string
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --city: string
   --collection-date: int # format: int32
   --collection-month: int # format: int32
@@ -1026,9 +1053,9 @@ export def "put-api-v2-0-database-strains-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}") $auth.query)
   let req_body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1099,7 +1126,7 @@ export def "get-api-v2-0-database-strainsversion" [
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/strainsversion") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1141,7 +1168,7 @@ export def "get-api-v2-0-database-traces" [
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/traces") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,7 +1205,7 @@ export def "get-api-v2-0-database-traces-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1208,7 +1235,7 @@ export def "post-api-v2-0-database-traces-barcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
   --only-fields: list<string>
@@ -1222,9 +1249,9 @@ export def "post-api-v2-0-database-traces-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}") $auth.query)
   let req_body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1254,7 +1281,7 @@ export def "put-api-v2-0-database-traces-barcode" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-barcode: list<string>
+  --body-barcode: list<string> # (spec name: barcode)
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
   --only-fields: list<string>
@@ -1268,9 +1295,9 @@ export def "put-api-v2-0-database-traces-barcode" [
   if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}") $auth.query)
   let req_body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1317,7 +1344,7 @@ export def "get-api-v2-0-database-scheme-alleles" [
   let qp = [(serialize-qp "allele_id" $allele_id "scalar") (serialize-qp "seq" $seq "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/alleles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1353,7 +1380,7 @@ export def "get-api-v2-0-database-scheme-loci" [
   --create-time: string # format: date-time
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
-  --qp-scheme: string
+  --qp-scheme: string # (spec name: scheme)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1362,7 +1389,7 @@ export def "get-api-v2-0-database-scheme-loci" [
   let qp = [(serialize-qp "barcode" $barcode "multi") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "create_time" $create_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "scheme" $qp_scheme "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/loci") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1393,7 +1420,7 @@ export def "get-api-v2-0-database-scheme-sts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --st-id: string
-  --qp-scheme: string
+  --qp-scheme: string # (spec name: scheme)
   --show-alleles: oneof<nothing, bool>
   --barcode: list<string> # Unique barcode for Strain records, _ e.g. SAL_AA0001AA
   --only-fields: list<string>
@@ -1408,7 +1435,7 @@ export def "get-api-v2-0-database-scheme-sts" [
   let qp = [(serialize-qp "st_id" $st_id "scalar") (serialize-qp "scheme" $qp_scheme "scalar") (serialize-qp "show_alleles" $show_alleles "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/sts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

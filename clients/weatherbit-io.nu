@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -175,7 +202,7 @@ export def "get-alerts-lat-lat-lon-lon" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/alerts") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -213,7 +240,7 @@ export def "get-bulk-files-file" [
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file: (encode-path-segment $file)} | format pattern "/bulk/files/{file}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -255,7 +282,7 @@ export def "get-current-airquality-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -294,7 +321,7 @@ export def "get-current-airquality-city-id-city-id" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -335,7 +362,7 @@ export def "get-current-airquality-lat-lat-lon-lon" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -375,7 +402,7 @@ export def "get-current-airquality-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -417,7 +444,7 @@ export def "get-current-cities-cities" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cities: (encode-path-segment $cities)} | format pattern "/current") "cities={cities}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "get-current-city-city-country-country" [
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/current") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -506,7 +533,7 @@ export def "get-current-city-id-city-id" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/current") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -551,7 +578,7 @@ export def "get-current-lat-lat-lon-lon" [
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/current") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -592,7 +619,7 @@ export def "get-current-points-points" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({points: (encode-path-segment $points)} | format pattern "/current") "points={points}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -636,7 +663,7 @@ export def "get-current-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "marine" $marine "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/current") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -678,7 +705,7 @@ export def "get-current-station-station" [
   let qp = [(serialize-qp "include" $include "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/current") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -719,7 +746,7 @@ export def "get-current-stations-stations" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stations: (encode-path-segment $stations)} | format pattern "/current") "stations={stations}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -762,7 +789,7 @@ export def "get-forecast-airquality-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -802,7 +829,7 @@ export def "get-forecast-airquality-city-id-city-id" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -844,7 +871,7 @@ export def "get-forecast-airquality-lat-lat-lon-lon" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -885,7 +912,7 @@ export def "get-forecast-airquality-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -930,7 +957,7 @@ export def "get-forecast-daily-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/daily") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -972,7 +999,7 @@ export def "get-forecast-daily-city-id-city-id" [
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/daily") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1016,7 +1043,7 @@ export def "get-forecast-daily-lat-lat-lon-lon" [
   let qp = [(serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/daily") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1059,7 +1086,7 @@ export def "get-forecast-daily-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "days" $days "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/daily") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1103,7 +1130,7 @@ export def "get-forecast-energy-lat-lat-lon-lon" [
   let qp = [(serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/energy") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1148,7 +1175,7 @@ export def "get-forecast-hourly-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/forecast/hourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1190,7 +1217,7 @@ export def "get-forecast-hourly-city-id-city-id" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/forecast/hourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1234,7 +1261,7 @@ export def "get-forecast-hourly-lat-lat-lon-lon" [
   let qp = [(serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/forecast/hourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "get-forecast-hourly-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "hours" $hours "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/forecast/hourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1319,7 +1346,7 @@ export def "get-history-airquality-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/airquality") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1358,7 +1385,7 @@ export def "get-history-airquality-city-id-city-id" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/airquality") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1399,7 +1426,7 @@ export def "get-history-airquality-lat-lat-lon-lon" [
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/airquality") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1439,7 +1466,7 @@ export def "get-history-airquality-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/airquality") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1487,7 +1514,7 @@ export def "get-history-daily-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/daily") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1532,7 +1559,7 @@ export def "get-history-daily-city-id-city-id" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/daily") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1579,7 +1606,7 @@ export def "get-history-daily-lat-lat-lon-lon" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/daily") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1625,7 +1652,7 @@ export def "get-history-daily-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/daily") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1670,7 +1697,7 @@ export def "get-history-daily-station-station" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/daily") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1718,7 +1745,7 @@ export def "get-history-energy-lat-lat-lon-lon" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "tp" $tp "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/energy") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1767,7 +1794,7 @@ export def "get-history-hourly-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/hourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1813,7 +1840,7 @@ export def "get-history-hourly-city-id-city-id" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/hourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1861,7 +1888,7 @@ export def "get-history-hourly-lat-lat-lon-lon" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/hourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1908,7 +1935,7 @@ export def "get-history-hourly-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/hourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1954,7 +1981,7 @@ export def "get-history-hourly-station-station" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/hourly") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2003,7 +2030,7 @@ export def "get-history-subhourly-city-city-country-country" [
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city: (encode-path-segment $city), country: (encode-path-segment $country)} | format pattern "/history/subhourly") "city={city}&country={country}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2049,7 +2076,7 @@ export def "get-history-subhourly-city-id-city-id" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({city_id: (encode-path-segment $city_id)} | format pattern "/history/subhourly") "city_id={city_id}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2097,7 +2124,7 @@ export def "get-history-subhourly-lat-lat-lon-lon" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/history/subhourly") "lat={lat}&lon={lon}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2144,7 +2171,7 @@ export def "get-history-subhourly-postal-code-postal-code" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postal_code: (encode-path-segment $postal_code)} | format pattern "/history/subhourly") "postal_code={postal_code}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2190,7 +2217,7 @@ export def "get-history-subhourly-station-station" [
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "units" $units "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "tz" $tz "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({station: (encode-path-segment $station)} | format pattern "/history/subhourly") "station={station}" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

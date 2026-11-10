@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -170,7 +197,7 @@ export def "get-info-configuration-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/info/configuration{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -208,7 +235,7 @@ export def "get-links-shares-media-type-extension" [
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/links/shares{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -245,7 +272,7 @@ export def "post-profiles-id-schedules-update-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/schedules/update{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -282,7 +309,7 @@ export def "get-profiles-id-schedules-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/schedules{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -324,7 +351,7 @@ export def "get-profiles-id-updates-pending-media-type-extension" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "utc" $utc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/pending{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -361,7 +388,7 @@ export def "post-profiles-id-updates-reorder-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/reorder{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -403,7 +430,7 @@ export def "get-profiles-id-updates-sent-media-type-extension" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "utc" $utc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/sent{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -440,7 +467,7 @@ export def "post-profiles-id-updates-shuffle-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}/updates/shuffle{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -477,7 +504,7 @@ export def "get-profiles-id-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles/{id}{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -512,7 +539,7 @@ export def "get-profiles-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/profiles{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -547,7 +574,7 @@ export def "post-updates-create-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/create{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -584,7 +611,7 @@ export def "post-updates-id-destroy-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/destroy{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -626,7 +653,7 @@ export def "get-updates-id-interactions-media-type-extension" [
   let qp = [(serialize-qp "event" $event "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/interactions{media_type_extension}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "post-updates-id-move-to-top-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/move_to_top{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -700,7 +727,7 @@ export def "post-updates-id-share-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/share{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -737,7 +764,7 @@ export def "post-updates-id-update-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}/update{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -774,7 +801,7 @@ export def "get-updates-id-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/updates/{id}{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -809,7 +836,7 @@ export def "get-user-media-type-extension" [
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
   let full_url = (build-url $base ({media_type_extension: (encode-path-segment $media_type_extension)} | format pattern "/user{media_type_extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

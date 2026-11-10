@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -221,7 +248,7 @@ export def "get-file-tags" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/fileTags") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -260,7 +287,7 @@ export def "get-files" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -301,10 +328,10 @@ export def "upload-file" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -346,7 +373,7 @@ export def "get-file" [
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), file_id: (encode-path-segment $file_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/files/{file_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -387,7 +414,7 @@ export def "get-spec" [
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -442,9 +469,9 @@ export def "put-spec" [
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let req_body = {"first_level_custom_fields": $first_level_custom_fields, "header_custom_fields": $header_custom_fields, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "second_level_custom_fields": $second_level_custom_fields, "sku": $sku, "spec_name": $spec_name, "spec_type_id": $spec_type_id, "versions": $versions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -487,9 +514,9 @@ export def "post-team-member-of-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/1.1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let req_body = {"role_id": $role_id, "team_template_id": $team_template_id, "user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -528,7 +555,7 @@ export def "get-spec-type-fields" [
   if ($spec_type_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_type_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/1.1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -563,7 +590,7 @@ export def "get-country-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/countries" $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -601,7 +628,7 @@ export def "get-workgroup-list" [
   let qp = [(serialize-qp "workgroup_name" $workgroup_name "scalar") (serialize-qp "workgroup_types" $workgroup_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/workgroups" $qp $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -638,7 +665,7 @@ export def "get-automatic-invitation-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/automaticInvitations") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -675,7 +702,7 @@ export def "get-billing-recipients" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/billingRecipients") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -712,7 +739,7 @@ export def "get-buy-order-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -751,7 +778,7 @@ export def "get-buy-order-of-workgroup" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/buyOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -788,7 +815,7 @@ export def "get-client-workgroup-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -827,7 +854,7 @@ export def "get-specific-client-workgroup" [
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -866,7 +893,7 @@ export def "get-project-category-list-of-client" [
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectCategory") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -905,7 +932,7 @@ export def "get-project-home-user-field-list-of-client" [
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectHomeUserFields") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -944,7 +971,7 @@ export def "get-project-status-of-client" [
   if ($client_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'client_workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), client_workgroup_id: (encode-path-segment $client_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/clientWorkgroups/{client_workgroup_id}/projectStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -981,7 +1008,7 @@ export def "get-contact-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1020,7 +1047,7 @@ export def "get-contact-user-info" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/contacts/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1057,7 +1084,7 @@ export def "get-wg-task-status-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1094,7 +1121,7 @@ export def "get-custom-task-types-of-wg" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/customTaskTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1131,7 +1158,7 @@ export def "get-deactivation-reason-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/deactivationReasons") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1168,7 +1195,7 @@ export def "task-priority-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskPriority") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "get-default-task-status-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/defaultTaskStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1242,7 +1269,7 @@ export def "get-workgroup-detail" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1290,9 +1317,9 @@ export def "put-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/detail") $auth.query)
   let req_body = {"address_line1": $address_line1, "address_line2": $address_line2, "address_line3": $address_line3, "city": $city, "country": $country, "custom_fields": $custom_fields, "decimal_places": $decimal_places, "postal": $postal, "state": $state, "workgroup_name": $workgroup_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1329,7 +1356,7 @@ export def "get-exchange-rate-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1368,9 +1395,9 @@ export def "post-exchange-rate" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/exchangeRate") $auth.query)
   let req_body = {"exchange_rates": $exchange_rates} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1407,7 +1434,7 @@ export def "get-my-time-card-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1446,7 +1473,7 @@ export def "get-my-time-card" [
   if ($time_card_id | is-empty) { error make --unspanned { msg: "path parameter 'timeCard_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/myTimeCards/{time_card_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1483,7 +1510,7 @@ export def "get-product-type-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1520,7 +1547,7 @@ export def "get-spec-product-type-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1560,9 +1587,9 @@ export def "post-spec-product-type-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/productTypesOfSpecTypes") $auth.query)
   let req_body = {"enableDifferentiatePrdTypePreference": $enable_differentiate_prd_type_preference, "spec_prdType_list": $spec_prd_type_list} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1601,9 +1628,9 @@ export def "upload-profile-image" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/profileImage") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1640,7 +1667,7 @@ export def "get-project-category-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectCategory") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1677,7 +1704,7 @@ export def "get-project-home-user-fields-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectHomeUserFields") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1714,7 +1741,7 @@ export def "get-project-status" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projectStatus") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1751,7 +1778,7 @@ export def "get-project-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1805,9 +1832,9 @@ export def "post-project" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects") $auth.query)
   let req_body = {"client_account": $client_account, "client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "is_paper_direct": $is_paper_direct, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_owner_user_id": $project_owner_user_id, "project_status_id": $project_status_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1846,7 +1873,7 @@ export def "delete-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1885,7 +1912,7 @@ export def "get-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1938,9 +1965,9 @@ export def "patch-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let req_body = {"client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_status_id": $project_status_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1996,9 +2023,9 @@ export def "put-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}") $auth.query)
   let req_body = {"client_account": $client_account, "client_user_id": $client_user_id, "client_workgroup_id": $client_workgroup_id, "comments": $comments, "completion_date": $completion_date, "custom_fields": $custom_fields, "deactivation_reason_id": $deactivation_reason_id, "is_active": $is_active, "is_hot": $is_hot, "is_paper_direct": $is_paper_direct, "project_category_id": $project_category_id, "project_description": $project_description, "project_name": $project_name, "project_number": $project_number, "project_owner_user_id": $project_owner_user_id, "project_status_id": $project_status_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2037,7 +2064,7 @@ export def "get-buy-order-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2093,9 +2120,9 @@ export def "post-buy-order" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders") $auth.query)
   let req_body = {"buyer_user_id": $buyer_user_id, "comments": $comments, "custom_fields": $custom_fields, "invoice_or_billing_recipient": $invoice_or_billing_recipient, "order_completion_date": $order_completion_date, "order_items": $order_items, "other_selection_reason": $other_selection_reason, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "sellOrder": $sell_order, "shipping": $shipping, "supplier_reference": $supplier_reference, "supplier_selection_reason_id": $supplier_selection_reason_id, "supplier_user_id": $supplier_user_id, "tax": $tax, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2136,7 +2163,7 @@ export def "get-buy-order" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2174,7 +2201,7 @@ export def "put-buy-order" [
   --comments: string # e.g. sample comments
   --custom-fields: list # item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
   --order-completion-date: string # format: date
-  --body-order-id: int # format: int64, e.g. 1
+  --body-order-id: int # format: int64, e.g. 1 (spec name: order_id)
   --other-selection-reason: string # e.g. sample other_selection_reason
   --overs-percent: any # Java type: java.math.BigDecimal
   --payment-method-id: int # format: int64, e.g. 1
@@ -2191,9 +2218,9 @@ export def "put-buy-order" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/buyOrders/{order_id}") $auth.query)
   let req_body = {"action": $action, "budget_type_field_id": $budget_type_field_id, "comments": $comments, "custom_fields": $custom_fields, "order_completion_date": $order_completion_date, "order_id": $body_order_id, "other_selection_reason": $other_selection_reason, "overs_percent": $overs_percent, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "reject_reason": $reject_reason, "supplier_selection_reason_id": $supplier_selection_reason_id, "unders_percent": $unders_percent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2234,9 +2261,9 @@ export def "attach-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/children") $auth.query)
   let req_body = {"childProjectIds": $child_project_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2275,7 +2302,7 @@ export def "get-estimate-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2322,9 +2349,9 @@ export def "post-estimate" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates") $auth.query)
   let req_body = {"comments": $comments, "description": $description, "estimate_items": $estimate_items, "estimate_title": $estimate_title, "expiration_date": $expiration_date, "owner_reference": $owner_reference, "rfe_id": $rfe_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2365,7 +2392,7 @@ export def "get-estimate" [
   if ($estimate_id | is-empty) { error make --unspanned { msg: "path parameter 'estimate_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), estimate_id: (encode-path-segment $estimate_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/estimates/{estimate_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2406,7 +2433,7 @@ export def "get-invoices" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/orders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2447,7 +2474,7 @@ export def "get-invoice" [
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2488,7 +2515,7 @@ export def "get-invoice-files" [
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/invoices/{invoice_id}/files") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2529,7 +2556,7 @@ export def "get-member-roles" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/memberroles/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2570,7 +2597,7 @@ export def "get-order" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/orders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2611,7 +2638,7 @@ export def "get-quote-list" [
   let qp = [(serialize-qp "quote_state_id, use filters={\"quote_state_id\":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2652,7 +2679,7 @@ export def "get-quote" [
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2687,7 +2714,7 @@ export def "put-quote" [
   --accept: string@accept-completer # Response content type
   --action: string # e.g. sample action
   --po-number: string # e.g. sample po_number
-  --body-quote-id: int # format: int64, e.g. 1
+  --body-quote-id: int # format: int64, e.g. 1 (spec name: quote_id)
   --state-change-comments: string # e.g. sample state_change_comments
 ]: any -> oneof<record<status_code: int, status_reason: string>, string, nothing> {
   let input = $in
@@ -2698,9 +2725,9 @@ export def "put-quote" [
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quote_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), quote_id: (encode-path-segment $quote_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/quotes/{quote_id}") $auth.query)
   let req_body = {"action": $action, "po_number": $po_number, "quote_id": $body_quote_id, "state_change_comments": $state_change_comments} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2739,7 +2766,7 @@ export def "get-rfe-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2787,9 +2814,9 @@ export def "post-rfe" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes") $auth.query)
   let req_body = {"description": $description, "details": $details, "estimate_due_date": $estimate_due_date, "proposed_order_completion_date": $proposed_order_completion_date, "rfe_number": $rfe_number, "rfe_title": $rfe_title, "specs": $specs, "supplier_user_ids": $supplier_user_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2830,7 +2857,7 @@ export def "get-rfe" [
   if ($rfe_id | is-empty) { error make --unspanned { msg: "path parameter 'rfe_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfe_id: (encode-path-segment $rfe_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfes/{rfe_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2869,7 +2896,7 @@ export def "get-rfq-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2910,7 +2937,7 @@ export def "get-rfq" [
   if ($rfq_id | is-empty) { error make --unspanned { msg: "path parameter 'rfq_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), rfq_id: (encode-path-segment $rfq_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/rfqs/{rfq_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2949,7 +2976,7 @@ export def "get-sell-order-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2990,7 +3017,7 @@ export def "get-sell-order" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3028,7 +3055,7 @@ export def "put-sell-order" [
   --comments: string # e.g. sample comments
   --custom-fields: list # item shape: {date_value?: string, number_value?: any, param_name?: string, string_value?: string}
   --order-completion-date: string # format: date
-  --body-order-id: int # format: int64, e.g. 1
+  --body-order-id: int # format: int64, e.g. 1 (spec name: order_id)
   --other-selection-reason: string # e.g. sample other_selection_reason
   --overs-percent: any # Java type: java.math.BigDecimal
   --payment-method-id: int # format: int64, e.g. 1
@@ -3045,9 +3072,9 @@ export def "put-sell-order" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/sellOrders/{order_id}") $auth.query)
   let req_body = {"action": $action, "budget_type_field_id": $budget_type_field_id, "comments": $comments, "custom_fields": $custom_fields, "order_completion_date": $order_completion_date, "order_id": $body_order_id, "other_selection_reason": $other_selection_reason, "overs_percent": $overs_percent, "payment_method_id": $payment_method_id, "payment_reference_no": $payment_reference_no, "reject_reason": $reject_reason, "supplier_selection_reason_id": $supplier_selection_reason_id, "unders_percent": $unders_percent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3086,7 +3113,7 @@ export def "get-shipment-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3155,9 +3182,9 @@ export def "post-shipment" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments") $auth.query)
   let req_body = {"address_line1": $address_line1, "address_line2": $address_line2, "address_line3": $address_line3, "batch_label": $batch_label, "city": $city, "company_name": $company_name, "country_iso_code": $country_iso_code, "delivery_date": $delivery_date, "description_or_title": $description_or_title, "email": $email, "first_name": $first_name, "inner_carton_label": $inner_carton_label, "last_name": $last_name, "middle_name": $middle_name, "outer_carton_label": $outer_carton_label, "pallet_lablel": $pallet_lablel, "poof_type": $poof_type, "postal_code": $postal_code, "request_type": $request_type, "requested_quantity": $requested_quantity, "shipment_custom_fields": $shipment_custom_fields, "shipment_request_custom_fields": $shipment_request_custom_fields, "shipping_carrier": $shipping_carrier, "shipping_instruction": $shipping_instruction, "shpping_method": $shpping_method, "spec_ids": $spec_ids, "state": $state, "work_phone_number": $work_phone_number, "workgroup_name": $workgroup_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3198,7 +3225,7 @@ export def "get-shipment" [
   if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipment_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3250,9 +3277,9 @@ export def "put-shipment-location" [
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), shipment_id: (encode-path-segment $shipment_id), location_id: (encode-path-segment $location_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/shipments/{shipment_id}/locations/{location_id}") $auth.query)
   let req_body = {"due_date": $due_date, "qty_received": $qty_received, "qty_requested": $qty_requested, "qty_shipped": $qty_shipped, "received_date": $received_date, "shipped_date": $shipped_date, "shipping_cost": $shipping_cost, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3291,7 +3318,7 @@ export def "get-spec-list" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3343,9 +3370,9 @@ export def "post-spec" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs") $auth.query)
   let req_body = {"jsonBody": $json_body, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "sku": $sku, "spec_name": $spec_name, "spec_template_id": $spec_template_id, "spec_type_id": $spec_type_id, "versions": $versions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3385,7 +3412,7 @@ export def "get-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3435,9 +3462,9 @@ export def "put-v1-workgroups-workgroup-id-projects-project-id-specs-spec-id" [
   if ($spec_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), spec_id: (encode-path-segment $spec_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/specs/{spec_id}") $auth.query)
   let req_body = {"inks_and_paper": $inks_and_paper, "product_type_id": $product_type_id, "quantity_1": $quantity_1, "quantity_2": $quantity_2, "quantity_3": $quantity_3, "quantity_4": $quantity_4, "quantity_5": $quantity_5, "sku": $sku, "spec_name": $spec_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3476,7 +3503,7 @@ export def "get-task-list-of-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3535,9 +3562,9 @@ export def "post-task-for-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks") $auth.query)
   let req_body = {"actual_duration": $actual_duration, "actual_duration_hour": $actual_duration_hour, "actual_end_date": $actual_end_date, "actual_start_date": $actual_start_date, "assign_to_user_id": $assign_to_user_id, "comments": $comments, "contributors": $contributors, "custom_status_id": $custom_status_id, "description": $description, "name": $name, "percentage_complete": $percentage_complete, "priority": $priority, "revised_duration": $revised_duration, "revised_duration_hour": $revised_duration_hour, "revised_end_date": $revised_end_date, "revised_start_date": $revised_start_date, "status_id": $status_id, "task_id": $task_id, "task_type_id": $task_type_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3578,7 +3605,7 @@ export def "get-task-of-project" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/tasks/{task_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3617,7 +3644,7 @@ export def "get-team-member-list-of-client-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teamMembersOfClientProject") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3656,7 +3683,7 @@ export def "get-team-member-list-of-project" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3697,9 +3724,9 @@ export def "post-v1-workgroups-workgroup-id-projects-project-id-teammembers" [
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers") $auth.query)
   let req_body = {"role_id": $role_id, "user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3740,7 +3767,7 @@ export def "delete-team-member-of-project" [
   if ($teammember_id | is-empty) { error make --unspanned { msg: "path parameter 'teammember_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), project_id: (encode-path-segment $project_id), teammember_id: (encode-path-segment $teammember_id)} | format pattern "/v1/workgroups/{workgroup_id}/projects/{project_id}/teammembers/{teammember_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3777,7 +3804,7 @@ export def "get-quote-state-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quoteStates") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3815,7 +3842,7 @@ export def "get-v1-workgroups-workgroup-id-quotes" [
   let qp = [(serialize-qp "quote_state_id, use filters={\"quote_state_id\":111111}" $quote_state_id_use_filters_quote_state_id_111111 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/quotes") $qp $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3852,7 +3879,7 @@ export def "get-received-time-card-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3891,7 +3918,7 @@ export def "get-received-time-card" [
   if ($time_card_id | is-empty) { error make --unspanned { msg: "path parameter 'timeCard_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), time_card_id: (encode-path-segment $time_card_id)} | format pattern "/v1/workgroups/{workgroup_id}/receivedTimeCards/{time_card_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3928,7 +3955,7 @@ export def "get-sell-order-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3967,7 +3994,7 @@ export def "get-sell-order-of-workgroup" [
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/workgroups/{workgroup_id}/sellOrders/{order_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4004,7 +4031,7 @@ export def "get-spec-template-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4043,7 +4070,7 @@ export def "get-spec-template" [
   if ($spec_template_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_template_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_template_id: (encode-path-segment $spec_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTemplates/{spec_template_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4081,7 +4108,7 @@ export def "get-v1-workgroups-workgroup-id-spec-types-spec-type-id-spec-type-fie
   if ($spec_type_id | is-empty) { error make --unspanned { msg: "path parameter 'spec_type_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), spec_type_id: (encode-path-segment $spec_type_id)} | format pattern "/v1/workgroups/{workgroup_id}/specTypes/{spec_type_id}/specTypeFields") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4118,7 +4145,7 @@ export def "get-supplier-workgroup-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4157,7 +4184,7 @@ export def "get-supplier-workgroup-detail" [
   if ($bu_supplier_workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'bu_supplier_workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), bu_supplier_workgroup_id: (encode-path-segment $bu_supplier_workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/supplierWorkgroups/{bu_supplier_workgroup_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4194,7 +4221,7 @@ export def "get-task-types-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/taskTypes") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4231,7 +4258,7 @@ export def "get-task-list-of-workgroup" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4270,7 +4297,7 @@ export def "get-task-of-workgroup" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), task_id: (encode-path-segment $task_id)} | format pattern "/v1/workgroups/{workgroup_id}/tasks/{task_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4307,7 +4334,7 @@ export def "get-team-template-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4346,7 +4373,7 @@ export def "get-team-template-detail" [
   if ($team_template_id | is-empty) { error make --unspanned { msg: "path parameter 'team_template_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), team_template_id: (encode-path-segment $team_template_id)} | format pattern "/v1/workgroups/{workgroup_id}/teamTemplates/{team_template_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4383,7 +4410,7 @@ export def "get-workgroup-member-list" [
   if ($workgroup_id | is-empty) { error make --unspanned { msg: "path parameter 'workgroup_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4422,7 +4449,7 @@ export def "get-workgroup-member-info" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({workgroup_id: (encode-path-segment $workgroup_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/workgroups/{workgroup_id}/workgroupMembers/{user_id}") $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

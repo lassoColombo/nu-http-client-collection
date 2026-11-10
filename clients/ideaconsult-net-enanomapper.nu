@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,7 +217,7 @@ export def "get-investigation-results" [
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "inchikey" $inchikey "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/investigation") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -239,7 +266,7 @@ export def "search-by-identifier" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "casesens" $casesens "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), term: (encode-path-segment $term), representation: (encode-path-segment $representation)} | format pattern "/enm/{db}/query/compound/{term}/{representation}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -288,7 +315,7 @@ export def "search-by-similarity" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filter_by_substance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/query/similarity") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -336,7 +363,7 @@ export def "search-by-smarts" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filter_by_substance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/query/smarts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -375,7 +402,7 @@ export def "get-endpoint-summary" [
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/query/study") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -420,7 +447,7 @@ export def "get-substances" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "compound_uri" $compound_uri "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "addDummySubstance" $add_dummy_substance "scalar") (serialize-qp "studysummary" $studysummary "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db)} | format pattern "/enm/{db}/substance") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -462,7 +489,7 @@ export def "get-substance-by-uuid" [
   let qp = [(serialize-qp "property_uris[]" $property_uris "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), uuid: (encode-path-segment $uuid)} | format pattern "/enm/{db}/substance/{uuid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -504,7 +531,7 @@ export def "get-substance-composition" [
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), uuid: (encode-path-segment $uuid)} | format pattern "/enm/{db}/substance/{uuid}/composition") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -545,7 +572,7 @@ export def "get-substance-structures" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), uuid: (encode-path-segment $uuid)} | format pattern "/enm/{db}/substance/{uuid}/structures") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -591,7 +618,7 @@ export def "get-substance-study" [
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "investigation_uuid" $investigation_uuid "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), uuid: (encode-path-segment $uuid)} | format pattern "/enm/{db}/substance/{uuid}/study") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -637,7 +664,7 @@ export def "get-substance-study-summary" [
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "result" $result "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({db: (encode-path-segment $db), uuid: (encode-path-segment $uuid)} | format pattern "/enm/{db}/substance/{uuid}/studySummary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -679,7 +706,7 @@ export def "solrquery-get" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "fq" $fq "scalar") (serialize-qp "fl" $fl "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "wt" $wt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/select" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -719,9 +746,9 @@ export def "solrquery-post" [
   let qp = [(serialize-qp "wt" $wt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/select" $qp $auth.query)
   let req_body = {"facet": $facet, "params": $params} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

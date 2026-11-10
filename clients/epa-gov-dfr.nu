@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -171,7 +198,7 @@ export def "get-dfr-rest-services-air-3-yr-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -205,7 +232,7 @@ export def "post-dfr-rest-services-air-3-yr-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.air_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -239,7 +266,7 @@ export def "get-dfr-rest-services-cwa-3-yr-effluent-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -273,7 +300,7 @@ export def "post-dfr-rest-services-cwa-3-yr-effluent-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_effluent_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -307,7 +334,7 @@ export def "get-dfr-rest-services-cwa-3-yr-sepscs-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -341,7 +368,7 @@ export def "post-dfr-rest-services-cwa-3-yr-sepscs-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.cwa_3_yr_sepscs_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -380,7 +407,7 @@ export def "get-dfr-rest-services-get-air-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -418,9 +445,9 @@ export def "post-dfr-rest-services-get-air-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_air_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -460,7 +487,7 @@ export def "get-dfr-rest-services-get-air-quality" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -498,9 +525,9 @@ export def "post-dfr-rest-services-get-air-quality" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_air_quality" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -540,7 +567,7 @@ export def "get-dfr-rest-services-get-aws-docs" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -578,9 +605,9 @@ export def "post-dfr-rest-services-get-aws-docs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_aws_docs" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -620,7 +647,7 @@ export def "get-dfr-rest-services-get-case-formal-actions" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -658,9 +685,9 @@ export def "post-dfr-rest-services-get-case-formal-actions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_case_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -700,7 +727,7 @@ export def "get-dfr-rest-services-get-compliance-history" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -738,9 +765,9 @@ export def "post-dfr-rest-services-get-compliance-history" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_history" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -780,7 +807,7 @@ export def "get-dfr-rest-services-get-compliance-summary" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -818,9 +845,9 @@ export def "post-dfr-rest-services-get-compliance-summary" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_compliance_summary" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -855,7 +882,7 @@ export def "get-dfr-rest-services-get-csv" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_csv" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -889,7 +916,7 @@ export def "post-dfr-rest-services-get-csv" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_csv" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -928,7 +955,7 @@ export def "get-dfr-rest-services-get-cwa-3yr-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -966,9 +993,9 @@ export def "post-dfr-rest-services-get-cwa-3yr-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1008,7 +1035,7 @@ export def "get-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1046,9 +1073,9 @@ export def "post-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_3yr_d80d90_counts" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1088,7 +1115,7 @@ export def "get-dfr-rest-services-get-cwa-cs-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,9 +1153,9 @@ export def "post-dfr-rest-services-get-cwa-cs-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_cs_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1168,7 +1195,7 @@ export def "get-dfr-rest-services-get-cwa-eff-alr" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1206,9 +1233,9 @@ export def "post-dfr-rest-services-get-cwa-eff-alr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1248,7 +1275,7 @@ export def "get-dfr-rest-services-get-cwa-eff-alr-exp" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1286,9 +1313,9 @@ export def "post-dfr-rest-services-get-cwa-eff-alr-exp" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_alr_exp" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1328,7 +1355,7 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1366,9 +1393,9 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1408,7 +1435,7 @@ export def "get-dfr-rest-services-get-cwa-eff-compliance-exp" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1446,9 +1473,9 @@ export def "post-dfr-rest-services-get-cwa-eff-compliance-exp" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_eff_compliance_exp" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1488,7 +1515,7 @@ export def "get-dfr-rest-services-get-cwa-ps-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1526,9 +1553,9 @@ export def "post-dfr-rest-services-get-cwa-ps-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_ps_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1568,7 +1595,7 @@ export def "get-dfr-rest-services-get-cwa-rnc-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1606,9 +1633,9 @@ export def "post-dfr-rest-services-get-cwa-rnc-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_rnc_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1648,7 +1675,7 @@ export def "get-dfr-rest-services-get-cwa-se-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1686,9 +1713,9 @@ export def "post-dfr-rest-services-get-cwa-se-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_cwa_se_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1730,7 +1757,7 @@ export def "get-dfr-rest-services-get-d80d90s-details" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1771,7 +1798,7 @@ export def "post-dfr-rest-services-get-d80d90s-details" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_npdes_id" $p_npdes_id "scalar") (serialize-qp "p_missinglate" $p_missinglate "scalar") (serialize-qp "p_qmtype" $p_qmtype "scalar") (serialize-qp "p_qmvalue" $p_qmvalue "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_d80d90s_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1810,7 +1837,7 @@ export def "get-dfr-rest-services-get-demographics-by-id" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1848,9 +1875,9 @@ export def "post-dfr-rest-services-get-demographics-by-id" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_demographics_by_id" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1891,7 +1918,7 @@ export def "get-dfr-rest-services-get-dfr" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "p_system" $p_system "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_dfr" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1930,9 +1957,9 @@ export def "post-dfr-rest-services-get-dfr" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_dfr" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "p_system": $p_system, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1972,7 +1999,7 @@ export def "get-dfr-rest-services-get-ejscreen-indexes" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2010,9 +2037,9 @@ export def "post-dfr-rest-services-get-ejscreen-indexes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_ejscreen_indexes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2052,7 +2079,7 @@ export def "get-dfr-rest-services-get-enforcement-summary" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2090,9 +2117,9 @@ export def "post-dfr-rest-services-get-enforcement-summary" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_enforcement_summary" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2132,7 +2159,7 @@ export def "get-dfr-rest-services-get-extract-dates" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2170,9 +2197,9 @@ export def "post-dfr-rest-services-get-extract-dates" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_extract_dates" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2212,7 +2239,7 @@ export def "get-dfr-rest-services-get-formal-actions" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2250,9 +2277,9 @@ export def "post-dfr-rest-services-get-formal-actions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2292,7 +2319,7 @@ export def "get-dfr-rest-services-get-icis-formal-actions" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2330,9 +2357,9 @@ export def "post-dfr-rest-services-get-icis-formal-actions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_icis_formal_actions" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2372,7 +2399,7 @@ export def "get-dfr-rest-services-get-inspections" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_inspections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2410,9 +2437,9 @@ export def "post-dfr-rest-services-get-inspections" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_inspections" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2452,7 +2479,7 @@ export def "get-dfr-rest-services-get-map" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_map" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2490,9 +2517,9 @@ export def "post-dfr-rest-services-get-map" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_map" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2532,7 +2559,7 @@ export def "get-dfr-rest-services-get-naics" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_naics" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2570,9 +2597,9 @@ export def "post-dfr-rest-services-get-naics" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_naics" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2612,7 +2639,7 @@ export def "get-dfr-rest-services-get-notices" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_notices" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2650,9 +2677,9 @@ export def "post-dfr-rest-services-get-notices" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_notices" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2692,7 +2719,7 @@ export def "get-dfr-rest-services-get-permits" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_permits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2730,9 +2757,9 @@ export def "post-dfr-rest-services-get-permits" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_permits" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2772,7 +2799,7 @@ export def "get-dfr-rest-services-get-rcra-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2810,9 +2837,9 @@ export def "post-dfr-rest-services-get-rcra-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_rcra_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2852,7 +2879,7 @@ export def "get-dfr-rest-services-get-sdwa-lead-and-copper" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2890,9 +2917,9 @@ export def "post-dfr-rest-services-get-sdwa-lead-and-copper" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_lead_and_copper" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2932,7 +2959,7 @@ export def "get-dfr-rest-services-get-sdwa-sanitary-surveys" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2970,9 +2997,9 @@ export def "post-dfr-rest-services-get-sdwa-sanitary-surveys" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_sanitary_surveys" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3012,7 +3039,7 @@ export def "get-dfr-rest-services-get-sdwa-site-visits" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3050,9 +3077,9 @@ export def "post-dfr-rest-services-get-sdwa-site-visits" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_site_visits" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3092,7 +3119,7 @@ export def "get-dfr-rest-services-get-sdwa-violations" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3130,9 +3157,9 @@ export def "post-dfr-rest-services-get-sdwa-violations" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sdwa_violations" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3172,7 +3199,7 @@ export def "get-dfr-rest-services-get-sdwis-compliance" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3210,9 +3237,9 @@ export def "post-dfr-rest-services-get-sdwis-compliance" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sdwis_compliance" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3252,7 +3279,7 @@ export def "get-dfr-rest-services-get-sic-codes" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3290,9 +3317,9 @@ export def "post-dfr-rest-services-get-sic-codes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_sic_codes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3332,7 +3359,7 @@ export def "get-dfr-rest-services-get-spatial-metadata" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3370,9 +3397,9 @@ export def "post-dfr-rest-services-get-spatial-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_spatial_metadata" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3412,7 +3439,7 @@ export def "get-dfr-rest-services-get-tri-history" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3450,9 +3477,9 @@ export def "post-dfr-rest-services-get-tri-history" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_tri_history" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3492,7 +3519,7 @@ export def "get-dfr-rest-services-get-tri-releases" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3530,9 +3557,9 @@ export def "post-dfr-rest-services-get-tri-releases" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_tri_releases" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3572,7 +3599,7 @@ export def "get-dfr-rest-services-get-tribes" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_tribes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3610,9 +3637,9 @@ export def "post-dfr-rest-services-get-tribes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_tribes" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3652,7 +3679,7 @@ export def "get-dfr-rest-services-get-water-quality" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3690,9 +3717,9 @@ export def "post-dfr-rest-services-get-water-quality" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3732,7 +3759,7 @@ export def "get-dfr-rest-services-get-water-quality-details" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_id" $p_id "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3770,9 +3797,9 @@ export def "post-dfr-rest-services-get-water-quality-details" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.get_water_quality_details" $auth.query)
   let req_body = {"output": $output, "p_id": $p_id, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3807,7 +3834,7 @@ export def "get-dfr-rest-services-rcra-3-yr-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3841,7 +3868,7 @@ export def "post-dfr-rest-services-rcra-3-yr-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dfr_rest_services.rcra_3_yr_download" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

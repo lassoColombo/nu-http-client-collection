@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -185,7 +212,7 @@ export def "list-licenses" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/license" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -235,10 +262,10 @@ export def "create-license" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/license" $auth.query)
   let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -276,7 +303,7 @@ export def "delete-license" [
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
   let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -313,7 +340,7 @@ export def "get-license" [
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
   let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -363,9 +390,9 @@ export def "update-license" [
   if ($license_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseNumber' must be non-empty" } }
   let full_url = (build-url $base ({license_number: (encode-path-segment $license_number)} | format pattern "/license/{license_number}") $auth.query)
   let req_body = {"active": $active, "currency": $currency, "hidden": $hidden, "name": $name, "number": $number, "parentfeature": $parentfeature, "price": $price, "quantity": $quantity, "startDate": $start_date, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period, "usedQuantity": $used_quantity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -401,7 +428,7 @@ export def "list-licensees" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensee" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -442,10 +469,10 @@ export def "create-licensee" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensee" $auth.query)
   let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number, "productNumber": $product_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -485,7 +512,7 @@ export def "delete-licensee" [
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -522,7 +549,7 @@ export def "get-licensee" [
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
   let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -564,9 +591,9 @@ export def "update-licensee" [
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
   let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}") $auth.query)
   let req_body = {"active": $active, "markedForTransfer": $marked_for_transfer, "name": $name, "number": $number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -606,9 +633,9 @@ export def "transfer-licenses" [
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
   let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/transfer") $auth.query)
   let req_body = {"sourceLicenseeNumber": $source_licensee_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -653,9 +680,9 @@ export def "validate-licensee" [
   if ($licensee_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseeNumber' must be non-empty" } }
   let full_url = (build-url $base ({licensee_number: (encode-path-segment $licensee_number)} | format pattern "/licensee/{licensee_number}/validate") $auth.query)
   let req_body = {"action": $action, "licenseeName": $licensee_name, "nodeSecret": $node_secret, "productModuleNumber": $product_module_number, "productNumber": $product_number, "sessionId": $session_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -691,7 +718,7 @@ export def "list-license-templates" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensetemplate" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -742,10 +769,10 @@ export def "create-license-template" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licensetemplate" $auth.query)
   let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "productModuleNumber": $product_module_number, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -785,7 +812,7 @@ export def "delete-license-template" [
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -822,7 +849,7 @@ export def "get-license-template" [
   if ($license_template_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseTemplateNumber' must be non-empty" } }
   let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -874,9 +901,9 @@ export def "update-license-template" [
   if ($license_template_number | is-empty) { error make --unspanned { msg: "path parameter 'licenseTemplateNumber' must be non-empty" } }
   let full_url = (build-url $base ({license_template_number: (encode-path-segment $license_template_number)} | format pattern "/licensetemplate/{license_template_number}") $auth.query)
   let req_body = {"active": $active, "automatic": $automatic, "currency": $currency, "hidden": $hidden, "hideLicenses": $hide_licenses, "licenseType": $license_type, "maxSessions": $max_sessions, "name": $name, "number": $number, "price": $price, "quantity": $quantity, "quota": $quota, "timeVolume": $time_volume, "timeVolumePeriod": $time_volume_period} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -912,7 +939,7 @@ export def "list-payment-methods" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/paymentmethod" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -949,7 +976,7 @@ export def "get-payment-method" [
   if ($payment_method_number | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodNumber' must be non-empty" } }
   let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -989,9 +1016,9 @@ export def "update-payment-method" [
   if ($payment_method_number | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodNumber' must be non-empty" } }
   let full_url = (build-url $base ({payment_method_number: (encode-path-segment $payment_method_number)} | format pattern "/paymentmethod/{payment_method_number}") $auth.query)
   let req_body = {"active": $active, "paypal.subject": $paypal_subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1027,7 +1054,7 @@ export def "list-products" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1071,10 +1098,10 @@ export def "create-product" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product" $auth.query)
   let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1114,7 +1141,7 @@ export def "delete-product" [
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1151,7 +1178,7 @@ export def "product-number" [
   if ($product_number | is-empty) { error make --unspanned { msg: "path parameter 'productNumber' must be non-empty" } }
   let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1197,9 +1224,9 @@ export def "update-product" [
   if ($product_number | is-empty) { error make --unspanned { msg: "path parameter 'productNumber' must be non-empty" } }
   let full_url = (build-url $base ({product_number: (encode-path-segment $product_number)} | format pattern "/product/{product_number}") $auth.query)
   let req_body = {"active": $active, "description": $description, "licenseeAutoCreate": $licensee_auto_create, "licensingInfo": $licensing_info, "name": $name, "number": $number, "vatMode": $vat_mode, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1235,7 +1262,7 @@ export def "list-product-modules" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/productmodule" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1281,10 +1308,10 @@ export def "create-product-module" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/productmodule" $auth.query)
   let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "productNumber": $product_number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1324,7 +1351,7 @@ export def "delete-product-module" [
   let qp = [(serialize-qp "forceCascade" $force_cascade "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1361,7 +1388,7 @@ export def "get-product-module" [
   if ($product_module_number | is-empty) { error make --unspanned { msg: "path parameter 'productModuleNumber' must be non-empty" } }
   let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1408,9 +1435,9 @@ export def "update-product-module" [
   if ($product_module_number | is-empty) { error make --unspanned { msg: "path parameter 'productModuleNumber' must be non-empty" } }
   let full_url = (build-url $base ({product_module_number: (encode-path-segment $product_module_number)} | format pattern "/productmodule/{product_module_number}") $auth.query)
   let req_body = {"active": $active, "licenseTemplate": $license_template, "licensingModel": $licensing_model, "maxCheckoutValidity": $max_checkout_validity, "name": $name, "nodeSecretMode": $node_secret_mode, "number": $number, "redThreshold": $red_threshold, "yellowThreshold": $yellow_threshold} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1446,7 +1473,7 @@ export def "list-tokens" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1495,9 +1522,9 @@ export def "create-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token" $auth.query)
   let req_body = {"action": $action, "apiKeyRole": $api_key_role, "cancelURL": $cancel_url, "cancelURLTitle": $cancel_url_title, "licenseTemplateNumber": $license_template_number, "licenseeNumber": $licensee_number, "predefinedShoppingItem": $predefined_shopping_item, "privateKey": $private_key, "productNumber": $product_number, "successURL": $success_url, "successURLTitle": $success_url_title, "tokenType": $token_type, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1535,7 +1562,7 @@ export def "delete-token" [
   if ($token_number | is-empty) { error make --unspanned { msg: "path parameter 'tokenNumber' must be non-empty" } }
   let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1572,7 +1599,7 @@ export def "get-token" [
   if ($token_number | is-empty) { error make --unspanned { msg: "path parameter 'tokenNumber' must be non-empty" } }
   let full_url = (build-url $base ({token_number: (encode-path-segment $token_number)} | format pattern "/token/{token_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1607,7 +1634,7 @@ export def "list-transactions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transaction" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1651,10 +1678,10 @@ export def "create-transaction" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transaction" $auth.query)
   let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "licenseeNumber": $licensee_number, "number": $number, "paymentMethod": $payment_method, "source": $source, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "active") == null) { error make --unspanned { msg: "required body field 'active' missing: pass --active or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1692,7 +1719,7 @@ export def "get-transaction" [
   if ($transaction_number | is-empty) { error make --unspanned { msg: "path parameter 'transactionNumber' must be non-empty" } }
   let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1737,9 +1764,9 @@ export def "update-transaction" [
   if ($transaction_number | is-empty) { error make --unspanned { msg: "path parameter 'transactionNumber' must be non-empty" } }
   let full_url = (build-url $base ({transaction_number: (encode-path-segment $transaction_number)} | format pattern "/transaction/{transaction_number}") $auth.query)
   let req_body = {"active": $active, "dateClosed": $date_closed, "dateCreated": $date_created, "number": $number, "paymentMethod": $payment_method, "source": $source, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1775,7 +1802,7 @@ export def "license-types" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/utility/licenseTypes" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1810,7 +1837,7 @@ export def "licensing-models" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/utility/licensingModels" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

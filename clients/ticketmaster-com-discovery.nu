@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -183,7 +210,7 @@ export def "get-discovery-v2-attractions" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "classificationName" $classification_name "multi") (serialize-qp "classificationId" $classification_id "multi") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/attractions" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -222,7 +249,7 @@ export def "get-discovery-v2-attractions-id" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/attractions/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -266,7 +293,7 @@ export def "get-discovery-v2-classifications" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/classifications" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -305,7 +332,7 @@ export def "get-genre" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/genres/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -344,7 +371,7 @@ export def "get-segment" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/segments/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -383,7 +410,7 @@ export def "get-subgenre" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/subgenres/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -421,7 +448,7 @@ export def "get-discovery-v2-classifications-id" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/classifications/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -491,7 +518,7 @@ export def "get-discovery-v2-events" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "onsaleStartDateTime" $onsale_start_date_time "scalar") (serialize-qp "onsaleOnStartDate" $onsale_on_start_date "scalar") (serialize-qp "onsaleOnAfterStartDate" $onsale_on_after_start_date "scalar") (serialize-qp "onsaleEndDateTime" $onsale_end_date_time "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "venueId" $venue_id "scalar") (serialize-qp "attractionId" $attraction_id "scalar") (serialize-qp "segmentId" $segment_id "scalar") (serialize-qp "segmentName" $segment_name "scalar") (serialize-qp "classificationName" $classification_name "multi") (serialize-qp "classificationId" $classification_id "multi") (serialize-qp "marketId" $market_id "scalar") (serialize-qp "promoterId" $promoter_id "scalar") (serialize-qp "dmaId" $dma_id "scalar") (serialize-qp "includeTBA" $include_tba "scalar") (serialize-qp "includeTBD" $include_tbd "scalar") (serialize-qp "clientVisibility" $client_visibility "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/events" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -529,7 +556,7 @@ export def "get-discovery-v2-events-id" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/events/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -568,7 +595,7 @@ export def "get-images" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/events/{id}/images") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "get-discovery-v2-suggest" [
   let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "includeFuzzy" $include_fuzzy "scalar") (serialize-qp "clientVisibility" $client_visibility "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "includeTBA" $include_tba "scalar") (serialize-qp "includeTBD" $include_tbd "scalar") (serialize-qp "segmentId" $segment_id "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/suggest" $qp $auth.query)
   let accept_val = ($accept | default "application/hal+json; charset=utf-8")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -669,7 +696,7 @@ export def "get-discovery-v2-venues" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "latlong" $latlong "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "unit" $unit "scalar") (serialize-qp "geoPoint" $geo_point "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "includeTest" $include_test "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar") (serialize-qp "includeSpellcheck" $include_spellcheck "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/discovery/v2/venues" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -707,7 +734,7 @@ export def "get-discovery-v2-venues-id" [
   let qp = [(serialize-qp "locale" $locale "scalar") (serialize-qp "includeLicensedContent" $include_licensed_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/discovery/v2/venues/{id}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

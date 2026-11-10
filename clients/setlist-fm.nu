@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -165,7 +192,7 @@ export def "resource-1-0-artist-mbid-get-artist-get" [
   if ($mbid | is-empty) { error make --unspanned { msg: "path parameter 'mbid' must be non-empty" } }
   let full_url = (build-url $base ({mbid: (encode-path-segment $mbid)} | format pattern "/1.0/artist/{mbid}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -204,7 +231,7 @@ export def "resource-1-0-artist-mbid-setlists-get-artist-setlists-get" [
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mbid: (encode-path-segment $mbid)} | format pattern "/1.0/artist/{mbid}/setlists") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -241,7 +268,7 @@ export def "resource-1-0-city-geo-id-get-city-get" [
   if ($geo_id | is-empty) { error make --unspanned { msg: "path parameter 'geoId' must be non-empty" } }
   let full_url = (build-url $base ({geo_id: (encode-path-segment $geo_id)} | format pattern "/1.0/city/{geo_id}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -282,7 +309,7 @@ export def "resource-1-0-search-artists-get-artists-get" [
   let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/artists" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -323,7 +350,7 @@ export def "resource-1-0-search-cities-get-cities-get" [
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/cities" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -358,7 +385,7 @@ export def "resource-1-0-search-countries-get-countries-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/search/countries" $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -410,7 +437,7 @@ export def "resource-1-0-search-setlists-get-setlists-get" [
   let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "lastFm" $last_fm "scalar") (serialize-qp "lastUpdated" $last_updated "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "tourName" $tour_name "scalar") (serialize-qp "venueId" $venue_id "scalar") (serialize-qp "venueName" $venue_name "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/setlists" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -453,7 +480,7 @@ export def "resource-1-0-search-venues-get-venues-get" [
   let qp = [(serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/venues" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -490,7 +517,7 @@ export def "resource-1-0-setlist-version-version-id-get-setlist-version-get" [
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'versionId' must be non-empty" } }
   let full_url = (build-url $base ({version_id: (encode-path-segment $version_id)} | format pattern "/1.0/setlist/version/{version_id}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -527,7 +554,7 @@ export def "resource-1-0-setlist-setlist-id-get-setlist-get" [
   if ($setlist_id | is-empty) { error make --unspanned { msg: "path parameter 'setlistId' must be non-empty" } }
   let full_url = (build-url $base ({setlist_id: (encode-path-segment $setlist_id)} | format pattern "/1.0/setlist/{setlist_id}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -564,7 +591,7 @@ export def "resource-1-0-user-user-id-get-user-get" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "resource-1-0-user-user-id-attended-get-user-attended-setlists-get" [
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}/attended") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -642,7 +669,7 @@ export def "resource-1-0-user-user-id-edited-get-user-edited-setlists-get" [
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/1.0/user/{user_id}/edited") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -679,7 +706,7 @@ export def "resource-1-0-venue-venue-id-get-venue-get" [
   if ($venue_id | is-empty) { error make --unspanned { msg: "path parameter 'venueId' must be non-empty" } }
   let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/1.0/venue/{venue_id}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -718,7 +745,7 @@ export def "resource-1-0-venue-venue-id-setlists-get-venue-setlists-get" [
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({venue_id: (encode-path-segment $venue_id)} | format pattern "/1.0/venue/{venue_id}/setlists") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

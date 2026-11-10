@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -191,7 +218,7 @@ export def "list-conference" [
   let qp = [(serialize-qp "ConferenceSid" $conference_sid "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "CreatedAfter" $created_after "scalar") (serialize-qp "CreatedBefore" $created_before "scalar") (serialize-qp "MixerRegion" $mixer_region "scalar") (serialize-qp "Tags" $tags "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "DetectedIssues" $detected_issues "scalar") (serialize-qp "EndReason" $end_reason "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Conferences" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -227,7 +254,7 @@ export def "fetch-conference" [
   if ($conference_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConferenceSid' must be non-empty" } }
   let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -270,7 +297,7 @@ export def "list-conference-participant" [
   let qp = [(serialize-qp "ParticipantSid" $participant_sid "scalar") (serialize-qp "Label" $label "scalar") (serialize-qp "Events" $events "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -311,7 +338,7 @@ export def "fetch-conference-participant" [
   let qp = [(serialize-qp "Events" $events "scalar") (serialize-qp "Metrics" $metrics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conference_sid: (encode-path-segment $conference_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Conferences/{conference_sid}/Participants/{participant_sid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -354,7 +381,7 @@ export def "list-video-room-summary" [
   let qp = [(serialize-qp "RoomType" $room_type "multi") (serialize-qp "Codec" $codec "multi") (serialize-qp "RoomName" $room_name "scalar") (serialize-qp "CreatedAfter" $created_after "scalar") (serialize-qp "CreatedBefore" $created_before "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Video/Rooms" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -390,7 +417,7 @@ export def "fetch-video-room-summary" [
   if ($room_sid | is-empty) { error make --unspanned { msg: "path parameter 'RoomSid' must be non-empty" } }
   let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -430,7 +457,7 @@ export def "list-video-participant-summary" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,7 +495,7 @@ export def "fetch-video-participant-summary" [
   if ($participant_sid | is-empty) { error make --unspanned { msg: "path parameter 'ParticipantSid' must be non-empty" } }
   let full_url = (build-url $base ({room_sid: (encode-path-segment $room_sid), participant_sid: (encode-path-segment $participant_sid)} | format pattern "/v1/Video/Rooms/{room_sid}/Participants/{participant_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -503,7 +530,7 @@ export def "fetch-account-settings" [
   let qp = [(serialize-qp "SubaccountSid" $subaccount_sid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Voice/Settings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -540,9 +567,9 @@ export def "update-account-settings" [
   let base = ($base_url | default "https://insights.twilio.com")
   let full_url = (build-url $base "/v1/Voice/Settings" $auth.query)
   let req_body = {"AdvancedFeatures": $advanced_features, "SubaccountSid": $subaccount_sid, "VoiceTrace": $voice_trace} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -599,7 +626,7 @@ export def "list-call-summaries" [
   let qp = [(serialize-qp "From" $from "scalar") (serialize-qp "To" $to "scalar") (serialize-qp "FromCarrier" $from_carrier "scalar") (serialize-qp "ToCarrier" $to_carrier "scalar") (serialize-qp "FromCountryCode" $from_country_code "scalar") (serialize-qp "ToCountryCode" $to_country_code "scalar") (serialize-qp "Branded" $branded "scalar") (serialize-qp "VerifiedCaller" $verified_caller "scalar") (serialize-qp "HasTag" $has_tag "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "CallType" $call_type "scalar") (serialize-qp "CallState" $call_state "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "ProcessingState" $processing_state "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "Subaccount" $subaccount "scalar") (serialize-qp "AbnormalSession" $abnormal_session "scalar") (serialize-qp "AnsweredBy" $answered_by "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Voice/Summaries" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -635,7 +662,7 @@ export def "fetch-annotation" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -679,9 +706,9 @@ export def "update-annotation" [
   if ($call_sid | is-empty) { error make --unspanned { msg: "path parameter 'CallSid' must be non-empty" } }
   let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Annotation") $auth.query)
   let req_body = {"AnsweredBy": $answered_by, "CallScore": $call_score, "Comment": $comment, "ConnectivityIssue": $connectivity_issue, "Incident": $incident, "QualityIssues": $quality_issues, "Spam": $spam} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -722,7 +749,7 @@ export def "list-event" [
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -763,7 +790,7 @@ export def "list-metric" [
   let qp = [(serialize-qp "Edge" $edge "scalar") (serialize-qp "Direction" $direction "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Metrics") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -800,7 +827,7 @@ export def "fetch-summary" [
   let qp = [(serialize-qp "ProcessingState" $processing_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({call_sid: (encode-path-segment $call_sid)} | format pattern "/v1/Voice/{call_sid}/Summary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -835,7 +862,7 @@ export def "fetch-call" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Voice/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

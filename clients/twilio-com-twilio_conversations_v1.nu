@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -187,7 +214,7 @@ export def "fetch-configuration" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -226,9 +253,9 @@ export def "update-configuration" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration" $auth.query)
   let req_body = {"DefaultChatServiceSid": $default_chat_service_sid, "DefaultClosedTimer": $default_closed_timer, "DefaultInactiveTimer": $default_inactive_timer, "DefaultMessagingServiceSid": $default_messaging_service_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -268,7 +295,7 @@ export def "list-configuration-address" [
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Configuration/Addresses" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -314,9 +341,9 @@ export def "create-configuration-address" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration/Addresses" $auth.query)
   let req_body = {"Address": $address, "AutoCreation.ConversationServiceSid": $auto_creation_conversation_service_sid, "AutoCreation.Enabled": $auto_creation_enabled, "AutoCreation.StudioFlowSid": $auto_creation_studio_flow_sid, "AutoCreation.StudioRetryCount": $auto_creation_studio_retry_count, "AutoCreation.Type": $auto_creation_type, "AutoCreation.WebhookFilters": $auto_creation_webhook_filters, "AutoCreation.WebhookMethod": $auto_creation_webhook_method, "AutoCreation.WebhookUrl": $auto_creation_webhook_url, "FriendlyName": $friendly_name, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -353,7 +380,7 @@ export def "delete-configuration-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Configuration/Addresses/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -389,7 +416,7 @@ export def "fetch-configuration-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Configuration/Addresses/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -435,9 +462,9 @@ export def "update-configuration-address" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Configuration/Addresses/{sid}") $auth.query)
   let req_body = {"AutoCreation.ConversationServiceSid": $auto_creation_conversation_service_sid, "AutoCreation.Enabled": $auto_creation_enabled, "AutoCreation.StudioFlowSid": $auto_creation_studio_flow_sid, "AutoCreation.StudioRetryCount": $auto_creation_studio_retry_count, "AutoCreation.Type": $auto_creation_type, "AutoCreation.WebhookFilters": $auto_creation_webhook_filters, "AutoCreation.WebhookMethod": $auto_creation_webhook_method, "AutoCreation.WebhookUrl": $auto_creation_webhook_url, "FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -471,7 +498,7 @@ export def "fetch-configuration-webhook" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration/Webhooks" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -510,9 +537,9 @@ export def "update-configuration-webhook" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration/Webhooks" $auth.query)
   let req_body = {"Filters": $filters, "Method": $method, "PostWebhookUrl": $post_webhook_url, "PreWebhookUrl": $pre_webhook_url, "Target": $target} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -554,7 +581,7 @@ export def "list-conversation" [
   let qp = [(serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "State" $state "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Conversations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -599,11 +626,11 @@ export def "create-conversation" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Conversations" $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "MessagingServiceSid": $messaging_service_sid, "State": $state, "Timers.Closed": $timers_closed, "Timers.Inactive": $timers_inactive, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -645,7 +672,7 @@ export def "list-conversation-message" [
   let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -691,11 +718,11 @@ export def "create-conversation-message" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages") $auth.query)
   let req_body = {"Attributes": $attributes, "Author": $author, "Body": $body, "ContentSid": $content_sid, "ContentVariables": $content_variables, "DateCreated": $date_created, "DateUpdated": $date_updated, "MediaSid": $media_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -738,7 +765,7 @@ export def "list-conversation-message-receipt" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages/{message_sid}/Receipts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -778,7 +805,7 @@ export def "fetch-conversation-message-receipt" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages/{message_sid}/Receipts/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -817,9 +844,9 @@ export def "delete-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -857,7 +884,7 @@ export def "fetch-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -902,11 +929,11 @@ export def "update-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "Author": $author, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -947,7 +974,7 @@ export def "list-conversation-participant" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -993,11 +1020,11 @@ export def "create-conversation-participant" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Participants") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "Identity": $identity, "MessagingBinding.Address": $messaging_binding_address, "MessagingBinding.ProjectedAddress": $messaging_binding_projected_address, "MessagingBinding.ProxyAddress": $messaging_binding_proxy_address, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1037,9 +1064,9 @@ export def "delete-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1077,7 +1104,7 @@ export def "fetch-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,11 +1153,11 @@ export def "update-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "Identity": $identity, "LastReadMessageIndex": $last_read_message_index, "LastReadTimestamp": $last_read_timestamp, "MessagingBinding.ProjectedAddress": $messaging_binding_projected_address, "MessagingBinding.ProxyAddress": $messaging_binding_proxy_address, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1171,7 +1198,7 @@ export def "list-conversation-scoped-webhook" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Webhooks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1215,9 +1242,9 @@ export def "create-conversation-scoped-webhook" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Conversations/{conversation_sid}/Webhooks") $auth.query)
   let req_body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.ReplayAfter": $configuration_replay_after, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url, "Target": $target} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1256,7 +1283,7 @@ export def "delete-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1294,7 +1321,7 @@ export def "fetch-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1338,9 +1365,9 @@ export def "update-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let req_body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1378,9 +1405,9 @@ export def "delete-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1416,7 +1443,7 @@ export def "fetch-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1463,11 +1490,11 @@ export def "update-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Conversations/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "MessagingServiceSid": $messaging_service_sid, "State": $state, "Timers.Closed": $timers_closed, "Timers.Inactive": $timers_inactive, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1506,7 +1533,7 @@ export def "list-credential" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Credentials" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1548,9 +1575,9 @@ export def "create-credential" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Credentials" $auth.query)
   let req_body = {"ApiKey": $api_key, "Certificate": $certificate, "FriendlyName": $friendly_name, "PrivateKey": $private_key, "Sandbox": $sandbox, "Secret": $secret, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1587,7 +1614,7 @@ export def "delete-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Credentials/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1623,7 +1650,7 @@ export def "fetch-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Credentials/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1667,9 +1694,9 @@ export def "update-credential" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Credentials/{sid}") $auth.query)
   let req_body = {"ApiKey": $api_key, "Certificate": $certificate, "FriendlyName": $friendly_name, "PrivateKey": $private_key, "Sandbox": $sandbox, "Secret": $secret, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1710,7 +1737,7 @@ export def "list-participant-conversation" [
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "Address" $address "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ParticipantConversations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1748,7 +1775,7 @@ export def "list-role" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Roles" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1786,9 +1813,9 @@ export def "create-role" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Roles" $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "Permission": $permission, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1825,7 +1852,7 @@ export def "delete-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Roles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1861,7 +1888,7 @@ export def "fetch-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Roles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1899,9 +1926,9 @@ export def "update-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Roles/{sid}") $auth.query)
   let req_body = {"Permission": $permission} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1940,7 +1967,7 @@ export def "list-service" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Services" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1976,9 +2003,9 @@ export def "create-service" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Services" $auth.query)
   let req_body = {"FriendlyName": $friendly_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2021,7 +2048,7 @@ export def "list-service-binding" [
   let qp = [(serialize-qp "BindingType" $binding_type "multi") (serialize-qp "Identity" $identity "multi") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Bindings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2059,7 +2086,7 @@ export def "delete-service-binding" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Bindings/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2097,7 +2124,7 @@ export def "fetch-service-binding" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Bindings/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2133,7 +2160,7 @@ export def "fetch-service-configuration" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2174,9 +2201,9 @@ export def "update-service-configuration" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration") $auth.query)
   let req_body = {"DefaultChatServiceRoleSid": $default_chat_service_role_sid, "DefaultConversationCreatorRoleSid": $default_conversation_creator_role_sid, "DefaultConversationRoleSid": $default_conversation_role_sid, "ReachabilityEnabled": $reachability_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2213,7 +2240,7 @@ export def "fetch-service-notification" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration/Notifications") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2263,9 +2290,9 @@ export def "update-service-notification" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration/Notifications") $auth.query)
   let req_body = {"AddedToConversation.Enabled": $added_to_conversation_enabled, "AddedToConversation.Sound": $added_to_conversation_sound, "AddedToConversation.Template": $added_to_conversation_template, "LogEnabled": $log_enabled, "NewMessage.BadgeCountEnabled": $new_message_badge_count_enabled, "NewMessage.Enabled": $new_message_enabled, "NewMessage.Sound": $new_message_sound, "NewMessage.Template": $new_message_template, "NewMessage.WithMedia.Enabled": $new_message_with_media_enabled, "NewMessage.WithMedia.Template": $new_message_with_media_template, "RemovedFromConversation.Enabled": $removed_from_conversation_enabled, "RemovedFromConversation.Sound": $removed_from_conversation_sound, "RemovedFromConversation.Template": $removed_from_conversation_template} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2302,7 +2329,7 @@ export def "fetch-service-webhook-configuration" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration/Webhooks") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2343,9 +2370,9 @@ export def "update-service-webhook-configuration" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Configuration/Webhooks") $auth.query)
   let req_body = {"Filters": $filters, "Method": $method, "PostWebhookUrl": $post_webhook_url, "PreWebhookUrl": $pre_webhook_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2389,7 +2416,7 @@ export def "list-service-conversation" [
   let qp = [(serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "State" $state "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2436,11 +2463,11 @@ export def "create-service-conversation" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "MessagingServiceSid": $messaging_service_sid, "State": $state, "Timers.Closed": $timers_closed, "Timers.Inactive": $timers_inactive, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2484,7 +2511,7 @@ export def "list-service-conversation-message" [
   let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2532,11 +2559,11 @@ export def "create-service-conversation-message" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages") $auth.query)
   let req_body = {"Attributes": $attributes, "Author": $author, "Body": $body, "ContentSid": $content_sid, "ContentVariables": $content_variables, "DateCreated": $date_created, "DateUpdated": $date_updated, "MediaSid": $media_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2581,7 +2608,7 @@ export def "list-service-conversation-message-receipt" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), message_sid: (encode-path-segment $message_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages/{message_sid}/Receipts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2623,7 +2650,7 @@ export def "fetch-service-conversation-message-receipt" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), message_sid: (encode-path-segment $message_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages/{message_sid}/Receipts/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2664,9 +2691,9 @@ export def "delete-service-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2706,7 +2733,7 @@ export def "fetch-service-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2753,11 +2780,11 @@ export def "update-service-conversation-message" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Messages/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "Author": $author, "Body": $body, "DateCreated": $date_created, "DateUpdated": $date_updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2800,7 +2827,7 @@ export def "list-service-conversation-participant" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Participants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2848,11 +2875,11 @@ export def "create-service-conversation-participant" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Participants") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "Identity": $identity, "MessagingBinding.Address": $messaging_binding_address, "MessagingBinding.ProjectedAddress": $messaging_binding_projected_address, "MessagingBinding.ProxyAddress": $messaging_binding_proxy_address, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2894,9 +2921,9 @@ export def "delete-service-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2936,7 +2963,7 @@ export def "fetch-service-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2987,11 +3014,11 @@ export def "update-service-conversation-participant" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Participants/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "Identity": $identity, "LastReadMessageIndex": $last_read_message_index, "LastReadTimestamp": $last_read_timestamp, "MessagingBinding.ProjectedAddress": $messaging_binding_projected_address, "MessagingBinding.ProxyAddress": $messaging_binding_proxy_address, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3034,7 +3061,7 @@ export def "list-service-conversation-scoped-webhook" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Webhooks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3080,9 +3107,9 @@ export def "create-service-conversation-scoped-webhook" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Webhooks") $auth.query)
   let req_body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.ReplayAfter": $configuration_replay_after, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url, "Target": $target} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3123,7 +3150,7 @@ export def "delete-service-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3163,7 +3190,7 @@ export def "fetch-service-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3209,9 +3236,9 @@ export def "update-service-conversation-scoped-webhook" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), conversation_sid: (encode-path-segment $conversation_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{conversation_sid}/Webhooks/{sid}") $auth.query)
   let req_body = {"Configuration.Filters": $configuration_filters, "Configuration.FlowSid": $configuration_flow_sid, "Configuration.Method": $configuration_method, "Configuration.Triggers": $configuration_triggers, "Configuration.Url": $configuration_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3251,9 +3278,9 @@ export def "delete-service-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3291,7 +3318,7 @@ export def "fetch-service-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3340,11 +3367,11 @@ export def "update-service-conversation" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Conversations/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "DateCreated": $date_created, "DateUpdated": $date_updated, "FriendlyName": $friendly_name, "MessagingServiceSid": $messaging_service_sid, "State": $state, "Timers.Closed": $timers_closed, "Timers.Inactive": $timers_inactive, "UniqueName": $unique_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3387,7 +3414,7 @@ export def "list-service-participant-conversation" [
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "Address" $address "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/ParticipantConversations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3427,7 +3454,7 @@ export def "list-service-role" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3467,9 +3494,9 @@ export def "create-service-role" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Roles") $auth.query)
   let req_body = {"FriendlyName": $friendly_name, "Permission": $permission, "Type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3508,7 +3535,7 @@ export def "delete-service-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Roles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3546,7 +3573,7 @@ export def "fetch-service-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Roles/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3586,9 +3613,9 @@ export def "update-service-role" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Roles/{sid}") $auth.query)
   let req_body = {"Permission": $permission} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3629,7 +3656,7 @@ export def "list-service-user" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3671,11 +3698,11 @@ export def "create-service-user" [
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users") $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Identity": $identity, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3715,9 +3742,9 @@ export def "delete-service-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3755,7 +3782,7 @@ export def "fetch-service-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3798,11 +3825,11 @@ export def "update-service-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3845,7 +3872,7 @@ export def "list-service-user-conversation" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), user_sid: (encode-path-segment $user_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{user_sid}/Conversations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3885,7 +3912,7 @@ export def "delete-service-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3925,7 +3952,7 @@ export def "fetch-service-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3969,9 +3996,9 @@ export def "update-service-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({chat_service_sid: (encode-path-segment $chat_service_sid), user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Services/{chat_service_sid}/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let req_body = {"LastReadMessageIndex": $last_read_message_index, "LastReadTimestamp": $last_read_timestamp, "NotificationLevel": $notification_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4008,7 +4035,7 @@ export def "delete-service" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4044,7 +4071,7 @@ export def "fetch-service" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Services/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4082,7 +4109,7 @@ export def "list-user" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Users" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4122,11 +4149,11 @@ export def "create-user" [
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Users" $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Identity": $identity, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4164,9 +4191,9 @@ export def "delete-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Users/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4202,7 +4229,7 @@ export def "fetch-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Users/{sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4243,11 +4270,11 @@ export def "update-user" [
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Users/{sid}") $auth.query)
   let req_body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "RoleSid": $role_sid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4288,7 +4315,7 @@ export def "list-user-conversation" [
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_sid: (encode-path-segment $user_sid)} | format pattern "/v1/Users/{user_sid}/Conversations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4326,7 +4353,7 @@ export def "delete-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4364,7 +4391,7 @@ export def "fetch-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4406,9 +4433,9 @@ export def "update-user-conversation" [
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
   let full_url = (build-url $base ({user_sid: (encode-path-segment $user_sid), conversation_sid: (encode-path-segment $conversation_sid)} | format pattern "/v1/Users/{user_sid}/Conversations/{conversation_sid}") $auth.query)
   let req_body = {"LastReadMessageIndex": $last_read_message_index, "LastReadTimestamp": $last_read_timestamp, "NotificationLevel": $notification_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

@@ -12,29 +12,38 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "query-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "token")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -62,9 +85,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -87,9 +112,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.pandascore.co"] }
@@ -99,9 +150,9 @@ def auth-scheme-completer [] { ["bearer" "query-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-additions" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-additions" "get-changes" "get-deletions" "get-incidents" "get-leagues" "get-leagues-league-id-or-slug" "get-leagues-league-id-or-slug-matches" "get-leagues-league-id-or-slug-matches-past" "get-leagues-league-id-or-slug-matches-running" "get-leagues-league-id-or-slug-matches-upcoming" "get-leagues-league-id-or-slug-series" "get-leagues-league-id-or-slug-tournaments" "get-lives" "get-matches" "get-matches-past" "get-matches-running" "get-matches-upcoming" "get-matches-match-id-or-slug" "get-matches-match-id-or-slug-opponents" "get-players" "get-players-player-id-or-slug" "get-players-player-id-or-slug-matches" "get-series" "get-series-past" "get-series-running" "get-series-upcoming" "get-series-serie-id-or-slug" "get-series-serie-id-or-slug-matches" "get-series-serie-id-or-slug-matches-past" "get-series-serie-id-or-slug-matches-running" "get-series-serie-id-or-slug-matches-upcoming" "get-series-serie-id-or-slug-players" "get-series-serie-id-or-slug-tournaments" "get-teams" "get-teams-team-id-or-slug" "get-teams-team-id-or-slug-leagues" "get-teams-team-id-or-slug-matches" "get-teams-team-id-or-slug-series" "get-teams-team-id-or-slug-tournaments" "get-tournaments" "get-tournaments-past" "get-tournaments-running" "get-tournaments-upcoming" "get-tournaments-tournament-id-or-slug" "get-tournaments-tournament-id-or-slug-brackets" "get-tournaments-tournament-id-or-slug-matches" "get-tournaments-tournament-id-or-slug-players" "get-tournaments-tournament-id-or-slug-rosters" "get-tournaments-tournament-id-or-slug-standings" "get-tournaments-tournament-id-or-slug-teams" "get-videogames" "get-videogames-videogame-id-or-slug" "get-videogames-videogame-id-or-slug-leagues" "get-videogames-videogame-id-or-slug-series" "get-videogames-videogame-id-or-slug-tournaments" "get-videogames-videogame-id-or-slug-versions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,13 +189,13 @@ export def "get-additions" [
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
   --videogame: list # Filter by videogame(s)
-]: nothing -> any {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "videogame" $videogame "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/additions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -178,13 +229,13 @@ export def "get-changes" [
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
   --videogame: list # Filter by videogame(s)
-]: nothing -> any {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "videogame" $videogame "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/changes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -218,13 +269,13 @@ export def "get-deletions" [
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
   --videogame: list # Filter by videogame(s)
-]: nothing -> any {
+]: nothing -> oneof<table<change_type: string, id: any, modified_at: string, object: record<deleted_at: string, reason: any, videogame_id: int>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "videogame" $videogame "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/deletions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -258,13 +309,13 @@ export def "get-incidents" [
   --type: list # Filter by result type(s)
   --since: string # Filter out older results (format: date-time)
   --videogame: list # Filter by videogame(s)
-]: nothing -> any {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "videogame" $videogame "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/incidents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -294,22 +345,22 @@ export def "get-leagues" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Options to search results (e.g. {name: Contenders})
-  --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
+  --sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, image_url: string, modified_at: string, name: string, series: list<record>, slug: string, url: string, videogame: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/leagues" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "sort": $qp_sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
+    query: ({"search": $search, "sort": $sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -335,13 +386,13 @@ export def "get-leagues-league-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<id: int, image_url: string, modified_at: string, name: string, series: table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, slug: string, url: string, videogame: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -373,22 +424,22 @@ export def "get-leagues-league-id-or-slug-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -416,22 +467,22 @@ export def "get-leagues-league-id-or-slug-matches-past" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/past") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -459,22 +510,22 @@ export def "get-leagues-league-id-or-slug-matches-running" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/running") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -502,22 +553,22 @@ export def "get-leagues-league-id-or-slug-matches-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/matches/upcoming") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -545,22 +596,22 @@ export def "get-leagues-league-id-or-slug-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/series") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -588,22 +639,22 @@ export def "get-leagues-league-id-or-slug-tournaments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($league_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'league_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({league_id_or_slug: (encode-path-segment $league_id_or_slug)} | format pattern "/leagues/{league_id_or_slug}/tournaments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -630,13 +681,13 @@ export def "get-lives" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<endpoints: list<record>, event: record<begin_at: string, end_at: string, game: string, id: int, is_active: bool, stream_url: string, tournament_id: int>, match: record<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list, id: int, league: record, league_id: int, live: record, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list, original_scheduled_at: string, rescheduled: bool, results: list, scheduled_at: string, serie: record, serie_id: int, slug: string, status: string, streams: record, streams_list: list, tournament: record, tournament_id: int, videogame: record, videogame_version: record, winner: record, winner_id: record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lives" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -667,21 +718,21 @@ export def "get-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matches" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -708,21 +759,21 @@ export def "get-matches-past" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matches/past" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -749,21 +800,21 @@ export def "get-matches-running" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matches/running" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -790,21 +841,21 @@ export def "get-matches-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/matches/upcoming" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -830,13 +881,13 @@ export def "get-matches-match-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: table<begin_at: string, complete: bool, detailed_stats: bool, end_at: string, finished: bool, forfeit: bool, id: any, length: int, match_id: int, position: int, status: string, video_url: string, winner: record, winner_type: string>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: table<opponent: any, type: string>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record<embed_url: string, raw_url: string>, official: record<embed_url: string, raw_url: string>, russian: record<embed_url: string, raw_url: string>>, streams_list: table<embed_url: string, language: string, main: bool, official: bool, raw_url: string>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($match_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'match_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({match_id_or_slug: (encode-path-segment $match_id_or_slug)} | format pattern "/matches/{match_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -872,7 +923,7 @@ export def "get-matches-match-id-or-slug-opponents" [
   if ($match_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'match_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({match_id_or_slug: (encode-path-segment $match_id_or_slug)} | format pattern "/matches/{match_id_or_slug}/opponents") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -903,21 +954,21 @@ export def "get-players" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {hometown: France})
   --search: record # Options to search results (e.g. {role: tank})
-  --qp-sort: list # Options to sort results (e.g. [last_name])
+  --sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<birth_year: float, birthday: string, current_team: record<acronym: string, id: int, image_url: string, location: string, modified_at: string, name: string, slug: string>, current_videogame: record, first_name: string, hometown: string, id: int, image_url: string, last_name: string, name: string, nationality: string, role: string, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/players" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -943,13 +994,13 @@ export def "get-players-player-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<birth_year: float, birthday: string, current_team: record<acronym: string, id: int, image_url: string, location: string, modified_at: string, name: string, slug: string>, current_videogame: record, first_name: string, hometown: string, id: int, image_url: string, last_name: string, name: string, nationality: string, role: string, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'player_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({player_id_or_slug: (encode-path-segment $player_id_or_slug)} | format pattern "/players/{player_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -981,22 +1032,22 @@ export def "get-players-player-id-or-slug-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'player_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({player_id_or_slug: (encode-path-segment $player_id_or_slug)} | format pattern "/players/{player_id_or_slug}/matches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1023,21 +1074,21 @@ export def "get-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1064,21 +1115,21 @@ export def "get-series-past" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series/past" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1105,21 +1156,21 @@ export def "get-series-running" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series/running" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1146,21 +1197,21 @@ export def "get-series-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series/upcoming" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1186,13 +1237,13 @@ export def "get-series-serie-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: table<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1224,22 +1275,22 @@ export def "get-series-serie-id-or-slug-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1267,22 +1318,22 @@ export def "get-series-serie-id-or-slug-matches-past" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/past") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1310,22 +1361,22 @@ export def "get-series-serie-id-or-slug-matches-running" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/running") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1353,22 +1404,22 @@ export def "get-series-serie-id-or-slug-matches-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/matches/upcoming") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1396,22 +1447,22 @@ export def "get-series-serie-id-or-slug-players" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {hometown: France})
   --search: record # Options to search results (e.g. {role: tank})
-  --qp-sort: list # Options to sort results (e.g. [last_name])
+  --sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<birth_year: float, birthday: string, current_team: record<acronym: string, id: int, image_url: string, location: string, modified_at: string, name: string, slug: string>, current_videogame: record, first_name: string, hometown: string, id: int, image_url: string, last_name: string, name: string, nationality: string, role: string, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/players") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1439,22 +1490,22 @@ export def "get-series-serie-id-or-slug-tournaments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($serie_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'serie_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({serie_id_or_slug: (encode-path-segment $serie_id_or_slug)} | format pattern "/series/{serie_id_or_slug}/tournaments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1481,21 +1532,21 @@ export def "get-teams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {acronym: RNG})
   --search: record # Options to search results (e.g. {name: vitality})
-  --qp-sort: list # Options to sort results (e.g. [name])
+  --sort: list # Options to sort results (e.g. [name])
   --range: record # Options to select results within ranges (e.g. {name: [vitality, vultur]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<acronym: string, current_videogame: record, id: int, image_url: string, location: string, modified_at: string, name: string, players: list<record>, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1521,13 +1572,13 @@ export def "get-teams-team-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<acronym: string, current_videogame: record, id: int, image_url: string, location: string, modified_at: string, name: string, players: table<birth_year: float, birthday: string, first_name: string, hometown: string, id: int, image_url: string, last_name: string, name: string, nationality: string, role: string, slug: string>, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1558,23 +1609,23 @@ export def "get-teams-team-id-or-slug-leagues" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Options to search results (e.g. {name: Contenders})
-  --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
+  --sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, image_url: string, modified_at: string, name: string, series: list<record>, slug: string, url: string, videogame: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/leagues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "sort": $qp_sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
+    query: ({"search": $search, "sort": $sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1602,22 +1653,22 @@ export def "get-teams-team-id-or-slug-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/matches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1645,22 +1696,22 @@ export def "get-teams-team-id-or-slug-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/series") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1688,22 +1739,22 @@ export def "get-teams-team-id-or-slug-tournaments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($team_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id_or_slug: (encode-path-segment $team_id_or_slug)} | format pattern "/teams/{team_id_or_slug}/tournaments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1730,21 +1781,21 @@ export def "get-tournaments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tournaments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1771,21 +1822,21 @@ export def "get-tournaments-past" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tournaments/past" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1812,21 +1863,21 @@ export def "get-tournaments-running" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tournaments/running" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1853,21 +1904,21 @@ export def "get-tournaments-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {serie_id: 1808})
   --search: record # Options to search results (e.g. {name: group})
-  --qp-sort: list # Options to sort results (e.g. [serie_id, -begin_at])
+  --sort: list # Options to sort results (e.g. [serie_id, -begin_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tournaments/upcoming" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1893,13 +1944,13 @@ export def "get-tournaments-tournament-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<begin_at: string, end_at: string, expected_roster: table<players: list, team: record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, id: int, live: record, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, original_scheduled_at: string, rescheduled: bool, scheduled_at: string, slug: string, status: string, streams: record, streams_list: list, tournament_id: int, winner_id: record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: table<acronym: string, id: int, image_url: string, location: string, modified_at: string, name: string, slug: string>, videogame: record, winner_id: record, winner_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1931,22 +1982,22 @@ export def "get-tournaments-tournament-id-or-slug-brackets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive
   --range: record # Options to select results within ranges
-  --qp-sort: list # Options to sort results
+  --sort: list # Options to sort results
   --search: record # Options to search results
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, previous_matches: list<record>, scheduled_at: string, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament_id: int, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/brackets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "range": $range, "sort": $qp_sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "range": $range, "sort": $sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1974,22 +2025,22 @@ export def "get-tournaments-tournament-id-or-slug-matches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {detailed_stats: true})
   --search: record # Options to search results (e.g. {name: Finals})
-  --qp-sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
+  --sort: list # Options to sort results (e.g. [tournament_id, scheduled_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, detailed_stats: bool, draw: bool, end_at: string, forfeit: bool, game_advantage: record, games: list<record>, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live: record<opens_at: string, supported: bool, url: string>, live_embed_url: string, match_type: string, modified_at: string, name: string, number_of_games: int, official_stream_url: string, opponents: list<record>, original_scheduled_at: string, rescheduled: bool, results: list<any>, scheduled_at: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, status: string, streams: record<english: record, official: record, russian: record>, streams_list: list<record>, tournament: record<begin_at: string, end_at: string, id: int, league_id: int, live_supported: bool, modified_at: string, name: string, prizepool: string, serie_id: int, slug: string, winner_id: record, winner_type: string>, tournament_id: int, videogame: record, videogame_version: record<current: bool, name: string>, winner: record, winner_id: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/matches") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2017,22 +2068,22 @@ export def "get-tournaments-tournament-id-or-slug-players" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {hometown: France})
   --search: record # Options to search results (e.g. {role: tank})
-  --qp-sort: list # Options to sort results (e.g. [last_name])
+  --sort: list # Options to sort results (e.g. [last_name])
   --range: record # Options to select results within ranges (e.g. {name: [f, i]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<birth_year: float, birthday: string, current_team: record<acronym: string, id: int, image_url: string, location: string, modified_at: string, name: string, slug: string>, current_videogame: record, first_name: string, hometown: string, id: int, image_url: string, last_name: string, name: string, nationality: string, role: string, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/players") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2064,7 +2115,7 @@ export def "get-tournaments-tournament-id-or-slug-rosters" [
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/rosters") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2096,14 +2147,14 @@ export def "get-tournaments-tournament-id-or-slug-standings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/standings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2135,22 +2186,22 @@ export def "get-tournaments-tournament-id-or-slug-teams" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {acronym: RNG})
   --search: record # Options to search results (e.g. {name: vitality})
-  --qp-sort: list # Options to sort results (e.g. [name])
+  --sort: list # Options to sort results (e.g. [name])
   --range: record # Options to select results within ranges (e.g. {name: [vitality, vultur]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<acronym: string, current_videogame: record, id: int, image_url: string, location: string, modified_at: string, name: string, players: list<record>, slug: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tournament_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'tournament_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tournament_id_or_slug: (encode-path-segment $tournament_id_or_slug)} | format pattern "/tournaments/{tournament_id_or_slug}/teams") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2177,13 +2228,13 @@ export def "get-videogames" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/videogames" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2219,7 +2270,7 @@ export def "get-videogames-videogame-id-or-slug" [
   if ($videogame_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'videogame_id_or_slug' must be non-empty" } }
   let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2249,23 +2300,23 @@ export def "get-videogames-videogame-id-or-slug-leagues" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Options to search results (e.g. {name: Contenders})
-  --qp-sort: list # Options to sort results (e.g. [name, -modified_at])
+  --sort: list # Options to sort results (e.g. [name, -modified_at])
   --range: record # Options to select results within ranges (e.g. {modified_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --filter: record # Options to filter results. String fields are case sensitive
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<id: int, image_url: string, modified_at: string, name: string, series: list<record>, slug: string, url: string, videogame: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($videogame_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'videogame_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/leagues") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"search": $search, "sort": $qp_sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
+    query: ({"search": $search, "sort": $sort, "range": $range, "filter": $filter, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2293,22 +2344,22 @@ export def "get-videogames-videogame-id-or-slug-series" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive (e.g. {winner_id: 390, winner_type: Team})
   --search: record # Options to search results (e.g. {slug: lck})
-  --qp-sort: list # Options to sort results (e.g. [year, -modified_at])
+  --sort: list # Options to sort results (e.g. [year, -modified_at])
   --range: record # Options to select results within ranges (e.g. {begin_at: [2019-04-08T17:00:00Z, 2019-10-08T22:00:00Z]})
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, description: string, end_at: string, full_name: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, tournaments: list<record>, videogame: record, videogame_title: record<id: int, name: string, videogame_id: int>, winner_id: record, winner_type: string, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($videogame_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'videogame_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "search" $search "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "range" $range "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/series") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "search": $search, "sort": $qp_sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "search": $search, "sort": $sort, "range": $range, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2336,22 +2387,22 @@ export def "get-videogames-videogame-id-or-slug-tournaments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive
   --range: record # Options to select results within ranges
-  --qp-sort: list # Options to sort results
+  --sort: list # Options to sort results
   --search: record # Options to search results
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<begin_at: string, end_at: string, id: int, league: record<id: int, image_url: string, modified_at: string, name: string, slug: string, url: string>, league_id: int, live_supported: bool, matches: list<record>, modified_at: string, name: string, prizepool: string, serie: record<begin_at: string, description: string, end_at: string, full_name: string, id: int, league_id: int, modified_at: string, name: string, season: string, slug: string, tier: string, winner_id: record, winner_type: string, year: int>, serie_id: int, slug: string, teams: list<record>, videogame: record, winner_id: record, winner_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($videogame_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'videogame_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/tournaments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "range": $range, "sort": $qp_sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "range": $range, "sort": $sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2379,22 +2430,22 @@ export def "get-videogames-videogame-id-or-slug-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # Options to filter results. String fields are case sensitive
   --range: record # Options to select results within ranges
-  --qp-sort: list # Options to sort results
+  --sort: list # Options to sort results
   --search: record # Options to search results
   --page: string # Pagination in the form of `page=2` or `page[size]=30&page[number]=2`
   --per-page: int # Equivalent to `page[size]` (default: 50, e.g. 5)
-]: nothing -> any {
+]: nothing -> oneof<table<current: bool, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($videogame_id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'videogame_id_or_slug' must be non-empty" } }
-  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "range" $range "deepObject") (serialize-qp "sort" $sort "multi") (serialize-qp "search" $search "deepObject") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({videogame_id_or_slug: (encode-path-segment $videogame_id_or_slug)} | format pattern "/videogames/{videogame_id_or_slug}/versions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "range": $range, "sort": $qp_sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
+    query: ({"filter": $filter, "range": $range, "sort": $sort, "search": $search, "page": $page, "per_page": $per_page} | compact)
     headers: $auth.headers
     body: null
     content_type: null

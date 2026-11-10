@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -191,7 +218,7 @@ export def "get-sandboxes-activity" [
   let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "sourceSandboxes" $source_sandboxes "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "allTypes" $all_types "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1/activity/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -227,7 +254,7 @@ export def "get-sandboxes" [
   let qp = [(serialize-qp "filterType" $filter_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1/sandboxes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -268,9 +295,9 @@ export def "create-sandbox" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/sandboxes" $auth.query)
   let req_body = {"commitBaseTemplate": $commit_base_template, "description": $description, "name": $name, "ownerOrganisationName": $owner_organisation_name, "parentSandboxName": $parent_sandbox_name, "transportType": $transport_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -306,7 +333,7 @@ export def "delete-sandbox" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -342,7 +369,7 @@ export def "get-sandbox" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -396,9 +423,9 @@ export def "update-sandbox" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}") $auth.query)
   let req_body = {"apiDefinition": $api_definition, "childSandboxes": $child_sandboxes, "configuredRoutes": $configured_routes, "description": $description, "gitAccessToken": $git_access_token, "gitUrl": $git_url, "hasRepository": $has_repository, "id": $id, "ipWhitelist": $ip_whitelist, "name": $name, "parentSandbox": $parent_sandbox, "properties": $properties, "proxyStatus": $proxy_status, "runtimeVersion": $runtime_version, "sandboxUrl": $sandbox_url, "stackType": $stack_type, "transportType": $transport_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -434,7 +461,7 @@ export def "fork-sandbox" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/fork") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -470,7 +497,7 @@ export def "delete-sandbox-state" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -506,7 +533,7 @@ export def "get-sandbox-state" [
   if ($sandbox_name | is-empty) { error make --unspanned { msg: "path parameter 'sandboxName' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_name: (encode-path-segment $sandbox_name)} | format pattern "/1/sandboxes/{sandbox_name}/state") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

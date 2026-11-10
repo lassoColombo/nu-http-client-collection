@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -253,7 +280,7 @@ export def "circuits-circuit-terminations-list" [
   let qp = [(serialize-qp "term_side" $term_side "scalar") (serialize-qp "port_speed" $port_speed "scalar") (serialize-qp "upstream_speed" $upstream_speed "scalar") (serialize-qp "xconnect_id" $xconnect_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "circuit_id" $circuit_id "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "term_side__n" $term_side_n "scalar") (serialize-qp "port_speed__n" $port_speed_n "scalar") (serialize-qp "port_speed__lte" $port_speed_lte "scalar") (serialize-qp "port_speed__lt" $port_speed_lt "scalar") (serialize-qp "port_speed__gte" $port_speed_gte "scalar") (serialize-qp "port_speed__gt" $port_speed_gt "scalar") (serialize-qp "upstream_speed__n" $upstream_speed_n "scalar") (serialize-qp "upstream_speed__lte" $upstream_speed_lte "scalar") (serialize-qp "upstream_speed__lt" $upstream_speed_lt "scalar") (serialize-qp "upstream_speed__gte" $upstream_speed_gte "scalar") (serialize-qp "upstream_speed__gt" $upstream_speed_gt "scalar") (serialize-qp "xconnect_id__n" $xconnect_id_n "scalar") (serialize-qp "xconnect_id__ic" $xconnect_id_ic "scalar") (serialize-qp "xconnect_id__nic" $xconnect_id_nic "scalar") (serialize-qp "xconnect_id__iew" $xconnect_id_iew "scalar") (serialize-qp "xconnect_id__niew" $xconnect_id_niew "scalar") (serialize-qp "xconnect_id__isw" $xconnect_id_isw "scalar") (serialize-qp "xconnect_id__nisw" $xconnect_id_nisw "scalar") (serialize-qp "xconnect_id__ie" $xconnect_id_ie "scalar") (serialize-qp "xconnect_id__nie" $xconnect_id_nie "scalar") (serialize-qp "circuit_id__n" $circuit_id_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/circuits/circuit-terminations/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -297,9 +324,9 @@ export def "circuits-circuit-terminations-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuit-terminations/" $auth.query)
   let req_body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -334,7 +361,7 @@ export def "circuits-circuit-terminations-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -370,7 +397,7 @@ export def "circuits-circuit-terminations-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -416,9 +443,9 @@ export def "circuits-circuit-terminations-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/") $auth.query)
   let req_body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -464,9 +491,9 @@ export def "circuits-circuit-terminations-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/") $auth.query)
   let req_body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -530,7 +557,7 @@ export def "circuits-circuit-types-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/circuits/circuit-types/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -567,9 +594,9 @@ export def "circuits-circuit-types-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuit-types/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -604,7 +631,7 @@ export def "circuits-circuit-types-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -640,7 +667,7 @@ export def "circuits-circuit-types-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -679,9 +706,9 @@ export def "circuits-circuit-types-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -720,9 +747,9 @@ export def "circuits-circuit-types-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -822,7 +849,7 @@ export def "circuits-circuits-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "cid" $cid "scalar") (serialize-qp "install_date" $install_date "scalar") (serialize-qp "commit_rate" $commit_rate "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "provider_id" $provider_id "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "type_id" $type_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "cid__n" $cid_n "scalar") (serialize-qp "cid__ic" $cid_ic "scalar") (serialize-qp "cid__nic" $cid_nic "scalar") (serialize-qp "cid__iew" $cid_iew "scalar") (serialize-qp "cid__niew" $cid_niew "scalar") (serialize-qp "cid__isw" $cid_isw "scalar") (serialize-qp "cid__nisw" $cid_nisw "scalar") (serialize-qp "cid__ie" $cid_ie "scalar") (serialize-qp "cid__nie" $cid_nie "scalar") (serialize-qp "install_date__n" $install_date_n "scalar") (serialize-qp "install_date__lte" $install_date_lte "scalar") (serialize-qp "install_date__lt" $install_date_lt "scalar") (serialize-qp "install_date__gte" $install_date_gte "scalar") (serialize-qp "install_date__gt" $install_date_gt "scalar") (serialize-qp "commit_rate__n" $commit_rate_n "scalar") (serialize-qp "commit_rate__lte" $commit_rate_lte "scalar") (serialize-qp "commit_rate__lt" $commit_rate_lt "scalar") (serialize-qp "commit_rate__gte" $commit_rate_gte "scalar") (serialize-qp "commit_rate__gt" $commit_rate_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "provider_id__n" $provider_id_n "scalar") (serialize-qp "provider__n" $provider_n "scalar") (serialize-qp "type_id__n" $type_id_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/circuits/circuits/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -867,9 +894,9 @@ export def "circuits-circuits-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/circuits/" $auth.query)
   let req_body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -904,7 +931,7 @@ export def "circuits-circuits-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -940,7 +967,7 @@ export def "circuits-circuits-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -987,9 +1014,9 @@ export def "circuits-circuits-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/") $auth.query)
   let req_body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1036,9 +1063,9 @@ export def "circuits-circuits-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/") $auth.query)
   let req_body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1134,7 +1161,7 @@ export def "circuits-providers-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "asn" $asn "scalar") (serialize-qp "account" $account "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "asn__n" $asn_n "scalar") (serialize-qp "asn__lte" $asn_lte "scalar") (serialize-qp "asn__lt" $asn_lt "scalar") (serialize-qp "asn__gte" $asn_gte "scalar") (serialize-qp "asn__gt" $asn_gt "scalar") (serialize-qp "account__n" $account_n "scalar") (serialize-qp "account__ic" $account_ic "scalar") (serialize-qp "account__nic" $account_nic "scalar") (serialize-qp "account__iew" $account_iew "scalar") (serialize-qp "account__niew" $account_niew "scalar") (serialize-qp "account__isw" $account_isw "scalar") (serialize-qp "account__nisw" $account_nisw "scalar") (serialize-qp "account__ie" $account_ie "scalar") (serialize-qp "account__nie" $account_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/circuits/providers/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,9 +1205,9 @@ export def "circuits-providers-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/circuits/providers/" $auth.query)
   let req_body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1215,7 +1242,7 @@ export def "circuits-providers-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1251,7 +1278,7 @@ export def "circuits-providers-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1297,9 +1324,9 @@ export def "circuits-providers-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/") $auth.query)
   let req_body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1345,9 +1372,9 @@ export def "circuits-providers-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/") $auth.query)
   let req_body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1383,7 +1410,7 @@ export def "circuits-providers-graphs" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/graphs/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1459,7 +1486,7 @@ export def "dcim-cables-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "length_unit" $length_unit "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "rack" $rack "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "label__n" $label_n "scalar") (serialize-qp "label__ic" $label_ic "scalar") (serialize-qp "label__nic" $label_nic "scalar") (serialize-qp "label__iew" $label_iew "scalar") (serialize-qp "label__niew" $label_niew "scalar") (serialize-qp "label__isw" $label_isw "scalar") (serialize-qp "label__nisw" $label_nisw "scalar") (serialize-qp "label__ie" $label_ie "scalar") (serialize-qp "label__nie" $label_nie "scalar") (serialize-qp "length__n" $length_n "scalar") (serialize-qp "length__lte" $length_lte "scalar") (serialize-qp "length__lt" $length_lt "scalar") (serialize-qp "length__gte" $length_gte "scalar") (serialize-qp "length__gt" $length_gt "scalar") (serialize-qp "length_unit__n" $length_unit_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/cables/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1503,9 +1530,9 @@ export def "dcim-cables-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/cables/" $auth.query)
   let req_body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1540,7 +1567,7 @@ export def "dcim-cables-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1576,7 +1603,7 @@ export def "dcim-cables-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1622,9 +1649,9 @@ export def "dcim-cables-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/") $auth.query)
   let req_body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1670,9 +1697,9 @@ export def "dcim-cables-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/") $auth.query)
   let req_body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1711,7 +1738,7 @@ export def "dcim-connected-device-list" [
   let qp = [(serialize-qp "peer_device" $peer_device "scalar") (serialize-qp "peer_interface" $peer_interface "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/connected-device/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1762,7 +1789,7 @@ export def "dcim-console-connections-list" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/console-connections/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1820,7 +1847,7 @@ export def "dcim-console-port-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/console-port-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1857,9 +1884,9 @@ export def "dcim-console-port-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-port-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1894,7 +1921,7 @@ export def "dcim-console-port-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1930,7 +1957,7 @@ export def "dcim-console-port-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1969,9 +1996,9 @@ export def "dcim-console-port-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2010,9 +2037,9 @@ export def "dcim-console-port-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2095,7 +2122,7 @@ export def "dcim-console-ports-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/console-ports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2136,9 +2163,9 @@ export def "dcim-console-ports-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-ports/" $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2173,7 +2200,7 @@ export def "dcim-console-ports-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2209,7 +2236,7 @@ export def "dcim-console-ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2252,9 +2279,9 @@ export def "dcim-console-ports-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2297,9 +2324,9 @@ export def "dcim-console-ports-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2335,7 +2362,7 @@ export def "dcim-console-ports-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2393,7 +2420,7 @@ export def "dcim-console-server-port-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/console-server-port-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2430,9 +2457,9 @@ export def "dcim-console-server-port-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-server-port-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2467,7 +2494,7 @@ export def "dcim-console-server-port-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2503,7 +2530,7 @@ export def "dcim-console-server-port-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2542,9 +2569,9 @@ export def "dcim-console-server-port-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2583,9 +2610,9 @@ export def "dcim-console-server-port-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2668,7 +2695,7 @@ export def "dcim-console-server-ports-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/console-server-ports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2709,9 +2736,9 @@ export def "dcim-console-server-ports-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/console-server-ports/" $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2746,7 +2773,7 @@ export def "dcim-console-server-ports-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2782,7 +2809,7 @@ export def "dcim-console-server-ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2825,9 +2852,9 @@ export def "dcim-console-server-ports-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2870,9 +2897,9 @@ export def "dcim-console-server-ports-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2908,7 +2935,7 @@ export def "dcim-console-server-ports-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2964,7 +2991,7 @@ export def "dcim-device-bay-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/device-bay-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3000,9 +3027,9 @@ export def "dcim-device-bay-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-bay-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3037,7 +3064,7 @@ export def "dcim-device-bay-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3073,7 +3100,7 @@ export def "dcim-device-bay-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3111,9 +3138,9 @@ export def "dcim-device-bay-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3151,9 +3178,9 @@ export def "dcim-device-bay-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3231,7 +3258,7 @@ export def "dcim-device-bays-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/device-bays/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3270,9 +3297,9 @@ export def "dcim-device-bays-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-bays/" $auth.query)
   let req_body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3307,7 +3334,7 @@ export def "dcim-device-bays-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3343,7 +3370,7 @@ export def "dcim-device-bays-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3384,9 +3411,9 @@ export def "dcim-device-bays-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/") $auth.query)
   let req_body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3427,9 +3454,9 @@ export def "dcim-device-bays-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/") $auth.query)
   let req_body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3504,7 +3531,7 @@ export def "dcim-device-roles-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "vm_role" $vm_role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/device-roles/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3543,9 +3570,9 @@ export def "dcim-device-roles-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-roles/" $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3580,7 +3607,7 @@ export def "dcim-device-roles-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3616,7 +3643,7 @@ export def "dcim-device-roles-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3657,9 +3684,9 @@ export def "dcim-device-roles-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -3700,9 +3727,9 @@ export def "dcim-device-roles-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3804,7 +3831,7 @@ export def "dcim-device-types-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "part_number" $part_number "scalar") (serialize-qp "u_height" $u_height "scalar") (serialize-qp "is_full_depth" $is_full_depth "scalar") (serialize-qp "subdevice_role" $subdevice_role "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "console_ports" $console_ports "scalar") (serialize-qp "console_server_ports" $console_server_ports "scalar") (serialize-qp "power_ports" $power_ports "scalar") (serialize-qp "power_outlets" $power_outlets "scalar") (serialize-qp "interfaces" $interfaces "scalar") (serialize-qp "pass_through_ports" $pass_through_ports "scalar") (serialize-qp "device_bays" $device_bays "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "model__n" $model_n "scalar") (serialize-qp "model__ic" $model_ic "scalar") (serialize-qp "model__nic" $model_nic "scalar") (serialize-qp "model__iew" $model_iew "scalar") (serialize-qp "model__niew" $model_niew "scalar") (serialize-qp "model__isw" $model_isw "scalar") (serialize-qp "model__nisw" $model_nisw "scalar") (serialize-qp "model__ie" $model_ie "scalar") (serialize-qp "model__nie" $model_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "part_number__n" $part_number_n "scalar") (serialize-qp "part_number__ic" $part_number_ic "scalar") (serialize-qp "part_number__nic" $part_number_nic "scalar") (serialize-qp "part_number__iew" $part_number_iew "scalar") (serialize-qp "part_number__niew" $part_number_niew "scalar") (serialize-qp "part_number__isw" $part_number_isw "scalar") (serialize-qp "part_number__nisw" $part_number_nisw "scalar") (serialize-qp "part_number__ie" $part_number_ie "scalar") (serialize-qp "part_number__nie" $part_number_nie "scalar") (serialize-qp "u_height__n" $u_height_n "scalar") (serialize-qp "u_height__lte" $u_height_lte "scalar") (serialize-qp "u_height__lt" $u_height_lt "scalar") (serialize-qp "u_height__gte" $u_height_gte "scalar") (serialize-qp "u_height__gt" $u_height_gt "scalar") (serialize-qp "subdevice_role__n" $subdevice_role_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/device-types/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3848,9 +3875,9 @@ export def "dcim-device-types-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/device-types/" $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3885,7 +3912,7 @@ export def "dcim-device-types-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3921,7 +3948,7 @@ export def "dcim-device-types-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3967,9 +3994,9 @@ export def "dcim-device-types-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4015,9 +4042,9 @@ export def "dcim-device-types-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4173,7 +4200,7 @@ export def "dcim-devices-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "face" $face "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "vc_position" $vc_position "scalar") (serialize-qp "vc_priority" $vc_priority "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "local_context_data" $local_context_data "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "device_type_id" $device_type_id "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "rack_group_id" $rack_group_id "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "is_full_depth" $is_full_depth "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "has_primary_ip" $has_primary_ip "scalar") (serialize-qp "virtual_chassis_id" $virtual_chassis_id "scalar") (serialize-qp "virtual_chassis_member" $virtual_chassis_member "scalar") (serialize-qp "console_ports" $console_ports "scalar") (serialize-qp "console_server_ports" $console_server_ports "scalar") (serialize-qp "power_ports" $power_ports "scalar") (serialize-qp "power_outlets" $power_outlets "scalar") (serialize-qp "interfaces" $interfaces "scalar") (serialize-qp "pass_through_ports" $pass_through_ports "scalar") (serialize-qp "device_bays" $device_bays "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "face__n" $face_n "scalar") (serialize-qp "position__n" $position_n "scalar") (serialize-qp "position__lte" $position_lte "scalar") (serialize-qp "position__lt" $position_lt "scalar") (serialize-qp "position__gte" $position_gte "scalar") (serialize-qp "position__gt" $position_gt "scalar") (serialize-qp "vc_position__n" $vc_position_n "scalar") (serialize-qp "vc_position__lte" $vc_position_lte "scalar") (serialize-qp "vc_position__lt" $vc_position_lt "scalar") (serialize-qp "vc_position__gte" $vc_position_gte "scalar") (serialize-qp "vc_position__gt" $vc_position_gt "scalar") (serialize-qp "vc_priority__n" $vc_priority_n "scalar") (serialize-qp "vc_priority__lte" $vc_priority_lte "scalar") (serialize-qp "vc_priority__lt" $vc_priority_lt "scalar") (serialize-qp "vc_priority__gte" $vc_priority_gte "scalar") (serialize-qp "vc_priority__gt" $vc_priority_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "device_type_id__n" $device_type_id_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "rack_group_id__n" $rack_group_id_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "model__n" $model_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "virtual_chassis_id__n" $virtual_chassis_id_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/devices/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4230,9 +4257,9 @@ export def "dcim-devices-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/devices/" $auth.query)
   let req_body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4267,7 +4294,7 @@ export def "dcim-devices-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4303,7 +4330,7 @@ export def "dcim-devices-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4362,9 +4389,9 @@ export def "dcim-devices-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4423,9 +4450,9 @@ export def "dcim-devices-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4461,7 +4488,7 @@ export def "dcim-devices-graphs" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/graphs/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4500,7 +4527,7 @@ export def "dcim-devices-napalm" [
   let qp = [(serialize-qp "method" $method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/napalm/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4558,7 +4585,7 @@ export def "dcim-front-port-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/front-port-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4597,9 +4624,9 @@ export def "dcim-front-port-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/front-port-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4634,7 +4661,7 @@ export def "dcim-front-port-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4670,7 +4697,7 @@ export def "dcim-front-port-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4711,9 +4738,9 @@ export def "dcim-front-port-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -4754,9 +4781,9 @@ export def "dcim-front-port-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4837,7 +4864,7 @@ export def "dcim-front-ports-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/front-ports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4879,9 +4906,9 @@ export def "dcim-front-ports-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/front-ports/" $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4916,7 +4943,7 @@ export def "dcim-front-ports-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4952,7 +4979,7 @@ export def "dcim-front-ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4996,9 +5023,9 @@ export def "dcim-front-ports-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5042,9 +5069,9 @@ export def "dcim-front-ports-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5080,7 +5107,7 @@ export def "dcim-front-ports-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5121,7 +5148,7 @@ export def "dcim-interface-connections-list" [
   let qp = [(serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/interface-connections/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5180,7 +5207,7 @@ export def "dcim-interface-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mgmt_only" $mgmt_only "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/interface-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5218,9 +5245,9 @@ export def "dcim-interface-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/interface-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5255,7 +5282,7 @@ export def "dcim-interface-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5291,7 +5318,7 @@ export def "dcim-interface-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5331,9 +5358,9 @@ export def "dcim-interface-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5373,9 +5400,9 @@ export def "dcim-interface-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5481,7 +5508,7 @@ export def "dcim-interfaces-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "mtu" $mtu "scalar") (serialize-qp "mgmt_only" $mgmt_only "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "kind" $kind "scalar") (serialize-qp "lag_id" $lag_id "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "vlan_id" $vlan_id "scalar") (serialize-qp "vlan" $vlan "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "mtu__n" $mtu_n "scalar") (serialize-qp "mtu__lte" $mtu_lte "scalar") (serialize-qp "mtu__lt" $mtu_lt "scalar") (serialize-qp "mtu__gte" $mtu_gte "scalar") (serialize-qp "mtu__gt" $mtu_gt "scalar") (serialize-qp "mode__n" $mode_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "lag_id__n" $lag_id_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/interfaces/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5530,9 +5557,9 @@ export def "dcim-interfaces-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/interfaces/" $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5567,7 +5594,7 @@ export def "dcim-interfaces-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5603,7 +5630,7 @@ export def "dcim-interfaces-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5654,9 +5681,9 @@ export def "dcim-interfaces-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -5707,9 +5734,9 @@ export def "dcim-interfaces-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5745,7 +5772,7 @@ export def "dcim-interfaces-graphs" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/graphs/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5781,7 +5808,7 @@ export def "dcim-interfaces-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5877,7 +5904,7 @@ export def "dcim-inventory-items-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "part_id" $part_id "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "discovered" $discovered "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "part_id__n" $part_id_n "scalar") (serialize-qp "part_id__ic" $part_id_ic "scalar") (serialize-qp "part_id__nic" $part_id_nic "scalar") (serialize-qp "part_id__iew" $part_id_iew "scalar") (serialize-qp "part_id__niew" $part_id_niew "scalar") (serialize-qp "part_id__isw" $part_id_isw "scalar") (serialize-qp "part_id__nisw" $part_id_nisw "scalar") (serialize-qp "part_id__ie" $part_id_ie "scalar") (serialize-qp "part_id__nie" $part_id_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/inventory-items/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5921,9 +5948,9 @@ export def "dcim-inventory-items-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/inventory-items/" $auth.query)
   let req_body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5958,7 +5985,7 @@ export def "dcim-inventory-items-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5994,7 +6021,7 @@ export def "dcim-inventory-items-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6040,9 +6067,9 @@ export def "dcim-inventory-items-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6088,9 +6115,9 @@ export def "dcim-inventory-items-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6164,7 +6191,7 @@ export def "dcim-manufacturers-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/manufacturers/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6201,9 +6228,9 @@ export def "dcim-manufacturers-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/manufacturers/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6238,7 +6265,7 @@ export def "dcim-manufacturers-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6274,7 +6301,7 @@ export def "dcim-manufacturers-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6313,9 +6340,9 @@ export def "dcim-manufacturers-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6354,9 +6381,9 @@ export def "dcim-manufacturers-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6444,7 +6471,7 @@ export def "dcim-platforms-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "napalm_driver" $napalm_driver "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "napalm_driver__n" $napalm_driver_n "scalar") (serialize-qp "napalm_driver__ic" $napalm_driver_ic "scalar") (serialize-qp "napalm_driver__nic" $napalm_driver_nic "scalar") (serialize-qp "napalm_driver__iew" $napalm_driver_iew "scalar") (serialize-qp "napalm_driver__niew" $napalm_driver_niew "scalar") (serialize-qp "napalm_driver__isw" $napalm_driver_isw "scalar") (serialize-qp "napalm_driver__nisw" $napalm_driver_nisw "scalar") (serialize-qp "napalm_driver__ie" $napalm_driver_ie "scalar") (serialize-qp "napalm_driver__nie" $napalm_driver_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "manufacturer_id__n" $manufacturer_id_n "scalar") (serialize-qp "manufacturer__n" $manufacturer_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/platforms/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6484,9 +6511,9 @@ export def "dcim-platforms-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/platforms/" $auth.query)
   let req_body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6521,7 +6548,7 @@ export def "dcim-platforms-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6557,7 +6584,7 @@ export def "dcim-platforms-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6599,9 +6626,9 @@ export def "dcim-platforms-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/") $auth.query)
   let req_body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6643,9 +6670,9 @@ export def "dcim-platforms-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/") $auth.query)
   let req_body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6696,7 +6723,7 @@ export def "dcim-power-connections-list" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-connections/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6796,7 +6823,7 @@ export def "dcim-power-feeds-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "supply" $supply "scalar") (serialize-qp "phase" $phase "scalar") (serialize-qp "voltage" $voltage "scalar") (serialize-qp "amperage" $amperage "scalar") (serialize-qp "max_utilization" $max_utilization "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "power_panel_id" $power_panel_id "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "supply__n" $supply_n "scalar") (serialize-qp "phase__n" $phase_n "scalar") (serialize-qp "voltage__n" $voltage_n "scalar") (serialize-qp "voltage__lte" $voltage_lte "scalar") (serialize-qp "voltage__lt" $voltage_lt "scalar") (serialize-qp "voltage__gte" $voltage_gte "scalar") (serialize-qp "voltage__gt" $voltage_gt "scalar") (serialize-qp "amperage__n" $amperage_n "scalar") (serialize-qp "amperage__lte" $amperage_lte "scalar") (serialize-qp "amperage__lt" $amperage_lt "scalar") (serialize-qp "amperage__gte" $amperage_gte "scalar") (serialize-qp "amperage__gt" $amperage_gt "scalar") (serialize-qp "max_utilization__n" $max_utilization_n "scalar") (serialize-qp "max_utilization__lte" $max_utilization_lte "scalar") (serialize-qp "max_utilization__lt" $max_utilization_lt "scalar") (serialize-qp "max_utilization__gte" $max_utilization_gte "scalar") (serialize-qp "max_utilization__gt" $max_utilization_gt "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "power_panel_id__n" $power_panel_id_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-feeds/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6843,9 +6870,9 @@ export def "dcim-power-feeds-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-feeds/" $auth.query)
   let req_body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6880,7 +6907,7 @@ export def "dcim-power-feeds-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6916,7 +6943,7 @@ export def "dcim-power-feeds-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6965,9 +6992,9 @@ export def "dcim-power-feeds-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/") $auth.query)
   let req_body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7016,9 +7043,9 @@ export def "dcim-power-feeds-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/") $auth.query)
   let req_body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7078,7 +7105,7 @@ export def "dcim-power-outlet-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "feed_leg" $feed_leg "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "feed_leg__n" $feed_leg_n "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-outlet-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7117,9 +7144,9 @@ export def "dcim-power-outlet-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-outlet-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7154,7 +7181,7 @@ export def "dcim-power-outlet-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7190,7 +7217,7 @@ export def "dcim-power-outlet-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7231,9 +7258,9 @@ export def "dcim-power-outlet-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7274,9 +7301,9 @@ export def "dcim-power-outlet-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7361,7 +7388,7 @@ export def "dcim-power-outlets-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "feed_leg" $feed_leg "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "feed_leg__n" $feed_leg_n "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-outlets/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7404,9 +7431,9 @@ export def "dcim-power-outlets-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-outlets/" $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7441,7 +7468,7 @@ export def "dcim-power-outlets-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7477,7 +7504,7 @@ export def "dcim-power-outlets-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7522,9 +7549,9 @@ export def "dcim-power-outlets-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7569,9 +7596,9 @@ export def "dcim-power-outlets-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/") $auth.query)
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7607,7 +7634,7 @@ export def "dcim-power-outlets-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7671,7 +7698,7 @@ export def "dcim-power-panels-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "rack_group_id" $rack_group_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "rack_group_id__n" $rack_group_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-panels/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7708,9 +7735,9 @@ export def "dcim-power-panels-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-panels/" $auth.query)
   let req_body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7745,7 +7772,7 @@ export def "dcim-power-panels-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7781,7 +7808,7 @@ export def "dcim-power-panels-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7820,9 +7847,9 @@ export def "dcim-power-panels-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/") $auth.query)
   let req_body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -7861,9 +7888,9 @@ export def "dcim-power-panels-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/") $auth.query)
   let req_body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7933,7 +7960,7 @@ export def "dcim-power-port-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "maximum_draw" $maximum_draw "scalar") (serialize-qp "allocated_draw" $allocated_draw "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "maximum_draw__n" $maximum_draw_n "scalar") (serialize-qp "maximum_draw__lte" $maximum_draw_lte "scalar") (serialize-qp "maximum_draw__lt" $maximum_draw_lt "scalar") (serialize-qp "maximum_draw__gte" $maximum_draw_gte "scalar") (serialize-qp "maximum_draw__gt" $maximum_draw_gt "scalar") (serialize-qp "allocated_draw__n" $allocated_draw_n "scalar") (serialize-qp "allocated_draw__lte" $allocated_draw_lte "scalar") (serialize-qp "allocated_draw__lt" $allocated_draw_lt "scalar") (serialize-qp "allocated_draw__gte" $allocated_draw_gte "scalar") (serialize-qp "allocated_draw__gt" $allocated_draw_gt "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-port-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7972,9 +7999,9 @@ export def "dcim-power-port-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-port-templates/" $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8009,7 +8036,7 @@ export def "dcim-power-port-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8045,7 +8072,7 @@ export def "dcim-power-port-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8086,9 +8113,9 @@ export def "dcim-power-port-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/") $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -8129,9 +8156,9 @@ export def "dcim-power-port-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/") $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8226,7 +8253,7 @@ export def "dcim-power-ports-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "maximum_draw" $maximum_draw "scalar") (serialize-qp "allocated_draw" $allocated_draw "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "connection_status" $connection_status "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "maximum_draw__n" $maximum_draw_n "scalar") (serialize-qp "maximum_draw__lte" $maximum_draw_lte "scalar") (serialize-qp "maximum_draw__lt" $maximum_draw_lt "scalar") (serialize-qp "maximum_draw__gte" $maximum_draw_gte "scalar") (serialize-qp "maximum_draw__gt" $maximum_draw_gt "scalar") (serialize-qp "allocated_draw__n" $allocated_draw_n "scalar") (serialize-qp "allocated_draw__lte" $allocated_draw_lte "scalar") (serialize-qp "allocated_draw__lt" $allocated_draw_lt "scalar") (serialize-qp "allocated_draw__gte" $allocated_draw_gte "scalar") (serialize-qp "allocated_draw__gt" $allocated_draw_gt "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "connection_status__n" $connection_status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/power-ports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8269,9 +8296,9 @@ export def "dcim-power-ports-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/power-ports/" $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8306,7 +8333,7 @@ export def "dcim-power-ports-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8342,7 +8369,7 @@ export def "dcim-power-ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8387,9 +8414,9 @@ export def "dcim-power-ports-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/") $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -8434,9 +8461,9 @@ export def "dcim-power-ports-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/") $auth.query)
   let req_body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8472,7 +8499,7 @@ export def "dcim-power-ports-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8558,7 +8585,7 @@ export def "dcim-rack-groups-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/rack-groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8597,9 +8624,9 @@ export def "dcim-rack-groups-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-groups/" $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8634,7 +8661,7 @@ export def "dcim-rack-groups-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8670,7 +8697,7 @@ export def "dcim-rack-groups-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8711,9 +8738,9 @@ export def "dcim-rack-groups-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -8754,9 +8781,9 @@ export def "dcim-rack-groups-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8828,7 +8855,7 @@ export def "dcim-rack-reservations-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "rack_id" $rack_id "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "created__n" $created_n "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "created__lt" $created_lt "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__gt" $created_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "rack_id__n" $rack_id_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "user_id__n" $user_id_n "scalar") (serialize-qp "user__n" $user_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/rack-reservations/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8867,9 +8894,9 @@ export def "dcim-rack-reservations-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-reservations/" $auth.query)
   let req_body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8904,7 +8931,7 @@ export def "dcim-rack-reservations-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8940,7 +8967,7 @@ export def "dcim-rack-reservations-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8981,9 +9008,9 @@ export def "dcim-rack-reservations-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/") $auth.query)
   let req_body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9024,9 +9051,9 @@ export def "dcim-rack-reservations-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/") $auth.query)
   let req_body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9100,7 +9127,7 @@ export def "dcim-rack-roles-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/rack-roles/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9138,9 +9165,9 @@ export def "dcim-rack-roles-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rack-roles/" $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9175,7 +9202,7 @@ export def "dcim-rack-roles-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9211,7 +9238,7 @@ export def "dcim-rack-roles-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9251,9 +9278,9 @@ export def "dcim-rack-roles-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9293,9 +9320,9 @@ export def "dcim-rack-roles-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9429,7 +9456,7 @@ export def "dcim-racks-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "facility_id" $facility_id "scalar") (serialize-qp "asset_tag" $asset_tag "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "u_height" $u_height "scalar") (serialize-qp "desc_units" $desc_units "scalar") (serialize-qp "outer_width" $outer_width "scalar") (serialize-qp "outer_depth" $outer_depth "scalar") (serialize-qp "outer_unit" $outer_unit "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "serial" $serial "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "facility_id__n" $facility_id_n "scalar") (serialize-qp "facility_id__ic" $facility_id_ic "scalar") (serialize-qp "facility_id__nic" $facility_id_nic "scalar") (serialize-qp "facility_id__iew" $facility_id_iew "scalar") (serialize-qp "facility_id__niew" $facility_id_niew "scalar") (serialize-qp "facility_id__isw" $facility_id_isw "scalar") (serialize-qp "facility_id__nisw" $facility_id_nisw "scalar") (serialize-qp "facility_id__ie" $facility_id_ie "scalar") (serialize-qp "facility_id__nie" $facility_id_nie "scalar") (serialize-qp "asset_tag__n" $asset_tag_n "scalar") (serialize-qp "asset_tag__ic" $asset_tag_ic "scalar") (serialize-qp "asset_tag__nic" $asset_tag_nic "scalar") (serialize-qp "asset_tag__iew" $asset_tag_iew "scalar") (serialize-qp "asset_tag__niew" $asset_tag_niew "scalar") (serialize-qp "asset_tag__isw" $asset_tag_isw "scalar") (serialize-qp "asset_tag__nisw" $asset_tag_nisw "scalar") (serialize-qp "asset_tag__ie" $asset_tag_ie "scalar") (serialize-qp "asset_tag__nie" $asset_tag_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "width__n" $width_n "scalar") (serialize-qp "u_height__n" $u_height_n "scalar") (serialize-qp "u_height__lte" $u_height_lte "scalar") (serialize-qp "u_height__lt" $u_height_lt "scalar") (serialize-qp "u_height__gte" $u_height_gte "scalar") (serialize-qp "u_height__gt" $u_height_gt "scalar") (serialize-qp "outer_width__n" $outer_width_n "scalar") (serialize-qp "outer_width__lte" $outer_width_lte "scalar") (serialize-qp "outer_width__lt" $outer_width_lt "scalar") (serialize-qp "outer_width__gte" $outer_width_gte "scalar") (serialize-qp "outer_width__gt" $outer_width_gt "scalar") (serialize-qp "outer_depth__n" $outer_depth_n "scalar") (serialize-qp "outer_depth__lte" $outer_depth_lte "scalar") (serialize-qp "outer_depth__lt" $outer_depth_lt "scalar") (serialize-qp "outer_depth__gte" $outer_depth_gte "scalar") (serialize-qp "outer_depth__gt" $outer_depth_gt "scalar") (serialize-qp "outer_unit__n" $outer_unit_n "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/racks/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9482,9 +9509,9 @@ export def "dcim-racks-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/racks/" $auth.query)
   let req_body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9519,7 +9546,7 @@ export def "dcim-racks-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9555,7 +9582,7 @@ export def "dcim-racks-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9610,9 +9637,9 @@ export def "dcim-racks-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9667,9 +9694,9 @@ export def "dcim-racks-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/") $auth.query)
   let req_body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9715,7 +9742,7 @@ export def "dcim-racks-elevation" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "face" $face "scalar") (serialize-qp "render" $render "scalar") (serialize-qp "unit_width" $unit_width "scalar") (serialize-qp "unit_height" $unit_height "scalar") (serialize-qp "legend_width" $legend_width "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "expand_devices" $expand_devices "scalar") (serialize-qp "include_images" $include_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/elevation/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9779,7 +9806,7 @@ export def "dcim-rear-port-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "positions" $positions "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "devicetype_id" $devicetype_id "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "positions__n" $positions_n "scalar") (serialize-qp "positions__lte" $positions_lte "scalar") (serialize-qp "positions__lt" $positions_lt "scalar") (serialize-qp "positions__gte" $positions_gte "scalar") (serialize-qp "positions__gt" $positions_gt "scalar") (serialize-qp "devicetype_id__n" $devicetype_id_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/rear-port-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9817,9 +9844,9 @@ export def "dcim-rear-port-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rear-port-templates/" $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9854,7 +9881,7 @@ export def "dcim-rear-port-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9890,7 +9917,7 @@ export def "dcim-rear-port-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9930,9 +9957,9 @@ export def "dcim-rear-port-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -9972,9 +9999,9 @@ export def "dcim-rear-port-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/") $auth.query)
   let req_body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10061,7 +10088,7 @@ export def "dcim-rear-ports-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "positions" $positions "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cabled" $cabled "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "positions__n" $positions_n "scalar") (serialize-qp "positions__lte" $positions_lte "scalar") (serialize-qp "positions__lt" $positions_lt "scalar") (serialize-qp "positions__gte" $positions_gte "scalar") (serialize-qp "positions__gt" $positions_gt "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/rear-ports/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10102,9 +10129,9 @@ export def "dcim-rear-ports-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/rear-ports/" $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10139,7 +10166,7 @@ export def "dcim-rear-ports-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10175,7 +10202,7 @@ export def "dcim-rear-ports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10218,9 +10245,9 @@ export def "dcim-rear-ports-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -10263,9 +10290,9 @@ export def "dcim-rear-ports-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/") $auth.query)
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10301,7 +10328,7 @@ export def "dcim-rear-ports-trace" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/trace/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10379,7 +10406,7 @@ export def "dcim-regions-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/regions/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10417,9 +10444,9 @@ export def "dcim-regions-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/regions/" $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10454,7 +10481,7 @@ export def "dcim-regions-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10490,7 +10517,7 @@ export def "dcim-regions-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10530,9 +10557,9 @@ export def "dcim-regions-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -10572,9 +10599,9 @@ export def "dcim-regions-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10718,7 +10745,7 @@ export def "dcim-sites-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "facility" $facility "scalar") (serialize-qp "asn" $asn "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "contact_phone" $contact_phone "scalar") (serialize-qp "contact_email" $contact_email "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "facility__n" $facility_n "scalar") (serialize-qp "facility__ic" $facility_ic "scalar") (serialize-qp "facility__nic" $facility_nic "scalar") (serialize-qp "facility__iew" $facility_iew "scalar") (serialize-qp "facility__niew" $facility_niew "scalar") (serialize-qp "facility__isw" $facility_isw "scalar") (serialize-qp "facility__nisw" $facility_nisw "scalar") (serialize-qp "facility__ie" $facility_ie "scalar") (serialize-qp "facility__nie" $facility_nie "scalar") (serialize-qp "asn__n" $asn_n "scalar") (serialize-qp "asn__lte" $asn_lte "scalar") (serialize-qp "asn__lt" $asn_lt "scalar") (serialize-qp "asn__gte" $asn_gte "scalar") (serialize-qp "asn__gt" $asn_gt "scalar") (serialize-qp "latitude__n" $latitude_n "scalar") (serialize-qp "latitude__lte" $latitude_lte "scalar") (serialize-qp "latitude__lt" $latitude_lt "scalar") (serialize-qp "latitude__gte" $latitude_gte "scalar") (serialize-qp "latitude__gt" $latitude_gt "scalar") (serialize-qp "longitude__n" $longitude_n "scalar") (serialize-qp "longitude__lte" $longitude_lte "scalar") (serialize-qp "longitude__lt" $longitude_lt "scalar") (serialize-qp "longitude__gte" $longitude_gte "scalar") (serialize-qp "longitude__gt" $longitude_gt "scalar") (serialize-qp "contact_name__n" $contact_name_n "scalar") (serialize-qp "contact_name__ic" $contact_name_ic "scalar") (serialize-qp "contact_name__nic" $contact_name_nic "scalar") (serialize-qp "contact_name__iew" $contact_name_iew "scalar") (serialize-qp "contact_name__niew" $contact_name_niew "scalar") (serialize-qp "contact_name__isw" $contact_name_isw "scalar") (serialize-qp "contact_name__nisw" $contact_name_nisw "scalar") (serialize-qp "contact_name__ie" $contact_name_ie "scalar") (serialize-qp "contact_name__nie" $contact_name_nie "scalar") (serialize-qp "contact_phone__n" $contact_phone_n "scalar") (serialize-qp "contact_phone__ic" $contact_phone_ic "scalar") (serialize-qp "contact_phone__nic" $contact_phone_nic "scalar") (serialize-qp "contact_phone__iew" $contact_phone_iew "scalar") (serialize-qp "contact_phone__niew" $contact_phone_niew "scalar") (serialize-qp "contact_phone__isw" $contact_phone_isw "scalar") (serialize-qp "contact_phone__nisw" $contact_phone_nisw "scalar") (serialize-qp "contact_phone__ie" $contact_phone_ie "scalar") (serialize-qp "contact_phone__nie" $contact_phone_nie "scalar") (serialize-qp "contact_email__n" $contact_email_n "scalar") (serialize-qp "contact_email__ic" $contact_email_ic "scalar") (serialize-qp "contact_email__nic" $contact_email_nic "scalar") (serialize-qp "contact_email__iew" $contact_email_iew "scalar") (serialize-qp "contact_email__niew" $contact_email_niew "scalar") (serialize-qp "contact_email__isw" $contact_email_isw "scalar") (serialize-qp "contact_email__nisw" $contact_email_nisw "scalar") (serialize-qp "contact_email__ie" $contact_email_ie "scalar") (serialize-qp "contact_email__nie" $contact_email_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/sites/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10771,9 +10798,9 @@ export def "dcim-sites-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/sites/" $auth.query)
   let req_body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10808,7 +10835,7 @@ export def "dcim-sites-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10844,7 +10871,7 @@ export def "dcim-sites-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10899,9 +10926,9 @@ export def "dcim-sites-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/") $auth.query)
   let req_body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -10956,9 +10983,9 @@ export def "dcim-sites-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/") $auth.query)
   let req_body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10994,7 +11021,7 @@ export def "dcim-sites-graphs" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/graphs/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11062,7 +11089,7 @@ export def "dcim-virtual-chassis-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "domain" $domain "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "domain__n" $domain_n "scalar") (serialize-qp "domain__ic" $domain_ic "scalar") (serialize-qp "domain__nic" $domain_nic "scalar") (serialize-qp "domain__iew" $domain_iew "scalar") (serialize-qp "domain__niew" $domain_niew "scalar") (serialize-qp "domain__isw" $domain_isw "scalar") (serialize-qp "domain__nisw" $domain_nisw "scalar") (serialize-qp "domain__ie" $domain_ie "scalar") (serialize-qp "domain__nie" $domain_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dcim/virtual-chassis/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11099,9 +11126,9 @@ export def "dcim-virtual-chassis-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dcim/virtual-chassis/" $auth.query)
   let req_body = {"domain": $domain, "master": $master, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11136,7 +11163,7 @@ export def "dcim-virtual-chassis-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11172,7 +11199,7 @@ export def "dcim-virtual-chassis-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11211,9 +11238,9 @@ export def "dcim-virtual-chassis-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/") $auth.query)
   let req_body = {"domain": $domain, "master": $master, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11252,9 +11279,9 @@ export def "dcim-virtual-chassis-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/") $auth.query)
   let req_body = {"domain": $domain, "master": $master, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11287,7 +11314,7 @@ export def "extras-custom-field-choices-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/_custom_field_choices/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11322,7 +11349,7 @@ export def "extras-custom-field-choices-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/_custom_field_choices/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11409,7 +11436,7 @@ export def "extras-config-contexts-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "is_active" $is_active "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "cluster_group_id" $cluster_group_id "scalar") (serialize-qp "cluster_group" $cluster_group "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "cluster_group_id__n" $cluster_group_id_n "scalar") (serialize-qp "cluster_group__n" $cluster_group_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/config-contexts/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11457,9 +11484,9 @@ export def "extras-config-contexts-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/config-contexts/" $auth.query)
   let req_body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11494,7 +11521,7 @@ export def "extras-config-contexts-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11530,7 +11557,7 @@ export def "extras-config-contexts-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11580,9 +11607,9 @@ export def "extras-config-contexts-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/") $auth.query)
   let req_body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11632,9 +11659,9 @@ export def "extras-config-contexts-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/") $auth.query)
   let req_body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11691,7 +11718,7 @@ export def "extras-export-templates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "template_language" $template_language "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "content_type__n" $content_type_n "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "template_language__n" $template_language_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/export-templates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11732,9 +11759,9 @@ export def "extras-export-templates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/export-templates/" $auth.query)
   let req_body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11769,7 +11796,7 @@ export def "extras-export-templates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11805,7 +11832,7 @@ export def "extras-export-templates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11848,9 +11875,9 @@ export def "extras-export-templates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/") $auth.query)
   let req_body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -11893,9 +11920,9 @@ export def "extras-export-templates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/") $auth.query)
   let req_body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11952,7 +11979,7 @@ export def "extras-graphs-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "template_language" $template_language "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "template_language__n" $template_language_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/graphs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11992,9 +12019,9 @@ export def "extras-graphs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/graphs/" $auth.query)
   let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12029,7 +12056,7 @@ export def "extras-graphs-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12065,7 +12092,7 @@ export def "extras-graphs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12107,9 +12134,9 @@ export def "extras-graphs-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
   let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12151,9 +12178,9 @@ export def "extras-graphs-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/") $auth.query)
   let req_body = {"link": $link, "name": $name, "source": $source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12190,7 +12217,7 @@ export def "extras-image-attachments-list" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/image-attachments/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12229,9 +12256,9 @@ export def "extras-image-attachments-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/image-attachments/" $auth.query)
   let req_body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12266,7 +12293,7 @@ export def "extras-image-attachments-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12302,7 +12329,7 @@ export def "extras-image-attachments-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12343,9 +12370,9 @@ export def "extras-image-attachments-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/") $auth.query)
   let req_body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12386,9 +12413,9 @@ export def "extras-image-attachments-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/") $auth.query)
   let req_body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -12466,7 +12493,7 @@ export def "extras-object-changes-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "request_id" $request_id "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "changed_object_type" $changed_object_type "scalar") (serialize-qp "changed_object_id" $changed_object_id "scalar") (serialize-qp "object_repr" $object_repr "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "user__n" $user_n "scalar") (serialize-qp "user_name__n" $user_name_n "scalar") (serialize-qp "user_name__ic" $user_name_ic "scalar") (serialize-qp "user_name__nic" $user_name_nic "scalar") (serialize-qp "user_name__iew" $user_name_iew "scalar") (serialize-qp "user_name__niew" $user_name_niew "scalar") (serialize-qp "user_name__isw" $user_name_isw "scalar") (serialize-qp "user_name__nisw" $user_name_nisw "scalar") (serialize-qp "user_name__ie" $user_name_ie "scalar") (serialize-qp "user_name__nie" $user_name_nie "scalar") (serialize-qp "action__n" $action_n "scalar") (serialize-qp "changed_object_type__n" $changed_object_type_n "scalar") (serialize-qp "changed_object_id__n" $changed_object_id_n "scalar") (serialize-qp "changed_object_id__lte" $changed_object_id_lte "scalar") (serialize-qp "changed_object_id__lt" $changed_object_id_lt "scalar") (serialize-qp "changed_object_id__gte" $changed_object_id_gte "scalar") (serialize-qp "changed_object_id__gt" $changed_object_id_gt "scalar") (serialize-qp "object_repr__n" $object_repr_n "scalar") (serialize-qp "object_repr__ic" $object_repr_ic "scalar") (serialize-qp "object_repr__nic" $object_repr_nic "scalar") (serialize-qp "object_repr__iew" $object_repr_iew "scalar") (serialize-qp "object_repr__niew" $object_repr_niew "scalar") (serialize-qp "object_repr__isw" $object_repr_isw "scalar") (serialize-qp "object_repr__nisw" $object_repr_nisw "scalar") (serialize-qp "object_repr__ie" $object_repr_ie "scalar") (serialize-qp "object_repr__nie" $object_repr_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/object-changes/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12502,7 +12529,7 @@ export def "extras-object-changes-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/object-changes/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12536,7 +12563,7 @@ export def "extras-reports-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/reports/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12572,7 +12599,7 @@ export def "extras-reports-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/reports/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12608,7 +12635,7 @@ export def "extras-reports-run" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/reports/{id}/run/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12641,7 +12668,7 @@ export def "extras-scripts-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/scripts/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12676,7 +12703,7 @@ export def "extras-scripts-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/scripts/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12750,7 +12777,7 @@ export def "extras-tags-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "color__n" $color_n "scalar") (serialize-qp "color__ic" $color_ic "scalar") (serialize-qp "color__nic" $color_nic "scalar") (serialize-qp "color__iew" $color_iew "scalar") (serialize-qp "color__niew" $color_niew "scalar") (serialize-qp "color__isw" $color_isw "scalar") (serialize-qp "color__nisw" $color_nisw "scalar") (serialize-qp "color__ie" $color_ie "scalar") (serialize-qp "color__nie" $color_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/extras/tags/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12788,9 +12815,9 @@ export def "extras-tags-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/extras/tags/" $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -12825,7 +12852,7 @@ export def "extras-tags-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -12861,7 +12888,7 @@ export def "extras-tags-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12901,9 +12928,9 @@ export def "extras-tags-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -12943,9 +12970,9 @@ export def "extras-tags-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/") $auth.query)
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13009,7 +13036,7 @@ export def "ipam-aggregates-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "date_added" $date_added "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "rir_id" $rir_id "scalar") (serialize-qp "rir" $rir "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "date_added__n" $date_added_n "scalar") (serialize-qp "date_added__lte" $date_added_lte "scalar") (serialize-qp "date_added__lt" $date_added_lt "scalar") (serialize-qp "date_added__gte" $date_added_gte "scalar") (serialize-qp "date_added__gt" $date_added_gt "scalar") (serialize-qp "rir_id__n" $rir_id_n "scalar") (serialize-qp "rir__n" $rir_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/aggregates/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13049,9 +13076,9 @@ export def "ipam-aggregates-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/aggregates/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13086,7 +13113,7 @@ export def "ipam-aggregates-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13122,7 +13149,7 @@ export def "ipam-aggregates-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13164,9 +13191,9 @@ export def "ipam-aggregates-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -13208,9 +13235,9 @@ export def "ipam-aggregates-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13303,7 +13330,7 @@ export def "ipam-ip-addresses-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "dns_name" $dns_name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "mask_length" $mask_length "scalar") (serialize-qp "vrf_id" $vrf_id "scalar") (serialize-qp "vrf" $vrf "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "interface" $interface "scalar") (serialize-qp "interface_id" $interface_id "scalar") (serialize-qp "assigned_to_interface" $assigned_to_interface "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "dns_name__n" $dns_name_n "scalar") (serialize-qp "dns_name__ic" $dns_name_ic "scalar") (serialize-qp "dns_name__nic" $dns_name_nic "scalar") (serialize-qp "dns_name__iew" $dns_name_iew "scalar") (serialize-qp "dns_name__niew" $dns_name_niew "scalar") (serialize-qp "dns_name__isw" $dns_name_isw "scalar") (serialize-qp "dns_name__nisw" $dns_name_nisw "scalar") (serialize-qp "dns_name__ie" $dns_name_ie "scalar") (serialize-qp "dns_name__nie" $dns_name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "vrf_id__n" $vrf_id_n "scalar") (serialize-qp "vrf__n" $vrf_n "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "interface__n" $interface_n "scalar") (serialize-qp "interface_id__n" $interface_id_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/ip-addresses/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13349,9 +13376,9 @@ export def "ipam-ip-addresses-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/ip-addresses/" $auth.query)
   let req_body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13386,7 +13413,7 @@ export def "ipam-ip-addresses-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13422,7 +13449,7 @@ export def "ipam-ip-addresses-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13470,9 +13497,9 @@ export def "ipam-ip-addresses-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/") $auth.query)
   let req_body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -13520,9 +13547,9 @@ export def "ipam-ip-addresses-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/") $auth.query)
   let req_body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13610,7 +13637,7 @@ export def "ipam-prefixes-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "is_pool" $is_pool "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "family" $family "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "within" $within "scalar") (serialize-qp "within_include" $within_include "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "mask_length" $mask_length "scalar") (serialize-qp "vrf_id" $vrf_id "scalar") (serialize-qp "vrf" $vrf "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "vlan_id" $vlan_id "scalar") (serialize-qp "vlan_vid" $vlan_vid "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "vrf_id__n" $vrf_id_n "scalar") (serialize-qp "vrf__n" $vrf_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "vlan_id__n" $vlan_id_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/prefixes/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13655,9 +13682,9 @@ export def "ipam-prefixes-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/prefixes/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13692,7 +13719,7 @@ export def "ipam-prefixes-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -13728,7 +13755,7 @@ export def "ipam-prefixes-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13775,9 +13802,9 @@ export def "ipam-prefixes-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -13824,9 +13851,9 @@ export def "ipam-prefixes-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -13862,7 +13889,7 @@ export def "ipam-prefixes-available-ips-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-ips/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13900,9 +13927,9 @@ export def "ipam-prefixes-available-ips-create" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-ips/") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -13938,7 +13965,7 @@ export def "ipam-prefixes-available-prefixes-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-prefixes/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -13986,9 +14013,9 @@ export def "ipam-prefixes-available-prefixes-create" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-prefixes/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14063,7 +14090,7 @@ export def "ipam-rirs-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/rirs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14101,9 +14128,9 @@ export def "ipam-rirs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/rirs/" $auth.query)
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14138,7 +14165,7 @@ export def "ipam-rirs-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14174,7 +14201,7 @@ export def "ipam-rirs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14214,9 +14241,9 @@ export def "ipam-rirs-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/") $auth.query)
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -14256,9 +14283,9 @@ export def "ipam-rirs-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/") $auth.query)
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14322,7 +14349,7 @@ export def "ipam-roles-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/roles/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14360,9 +14387,9 @@ export def "ipam-roles-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/roles/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14397,7 +14424,7 @@ export def "ipam-roles-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14433,7 +14460,7 @@ export def "ipam-roles-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14473,9 +14500,9 @@ export def "ipam-roles-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -14515,9 +14542,9 @@ export def "ipam-roles-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14595,7 +14622,7 @@ export def "ipam-services-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "port" $port "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "protocol__n" $protocol_n "scalar") (serialize-qp "port__n" $port_n "scalar") (serialize-qp "port__lte" $port_lte "scalar") (serialize-qp "port__lt" $port_lt "scalar") (serialize-qp "port__gte" $port_gte "scalar") (serialize-qp "port__gt" $port_gt "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/services/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14638,9 +14665,9 @@ export def "ipam-services-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/services/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14675,7 +14702,7 @@ export def "ipam-services-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14711,7 +14738,7 @@ export def "ipam-services-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14756,9 +14783,9 @@ export def "ipam-services-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -14803,9 +14830,9 @@ export def "ipam-services-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -14887,7 +14914,7 @@ export def "ipam-vlan-groups-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/vlan-groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -14925,9 +14952,9 @@ export def "ipam-vlan-groups-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vlan-groups/" $auth.query)
   let req_body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -14962,7 +14989,7 @@ export def "ipam-vlan-groups-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -14998,7 +15025,7 @@ export def "ipam-vlan-groups-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15038,9 +15065,9 @@ export def "ipam-vlan-groups-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15080,9 +15107,9 @@ export def "ipam-vlan-groups-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -15176,7 +15203,7 @@ export def "ipam-vlans-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "vid" $vid "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "vid__n" $vid_n "scalar") (serialize-qp "vid__lte" $vid_lte "scalar") (serialize-qp "vid__lt" $vid_lt "scalar") (serialize-qp "vid__gte" $vid_gte "scalar") (serialize-qp "vid__gt" $vid_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/vlans/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15220,9 +15247,9 @@ export def "ipam-vlans-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vlans/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15257,7 +15284,7 @@ export def "ipam-vlans-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -15293,7 +15320,7 @@ export def "ipam-vlans-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15339,9 +15366,9 @@ export def "ipam-vlans-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15387,9 +15414,9 @@ export def "ipam-vlans-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -15470,7 +15497,7 @@ export def "ipam-vrfs-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "rd" $rd "scalar") (serialize-qp "enforce_unique" $enforce_unique "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "rd__n" $rd_n "scalar") (serialize-qp "rd__ic" $rd_ic "scalar") (serialize-qp "rd__nic" $rd_nic "scalar") (serialize-qp "rd__iew" $rd_iew "scalar") (serialize-qp "rd__niew" $rd_niew "scalar") (serialize-qp "rd__isw" $rd_isw "scalar") (serialize-qp "rd__nisw" $rd_nisw "scalar") (serialize-qp "rd__ie" $rd_ie "scalar") (serialize-qp "rd__nie" $rd_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ipam/vrfs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15511,9 +15538,9 @@ export def "ipam-vrfs-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ipam/vrfs/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15548,7 +15575,7 @@ export def "ipam-vrfs-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -15584,7 +15611,7 @@ export def "ipam-vrfs-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15627,9 +15654,9 @@ export def "ipam-vrfs-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15672,9 +15699,9 @@ export def "ipam-vrfs-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -15708,7 +15735,7 @@ export def "secrets-generate-rsa-key-pair-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/generate-rsa-key-pair/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15742,7 +15769,7 @@ export def "secrets-get-session-key-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/get-session-key/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15806,7 +15833,7 @@ export def "secrets-secret-roles-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets/secret-roles/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15843,9 +15870,9 @@ export def "secrets-secret-roles-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/secret-roles/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -15880,7 +15907,7 @@ export def "secrets-secret-roles-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -15916,7 +15943,7 @@ export def "secrets-secret-roles-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -15955,9 +15982,9 @@ export def "secrets-secret-roles-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -15996,9 +16023,9 @@ export def "secrets-secret-roles-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -16067,7 +16094,7 @@ export def "secrets-secrets-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "device_id__n" $device_id_n "scalar") (serialize-qp "device__n" $device_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/secrets/secrets/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16107,9 +16134,9 @@ export def "secrets-secrets-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/secrets/" $auth.query)
   let req_body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -16144,7 +16171,7 @@ export def "secrets-secrets-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -16179,7 +16206,7 @@ export def "secrets-secrets-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16221,9 +16248,9 @@ export def "secrets-secrets-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -16265,9 +16292,9 @@ export def "secrets-secrets-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/") $auth.query)
   let req_body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -16345,7 +16372,7 @@ export def "tenancy-tenant-groups-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "parent_id__n" $parent_id_n "scalar") (serialize-qp "parent__n" $parent_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tenancy/tenant-groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16383,9 +16410,9 @@ export def "tenancy-tenant-groups-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tenancy/tenant-groups/" $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -16420,7 +16447,7 @@ export def "tenancy-tenant-groups-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -16456,7 +16483,7 @@ export def "tenancy-tenant-groups-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16496,9 +16523,9 @@ export def "tenancy-tenant-groups-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -16538,9 +16565,9 @@ export def "tenancy-tenant-groups-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -16616,7 +16643,7 @@ export def "tenancy-tenants-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tenancy/tenants/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16657,9 +16684,9 @@ export def "tenancy-tenants-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tenancy/tenants/" $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -16694,7 +16721,7 @@ export def "tenancy-tenants-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -16730,7 +16757,7 @@ export def "tenancy-tenants-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16773,9 +16800,9 @@ export def "tenancy-tenants-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -16818,9 +16845,9 @@ export def "tenancy-tenants-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -16894,7 +16921,7 @@ export def "virtualization-cluster-groups-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualization/cluster-groups/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -16931,9 +16958,9 @@ export def "virtualization-cluster-groups-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/cluster-groups/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -16968,7 +16995,7 @@ export def "virtualization-cluster-groups-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -17004,7 +17031,7 @@ export def "virtualization-cluster-groups-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17043,9 +17070,9 @@ export def "virtualization-cluster-groups-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -17084,9 +17111,9 @@ export def "virtualization-cluster-groups-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -17160,7 +17187,7 @@ export def "virtualization-cluster-types-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "slug" $slug "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "slug__n" $slug_n "scalar") (serialize-qp "slug__ic" $slug_ic "scalar") (serialize-qp "slug__nic" $slug_nic "scalar") (serialize-qp "slug__iew" $slug_iew "scalar") (serialize-qp "slug__niew" $slug_niew "scalar") (serialize-qp "slug__isw" $slug_isw "scalar") (serialize-qp "slug__nisw" $slug_nisw "scalar") (serialize-qp "slug__ie" $slug_ie "scalar") (serialize-qp "slug__nie" $slug_nie "scalar") (serialize-qp "description__n" $description_n "scalar") (serialize-qp "description__ic" $description_ic "scalar") (serialize-qp "description__nic" $description_nic "scalar") (serialize-qp "description__iew" $description_iew "scalar") (serialize-qp "description__niew" $description_niew "scalar") (serialize-qp "description__isw" $description_isw "scalar") (serialize-qp "description__nisw" $description_nisw "scalar") (serialize-qp "description__ie" $description_ie "scalar") (serialize-qp "description__nie" $description_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualization/cluster-types/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17197,9 +17224,9 @@ export def "virtualization-cluster-types-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/cluster-types/" $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -17234,7 +17261,7 @@ export def "virtualization-cluster-types-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -17270,7 +17297,7 @@ export def "virtualization-cluster-types-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17309,9 +17336,9 @@ export def "virtualization-cluster-types-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -17350,9 +17377,9 @@ export def "virtualization-cluster-types-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/") $auth.query)
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -17438,7 +17465,7 @@ export def "virtualization-clusters-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "type_id" $type_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "group_id__n" $group_id_n "scalar") (serialize-qp "group__n" $group_n "scalar") (serialize-qp "type_id__n" $type_id_n "scalar") (serialize-qp "type__n" $type_n "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualization/clusters/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17480,9 +17507,9 @@ export def "virtualization-clusters-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/clusters/" $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -17517,7 +17544,7 @@ export def "virtualization-clusters-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -17553,7 +17580,7 @@ export def "virtualization-clusters-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17597,9 +17624,9 @@ export def "virtualization-clusters-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -17643,9 +17670,9 @@ export def "virtualization-clusters-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/") $auth.query)
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -17720,7 +17747,7 @@ export def "virtualization-interfaces-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "mtu" $mtu "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "virtual_machine_id" $virtual_machine_id "scalar") (serialize-qp "virtual_machine" $virtual_machine "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "mtu__n" $mtu_n "scalar") (serialize-qp "mtu__lte" $mtu_lte "scalar") (serialize-qp "mtu__lt" $mtu_lt "scalar") (serialize-qp "mtu__gte" $mtu_gte "scalar") (serialize-qp "mtu__gt" $mtu_gt "scalar") (serialize-qp "virtual_machine_id__n" $virtual_machine_id_n "scalar") (serialize-qp "virtual_machine__n" $virtual_machine_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualization/interfaces/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17765,9 +17792,9 @@ export def "virtualization-interfaces-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/interfaces/" $auth.query)
   let req_body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -17802,7 +17829,7 @@ export def "virtualization-interfaces-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -17838,7 +17865,7 @@ export def "virtualization-interfaces-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -17885,9 +17912,9 @@ export def "virtualization-interfaces-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/") $auth.query)
   let req_body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -17934,9 +17961,9 @@ export def "virtualization-interfaces-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/") $auth.query)
   let req_body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -18065,7 +18092,7 @@ export def "virtualization-virtual-machines-list" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "cluster" $cluster "scalar") (serialize-qp "vcpus" $vcpus "scalar") (serialize-qp "memory" $memory "scalar") (serialize-qp "disk" $disk "scalar") (serialize-qp "local_context_data" $local_context_data "scalar") (serialize-qp "tenant_group_id" $tenant_group_id "scalar") (serialize-qp "tenant_group" $tenant_group "scalar") (serialize-qp "tenant_id" $tenant_id "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "created__gte" $created_gte "scalar") (serialize-qp "created__lte" $created_lte "scalar") (serialize-qp "last_updated" $last_updated "scalar") (serialize-qp "last_updated__gte" $last_updated_gte "scalar") (serialize-qp "last_updated__lte" $last_updated_lte "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "cluster_group_id" $cluster_group_id "scalar") (serialize-qp "cluster_group" $cluster_group "scalar") (serialize-qp "cluster_type_id" $cluster_type_id "scalar") (serialize-qp "cluster_type" $cluster_type "scalar") (serialize-qp "cluster_id" $cluster_id "scalar") (serialize-qp "region_id" $region_id "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "site_id" $site_id "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "role_id" $role_id "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "platform_id" $platform_id "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "mac_address" $mac_address "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "id__n" $id_n "scalar") (serialize-qp "id__lte" $id_lte "scalar") (serialize-qp "id__lt" $id_lt "scalar") (serialize-qp "id__gte" $id_gte "scalar") (serialize-qp "id__gt" $id_gt "scalar") (serialize-qp "name__n" $name_n "scalar") (serialize-qp "name__ic" $name_ic "scalar") (serialize-qp "name__nic" $name_nic "scalar") (serialize-qp "name__iew" $name_iew "scalar") (serialize-qp "name__niew" $name_niew "scalar") (serialize-qp "name__isw" $name_isw "scalar") (serialize-qp "name__nisw" $name_nisw "scalar") (serialize-qp "name__ie" $name_ie "scalar") (serialize-qp "name__nie" $name_nie "scalar") (serialize-qp "cluster__n" $cluster_n "scalar") (serialize-qp "vcpus__n" $vcpus_n "scalar") (serialize-qp "vcpus__lte" $vcpus_lte "scalar") (serialize-qp "vcpus__lt" $vcpus_lt "scalar") (serialize-qp "vcpus__gte" $vcpus_gte "scalar") (serialize-qp "vcpus__gt" $vcpus_gt "scalar") (serialize-qp "memory__n" $memory_n "scalar") (serialize-qp "memory__lte" $memory_lte "scalar") (serialize-qp "memory__lt" $memory_lt "scalar") (serialize-qp "memory__gte" $memory_gte "scalar") (serialize-qp "memory__gt" $memory_gt "scalar") (serialize-qp "disk__n" $disk_n "scalar") (serialize-qp "disk__lte" $disk_lte "scalar") (serialize-qp "disk__lt" $disk_lt "scalar") (serialize-qp "disk__gte" $disk_gte "scalar") (serialize-qp "disk__gt" $disk_gt "scalar") (serialize-qp "tenant_group_id__n" $tenant_group_id_n "scalar") (serialize-qp "tenant_group__n" $tenant_group_n "scalar") (serialize-qp "tenant_id__n" $tenant_id_n "scalar") (serialize-qp "tenant__n" $tenant_n "scalar") (serialize-qp "status__n" $status_n "scalar") (serialize-qp "cluster_group_id__n" $cluster_group_id_n "scalar") (serialize-qp "cluster_group__n" $cluster_group_n "scalar") (serialize-qp "cluster_type_id__n" $cluster_type_id_n "scalar") (serialize-qp "cluster_type__n" $cluster_type_n "scalar") (serialize-qp "cluster_id__n" $cluster_id_n "scalar") (serialize-qp "region_id__n" $region_id_n "scalar") (serialize-qp "region__n" $region_n "scalar") (serialize-qp "site_id__n" $site_id_n "scalar") (serialize-qp "site__n" $site_n "scalar") (serialize-qp "role_id__n" $role_id_n "scalar") (serialize-qp "role__n" $role_n "scalar") (serialize-qp "platform_id__n" $platform_id_n "scalar") (serialize-qp "platform__n" $platform_n "scalar") (serialize-qp "mac_address__n" $mac_address_n "scalar") (serialize-qp "mac_address__ic" $mac_address_ic "scalar") (serialize-qp "mac_address__nic" $mac_address_nic "scalar") (serialize-qp "mac_address__iew" $mac_address_iew "scalar") (serialize-qp "mac_address__niew" $mac_address_niew "scalar") (serialize-qp "mac_address__isw" $mac_address_isw "scalar") (serialize-qp "mac_address__nisw" $mac_address_nisw "scalar") (serialize-qp "mac_address__ie" $mac_address_ie "scalar") (serialize-qp "mac_address__nie" $mac_address_nie "scalar") (serialize-qp "tag__n" $tag_n "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/virtualization/virtual-machines/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -18114,9 +18141,9 @@ export def "virtualization-virtual-machines-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/virtualization/virtual-machines/" $auth.query)
   let req_body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -18151,7 +18178,7 @@ export def "virtualization-virtual-machines-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -18187,7 +18214,7 @@ export def "virtualization-virtual-machines-read" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -18238,9 +18265,9 @@ export def "virtualization-virtual-machines-partial-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/") $auth.query)
   let req_body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -18291,9 +18318,9 @@ export def "virtualization-virtual-machines-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/") $auth.query)
   let req_body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

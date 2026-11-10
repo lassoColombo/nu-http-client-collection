@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -193,9 +220,9 @@ export def "list-applications-api-v1-app-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/app/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -237,11 +264,11 @@ export def "create-application-api-v1-app-post" [
   let qp = [(serialize-qp "get_if_exists" $get_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/app/" $qp $auth.query)
   let req_body = {"metadata": $metadata, "name": $name, "rateLimit": $rate_limit, "uid": $uid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -278,9 +305,9 @@ export def "delete-application-api-v1-app-app-id-delete" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -317,9 +344,9 @@ export def "get-application-api-v1-app-app-id-get" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -361,11 +388,11 @@ export def "update-application-api-v1-app-app-id-put" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/") $auth.query)
   let req_body = {"metadata": $metadata, "name": $name, "rateLimit": $rate_limit, "uid": $uid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -413,9 +440,9 @@ export def "list-attempts-by-endpoint-api-v1-app-app-id-attempt-endpoint-endpoin
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "status_code_class" $status_code_class "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/attempt/endpoint/{endpoint_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -464,9 +491,9 @@ export def "list-attempts-by-msg-api-v1-app-app-id-attempt-msg-msg-id-get" [
   let qp = [(serialize-qp "endpoint_id" $endpoint_id "scalar") (serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "status_code_class" $status_code_class "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id)} | format pattern "/api/v1/app/{app_id}/attempt/msg/{msg_id}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -507,9 +534,9 @@ export def "list-endpoints-api-v1-app-app-id-endpoint-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/endpoint/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -557,11 +584,11 @@ export def "create-endpoint-api-v1-app-app-id-endpoint-post" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/endpoint/") $auth.query)
   let req_body = {"channels": $channels, "description": $description, "disabled": $disabled, "filterTypes": $filter_types, "metadata": $metadata, "rateLimit": $rate_limit, "secret": $secret, "uid": $uid, "url": $url, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -600,9 +627,9 @@ export def "delete-endpoint-api-v1-app-app-id-endpoint-endpoint-id-delete" [
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -641,9 +668,9 @@ export def "get-endpoint-api-v1-app-app-id-endpoint-endpoint-id-get" [
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -692,11 +719,11 @@ export def "update-endpoint-api-v1-app-app-id-endpoint-endpoint-id-put" [
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/") $auth.query)
   let req_body = {"channels": $channels, "description": $description, "disabled": $disabled, "filterTypes": $filter_types, "metadata": $metadata, "rateLimit": $rate_limit, "uid": $uid, "url": $url, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -735,9 +762,9 @@ export def "get-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -778,11 +805,11 @@ export def "patch-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-header
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/") $auth.query)
   let req_body = {"headers": $headers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -823,11 +850,11 @@ export def "update-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-heade
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/") $auth.query)
   let req_body = {"headers": $headers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -873,9 +900,9 @@ export def "list-attempted-messages-api-v1-app-app-id-endpoint-endpoint-id-msg-g
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/msg/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -917,11 +944,11 @@ export def "recover-failed-webhooks-api-v1-app-app-id-endpoint-endpoint-id-recov
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/recover/") $auth.query)
   let req_body = {"since": $since, "until": $until} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -963,11 +990,11 @@ export def "replay-missing-webhooks-api-v1-app-app-id-endpoint-endpoint-id-repla
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/replay-missing/") $auth.query)
   let req_body = {"since": $since, "until": $until} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1006,9 +1033,9 @@ export def "get-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-ge
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1049,11 +1076,11 @@ export def "rotate-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/rotate/") $auth.query)
   let req_body = {"key": $key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1095,9 +1122,9 @@ export def "get-endpoint-stats-api-v1-app-app-id-endpoint-endpoint-id-stats-get"
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/stats/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1136,9 +1163,9 @@ export def "get-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-t
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1180,11 +1207,11 @@ export def "set-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-t
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/") $auth.query)
   let req_body = {"code": $code, "enabled": $enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1224,9 +1251,9 @@ export def "list-integrations-api-v1-app-app-id-integration-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/integration/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1265,11 +1292,11 @@ export def "create-integration-api-v1-app-app-id-integration-post" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/integration/") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1308,9 +1335,9 @@ export def "delete-integration-api-v1-app-app-id-integration-integ-id-delete" [
   if ($integ_id | is-empty) { error make --unspanned { msg: "path parameter 'integ_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), integ_id: (encode-path-segment $integ_id)} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1349,9 +1376,9 @@ export def "get-integration-api-v1-app-app-id-integration-integ-id-get" [
   if ($integ_id | is-empty) { error make --unspanned { msg: "path parameter 'integ_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), integ_id: (encode-path-segment $integ_id)} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1392,11 +1419,11 @@ export def "update-integration-api-v1-app-app-id-integration-integ-id-put" [
   if ($integ_id | is-empty) { error make --unspanned { msg: "path parameter 'integ_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), integ_id: (encode-path-segment $integ_id)} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1435,9 +1462,9 @@ export def "get-integration-key-api-v1-app-app-id-integration-integ-id-key-get" 
   if ($integ_id | is-empty) { error make --unspanned { msg: "path parameter 'integ_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), integ_id: (encode-path-segment $integ_id)} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/key/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1476,9 +1503,9 @@ export def "rotate-integration-key-api-v1-app-app-id-integration-integ-id-key-ro
   if ($integ_id | is-empty) { error make --unspanned { msg: "path parameter 'integ_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), integ_id: (encode-path-segment $integ_id)} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/key/rotate/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1522,9 +1549,9 @@ export def "list-messages-api-v1-app-app-id-msg-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/msg/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1570,11 +1597,11 @@ export def "create-message-api-v1-app-app-id-msg-post" [
   let qp = [(serialize-qp "with_content" $with_content "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/app/{app_id}/msg/") $qp $auth.query)
   let req_body = {"application": $application, "channels": $channels, "eventId": $event_id, "eventType": $event_type, "payload": $payload, "payloadRetentionPeriod": $payload_retention_period} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1613,9 +1640,9 @@ export def "get-message-api-v1-app-app-id-msg-msg-id-get" [
   if ($msg_id | is-empty) { error make --unspanned { msg: "path parameter 'msg_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1665,9 +1692,9 @@ export def "list-attempts-api-v1-app-app-id-msg-msg-id-attempt-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "endpoint_id" $endpoint_id "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1708,9 +1735,9 @@ export def "get-attempt-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-get" [
   if ($attempt_id | is-empty) { error make --unspanned { msg: "path parameter 'attempt_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id), attempt_id: (encode-path-segment $attempt_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1751,9 +1778,9 @@ export def "expunge-attempt-content-api-v1-app-app-id-msg-msg-id-attempt-attempt
   if ($attempt_id | is-empty) { error make --unspanned { msg: "path parameter 'attempt_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id), attempt_id: (encode-path-segment $attempt_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/content/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1792,9 +1819,9 @@ export def "expunge-message-payload-api-v1-app-app-id-msg-msg-id-content-delete"
   if ($msg_id | is-empty) { error make --unspanned { msg: "path parameter 'msg_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/content/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1836,9 +1863,9 @@ export def "list-attempted-destinations-api-v1-app-app-id-msg-msg-id-endpoint-ge
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1889,9 +1916,9 @@ export def "list-attempts-for-endpoint-api-v1-app-app-id-msg-msg-id-endpoint-end
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/attempt/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1932,9 +1959,9 @@ export def "resend-webhook-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-res
   if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id), msg_id: (encode-path-segment $msg_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/resend/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1973,11 +2000,11 @@ export def "get-app-portal-access-api-v1-auth-app-portal-access-app-id-post" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/auth/app-portal-access/{app_id}/") $auth.query)
   let req_body = {"featureFlags": $feature_flags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2016,11 +2043,11 @@ export def "expire-all-api-v1-auth-app-app-id-expire-all-post" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/auth/app/{app_id}/expire-all/") $auth.query)
   let req_body = {"expiry": $expiry} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2059,9 +2086,9 @@ export def "get-dashboard-access-api-v1-auth-dashboard-access-app-id-post" [
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/api/v1/auth/dashboard-access/{app_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2096,9 +2123,9 @@ export def "logout-api-v1-auth-logout-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/auth/logout/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2137,9 +2164,9 @@ export def "list-background-tasks-api-v1-background-task-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/background-task/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2176,9 +2203,9 @@ export def "get-background-task-api-v1-background-task-task-id-get" [
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/api/v1/background-task/{task_id}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2218,9 +2245,9 @@ export def "list-event-types-api-v1-event-type-get" [
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_content" $with_content "scalar") (serialize-qp "include_archived" $include_archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/event-type/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2261,11 +2288,11 @@ export def "create-event-type-api-v1-event-type-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/event-type/" $auth.query)
   let req_body = {"archived": $archived, "description": $description, "featureFlag": $feature_flag, "name": $name, "schemas": $schemas} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2304,9 +2331,9 @@ export def "delete-event-type-api-v1-event-type-event-type-name-delete" [
   let qp = [(serialize-qp "expunge" $expunge "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({event_type_name: (encode-path-segment $event_type_name)} | format pattern "/api/v1/event-type/{event_type_name}/") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2343,9 +2370,9 @@ export def "get-event-type-api-v1-event-type-event-type-name-get" [
   if ($event_type_name | is-empty) { error make --unspanned { msg: "path parameter 'event_type_name' must be non-empty" } }
   let full_url = (build-url $base ({event_type_name: (encode-path-segment $event_type_name)} | format pattern "/api/v1/event-type/{event_type_name}/") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2387,11 +2414,11 @@ export def "update-event-type-api-v1-event-type-event-type-name-put" [
   if ($event_type_name | is-empty) { error make --unspanned { msg: "path parameter 'event_type_name' must be non-empty" } }
   let full_url = (build-url $base ({event_type_name: (encode-path-segment $event_type_name)} | format pattern "/api/v1/event-type/{event_type_name}/") $auth.query)
   let req_body = {"archived": $archived, "description": $description, "featureFlag": $feature_flag, "schemas": $schemas} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2426,9 +2453,9 @@ export def "health-api-v1-health-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/health/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

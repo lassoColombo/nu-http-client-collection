@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -193,9 +220,9 @@ export def "get-api-public-v1-alerts-uuid" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/api-public/v1/alerts/{uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -232,9 +259,9 @@ export def "get-api-public-v1-incidents" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -276,11 +303,11 @@ export def "post-api-public-v1-incidents" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents" $auth.query)
   let req_body = {"details": $details, "summary": $summary, "targets": $targets, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -321,11 +348,11 @@ export def "patch-api-public-v1-incidents-ack" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/ack" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -365,11 +392,11 @@ export def "patch-api-public-v1-incidents-by-user-ack" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/ack" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -409,11 +436,11 @@ export def "patch-api-public-v1-incidents-by-user-resolve" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/resolve" $auth.query)
   let req_body = {"message": $message, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -453,11 +480,11 @@ export def "post-api-public-v1-incidents-reroute" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/reroute" $auth.query)
   let req_body = {"reroutes": $reroutes, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -498,11 +525,11 @@ export def "patch-api-public-v1-incidents-resolve" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/incidents/resolve" $auth.query)
   let req_body = {"incidentNames": $incident_names, "message": $message, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -539,9 +566,9 @@ export def "get-api-public-v1-maintenancemode" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/maintenancemode" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -582,11 +609,11 @@ export def "post-api-public-v1-maintenancemode-start" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/maintenancemode/start" $auth.query)
   let req_body = {"names": $names, "purpose": $purpose, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -625,9 +652,9 @@ export def "put-api-public-v1-maintenancemode-maintenancemodeid-end" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({maintenancemodeid: (encode-path-segment $maintenancemodeid)} | format pattern "/api-public/v1/maintenancemode/{maintenancemodeid}/end") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -664,9 +691,9 @@ export def "get-api-public-v1-oncall-current" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/oncall/current" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -703,9 +730,9 @@ export def "get-api-public-v1-org-routing-keys" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/org/routing-keys" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -742,9 +769,9 @@ export def "get-api-public-v1-overrides" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -786,11 +813,11 @@ export def "post-api-public-v1-overrides" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/overrides" $auth.query)
   let req_body = {"end": $end, "start": $start, "timezone": $timezone, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -829,9 +856,9 @@ export def "delete-api-public-v1-overrides-public-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -870,9 +897,9 @@ export def "get-api-public-v1-overrides-public-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -911,9 +938,9 @@ export def "get-api-public-v1-overrides-public-id-assignments" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id)} | format pattern "/api-public/v1/overrides/{public_id}/assignments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -954,9 +981,9 @@ export def "delete-api-public-v1-overrides-public-id-assignments-policy-slug" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -997,9 +1024,9 @@ export def "get-api-public-v1-overrides-public-id-assignments-policy-slug" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,11 +1070,11 @@ export def "put-api-public-v1-overrides-public-id-assignments-policy-slug" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({public_id: (encode-path-segment $public_id), policy_slug: (encode-path-segment $policy_slug)} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}") $auth.query)
   let req_body = {"policy": $policy, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1084,9 +1111,9 @@ export def "get-api-public-v1-policies" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1123,9 +1150,9 @@ export def "get-api-public-v1-policies-types-contacts" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/contacts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1162,9 +1189,9 @@ export def "get-api-public-v1-policies-types-notifications" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/notifications" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1201,9 +1228,9 @@ export def "get-api-public-v1-policies-types-timeouts" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/policies/types/timeouts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1245,11 +1272,11 @@ export def "patch-api-public-v1-policies-policy-oncall-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({policy: (encode-path-segment $policy)} | format pattern "/api-public/v1/policies/{policy}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1288,9 +1315,9 @@ export def "get-api-public-v1-profile-username-policies" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1332,11 +1359,11 @@ export def "post-api-public-v1-profile-username-policies" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api-public/v1/profile/{username}/policies") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1377,9 +1404,9 @@ export def "get-api-public-v1-profile-username-policies-step" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1423,11 +1450,11 @@ export def "post-api-public-v1-profile-username-policies-step" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1471,11 +1498,11 @@ export def "put-api-public-v1-profile-username-policies-step" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step)} | format pattern "/api-public/v1/profile/{username}/policies/{step}") $auth.query)
   let req_body = {"rules": $rules, "timeout": $timeout} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1518,9 +1545,9 @@ export def "delete-api-public-v1-profile-username-policies-step-rule" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1563,9 +1590,9 @@ export def "get-api-public-v1-profile-username-policies-step-rule" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1611,11 +1638,11 @@ export def "put-api-public-v1-profile-username-policies-step-rule" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), step: (encode-path-segment $step), rule: (encode-path-segment $rule)} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}") $auth.query)
   let req_body = {"contact": $contact, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1652,9 +1679,9 @@ export def "get-api-public-v1-team" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1693,11 +1720,11 @@ export def "post-api-public-v1-team" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/team" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1736,9 +1763,9 @@ export def "delete-api-public-v1-team-team" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1777,9 +1804,9 @@ export def "get-api-public-v1-team-team" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1820,11 +1847,11 @@ export def "put-api-public-v1-team-team" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1863,9 +1890,9 @@ export def "get-api-public-v1-team-team-admins" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/admins") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1904,9 +1931,9 @@ export def "get-api-public-v1-team-team-members" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1947,11 +1974,11 @@ export def "post-api-public-v1-team-team-members" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/members") $auth.query)
   let req_body = {"username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1994,11 +2021,11 @@ export def "delete-api-public-v1-team-team-members-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team), user: (encode-path-segment $user)} | format pattern "/api-public/v1/team/{team}/members/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2043,9 +2070,9 @@ export def "get-api-public-v1-team-team-oncall-schedule" [
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2089,11 +2116,11 @@ export def "patch-api-public-v1-team-team-oncall-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/oncall/user") $auth.query)
   let req_body = {"fromUser": $from_user, "toUser": $to_user} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -2132,9 +2159,9 @@ export def "get-api-public-v1-team-team-policies" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v1/team/{team}/policies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2171,9 +2198,9 @@ export def "get-api-public-v1-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2217,11 +2244,11 @@ export def "post-api-public-v1-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base "/api-public/v1/user" $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2262,11 +2289,11 @@ export def "delete-api-public-v1-user-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"replacement": $replacement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2305,9 +2332,9 @@ export def "get-api-public-v1-user-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2353,11 +2380,11 @@ export def "put-api-public-v1-user-user" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}") $auth.query)
   let req_body = {"admin": $admin, "email": $email, "expirationHours": $expiration_hours, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2396,9 +2423,9 @@ export def "get-api-public-v1-user-user-contact-methods" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2437,9 +2464,9 @@ export def "get-api-public-v1-user-user-contact-methods-devices" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2480,9 +2507,9 @@ export def "delete-api-public-v1-user-user-contact-methods-devices-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2523,9 +2550,9 @@ export def "get-api-public-v1-user-user-contact-methods-devices-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2571,11 +2598,11 @@ export def "put-api-public-v1-user-user-contact-methods-devices-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}") $auth.query)
   let req_body = {"chat_escalation_sound": $chat_escalation_sound, "device_label": $device_label, "escalation_notification_sound": $escalation_notification_sound, "resolved_notification_sound": $resolved_notification_sound} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2614,9 +2641,9 @@ export def "get-api-public-v1-user-user-contact-methods-emails" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2659,11 +2686,11 @@ export def "post-api-public-v1-user-user-contact-methods-emails" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails") $auth.query)
   let req_body = {"email": $email, "label": $label, "rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2704,9 +2731,9 @@ export def "delete-api-public-v1-user-user-contact-methods-emails-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2747,9 +2774,9 @@ export def "get-api-public-v1-user-user-contact-methods-emails-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2788,9 +2815,9 @@ export def "get-api-public-v1-user-user-contact-methods-phones" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2833,11 +2860,11 @@ export def "post-api-public-v1-user-user-contact-methods-phones" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones") $auth.query)
   let req_body = {"label": $label, "phone": $phone, "rank": $rank} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2878,9 +2905,9 @@ export def "delete-api-public-v1-user-user-contact-methods-phones-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2921,9 +2948,9 @@ export def "get-api-public-v1-user-user-contact-methods-phones-contact-id" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), contact_id: (encode-path-segment $contact_id)} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2968,9 +2995,9 @@ export def "get-api-public-v1-user-user-oncall-schedule" [
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3009,9 +3036,9 @@ export def "get-api-public-v1-user-user-policies" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/policies") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3050,9 +3077,9 @@ export def "get-api-public-v1-user-user-teams" [
   if ($x_vo_api_key == null) { error make --unspanned { msg: "required header parameter 'X-VO-Api-Key' missing: pass --x-vo-api-key" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v1/user/{user}/teams") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3095,9 +3122,9 @@ export def "get-api-public-v2-team-team-oncall-schedule" [
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-public/v2/team/{team}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3140,9 +3167,9 @@ export def "get-api-public-v2-user-user-oncall-schedule" [
   let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/api-public/v2/user/{user}/oncall/schedule") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3191,9 +3218,9 @@ export def "get-api-reporting-v1-incidents" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v1/incidents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3236,9 +3263,9 @@ export def "get-api-reporting-v1-team-team-oncall-log" [
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team: (encode-path-segment $team)} | format pattern "/api-reporting/v1/team/{team}/oncall/log") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3286,9 +3313,9 @@ export def "get-api-reporting-v2-incidents" [
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar") (serialize-qp "routingKey" $routing_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v2/incidents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

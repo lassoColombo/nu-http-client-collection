@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -204,7 +231,7 @@ export def "appkey-patch" [
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -247,7 +274,7 @@ export def "appkey-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -286,7 +313,7 @@ export def "appkey-put" [
   let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -324,7 +351,7 @@ export def "auth-appkey-patch" [
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -365,7 +392,7 @@ export def "auth-appkey-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -402,7 +429,7 @@ export def "auth-appkey-put" [
   let qp = [(serialize-qp "app_key" $app_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -444,7 +471,7 @@ export def "auth-authkey-get" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar") (serialize-qp "deviceName" $device_name "scalar") (serialize-qp "identifierForVendor" $identifier_for_vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -482,7 +509,7 @@ export def "auth-authkey-patch" [
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -522,7 +549,7 @@ export def "auth-authkey-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -559,7 +586,7 @@ export def "auth-authkey-put" [
   let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -596,7 +623,7 @@ export def "auth-verifyotp-get" [
   let qp = [(serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/verifyotp" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -638,7 +665,7 @@ export def "authkey-get" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -678,7 +705,7 @@ export def "authkey-patch" [
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -720,7 +747,7 @@ export def "authkey-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -759,7 +786,7 @@ export def "authkey-put" [
   let qp = [(serialize-qp "auth_key" $auth_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -797,7 +824,7 @@ export def "kkid-allowance-get" [
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "transactionDays" $transaction_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -840,7 +867,7 @@ export def "kkid-allowance-post" [
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "transactionType" $transaction_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -871,7 +898,7 @@ export def "kkid-apns-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --kid-user-id: int # userID of the kid (required)
   --tool: string@tool-completer # tool you wish to talk to (required)
-  --qp-token: string # device APNS token (required for register)
+  --qp-token: string # device APNS token (required for register) (spec name: token)
   --devicename: string # Name of device to associate to token (required for register)
   --title: string # title of APNS message (required for send)
   --message: string # APNS message body (required for send)
@@ -887,7 +914,7 @@ export def "kkid-apns-post" [
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "tool" $tool "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devicename" $devicename "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "badge" $badge "scalar") (serialize-qp "sound" $sound "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/apns" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -924,7 +951,7 @@ export def "kkid-chorelist-delete" [
   let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -966,7 +993,7 @@ export def "kkid-chorelist-get" [
   let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "includeCalendar" $include_calendar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1023,7 +1050,7 @@ export def "kkid-chorelist-post" [
   let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "choreName" $chore_name "scalar") (serialize-qp "choreDescription" $chore_description "scalar") (serialize-qp "choreNumber" $chore_number "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "oneTime" $one_time "scalar") (serialize-qp "extraAllowance" $extra_allowance "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "reassignable" $reassignable "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "requireObjectDetection" $require_object_detection "scalar") (serialize-qp "objectDetectionTag" $object_detection_tag "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "aiIcon" $ai_icon "scalar") (serialize-qp "isCalendar" $is_calendar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1072,7 +1099,7 @@ export def "kkid-chorelist-put" [
   let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "stolen" $stolen "scalar") (serialize-qp "stolenBy" $stolen_by "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "whereDay" $where_day "scalar") (serialize-qp "whereStatus" $where_status "scalar") (serialize-qp "whereName" $where_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1117,7 +1144,7 @@ export def "kkid-masteruser-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/masteruser" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1161,7 +1188,7 @@ export def "kkid-share-get" [
   let qp = [(serialize-qp "linkUserId" $link_user_id "scalar") (serialize-qp "link" $link "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "scope2" $scope2 "scalar") (serialize-qp "scope3" $scope3 "scalar") (serialize-qp "scope4" $scope4 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/share" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1197,7 +1224,7 @@ export def "kkid-user-get" [
   let qp = [(serialize-qp "enableBool" $enable_bool "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/user" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1234,7 +1261,7 @@ export def "kkid-userlist-delete" [
   let qp = [(serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "kkid-userlist-get" [
   let qp = [(serialize-qp "isChild" $is_child "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isAdmin" $is_admin "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1322,7 +1349,7 @@ export def "kkid-userlist-post" [
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1375,7 +1402,7 @@ export def "kkid-userlist-put" [
   let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "emoji" $emoji "scalar") (serialize-qp "tmdbKey" $tmdb_key "scalar") (serialize-qp "enableWishList" $enable_wish_list "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableAdmin" $enable_admin "scalar") (serialize-qp "enableTmdb" $enable_tmdb "scalar") (serialize-qp "enableObjectDetection" $enable_object_detection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1412,7 +1439,7 @@ export def "kkid-wishlist-delete" [
   let qp = [(serialize-qp "wishId" $wish_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1448,7 +1475,7 @@ export def "kkid-wishlist-get" [
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1490,7 +1517,7 @@ export def "kkid-wishlist-post" [
   let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1531,7 +1558,7 @@ export def "kkid-wishlist-put" [
   let qp = [(serialize-qp "wishId" $wish_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url

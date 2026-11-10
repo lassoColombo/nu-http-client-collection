@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -172,9 +199,9 @@ export def "post-batch" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/batch") $auth.query)
   let req_body = {"cart": $cart, "category": $category, "customer": $customer, "employee": $employee, "order": $order, "product": $product} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -227,9 +254,9 @@ export def "post-cart" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/cart") $auth.query)
   let req_body = {"cart_id": $cart_id, "change_date": $change_date, "cookies": $cookies, "create_date": $create_date, "currency": $currency, "customer": $customer, "id": $id, "items": $items, "previous_items": $previous_items, "subtotal": $subtotal, "total": $total, "total_discounts": $total_discounts, "total_payment_cost": $total_payment_cost, "total_shipping": $total_shipping, "total_tax": $total_tax, "visit": $visit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -268,9 +295,9 @@ export def "post-category" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/category") $auth.query)
   let req_body = {"id": $id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -321,9 +348,9 @@ export def "post-customer" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/customer") $auth.query)
   let req_body = {"active_flag": $active_flag, "change_date": $change_date, "company": $company, "cookies": $cookies, "create_date": $create_date, "department": $department, "email": $email, "first_name": $first_name, "id": $id, "last_name": $last_name, "marketing_opt_in": $marketing_opt_in, "name": $name, "phone": $phone, "position": $position} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -363,9 +390,9 @@ export def "post-order-cancelled" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/order") $auth.query)
   let req_body = {"cancel_date": $cancel_date, "order_number": $order_number, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -419,11 +446,11 @@ export def "post-product" [
   if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'siteId' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/{site_id}/product") $auth.query)
   let req_body = {"ancestors": $ancestors, "attributes": $attributes, "base_product": $base_product, "brand": $brand, "catalog": $catalog, "categories": $categories, "change_date": $change_date, "code": $code, "create_date": $create_date, "id": $id, "images": $images, "is_order": $is_order, "is_sku": $is_sku, "name": $name, "rating": $rating, "urls": $urls, "vendors": $vendors} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "is_order") == null) { error make --unspanned { msg: "required body field 'is_order' missing: pass --is-order or pipe a record" } }
   if (($req_body | get -o "is_sku") == null) { error make --unspanned { msg: "required body field 'is_sku' missing: pass --is-sku or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

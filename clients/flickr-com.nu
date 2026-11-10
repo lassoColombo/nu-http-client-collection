@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -218,7 +245,7 @@ export def "get-access-token" [
   let qp = [(serialize-qp "oauth_consumer_key" $oauth_consumer_key "scalar") (serialize-qp "oauth_nonce" $oauth_nonce "scalar") (serialize-qp "oauth_timestamp" $oauth_timestamp "scalar") (serialize-qp "oauth_signature_method" $oauth_signature_method "scalar") (serialize-qp "oauth_version" $oauth_version "scalar") (serialize-qp "oauth_signature" $oauth_signature "scalar") (serialize-qp "oauth_verifier" $oauth_verifier "scalar") (serialize-qp "oauth_token" $oauth_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/access_token" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -267,7 +294,7 @@ export def "get-request-token" [
   let qp = [(serialize-qp "oauth_consumer_key" $oauth_consumer_key "scalar") (serialize-qp "oauth_nonce" $oauth_nonce "scalar") (serialize-qp "oauth_timestamp" $oauth_timestamp "scalar") (serialize-qp "oauth_signature_method" $oauth_signature_method "scalar") (serialize-qp "oauth_version" $oauth_version "scalar") (serialize-qp "oauth_signature" $oauth_signature "scalar") (serialize-qp "oauth_callback" $oauth_callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/request_token" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -307,7 +334,7 @@ export def "get-favorites-context-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.favorites.getContext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -350,7 +377,7 @@ export def "get-favorites-by-person-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "min_fave_date" $min_fave_date "scalar") (serialize-qp "max_fave_date" $max_fave_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.favorites.getList" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -389,7 +416,7 @@ export def "get-gallery-photos-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "gallery_id" $gallery_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.galleries.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -431,7 +458,7 @@ export def "get-group-topic-replies-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "topic_id" $topic_id "scalar") (serialize-qp "reply_id" $reply_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.replies.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -471,7 +498,7 @@ export def "get-group-topic-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "topic_id" $topic_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.topics.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -511,7 +538,7 @@ export def "get-group-discussions-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.discuss.topics.getList" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -551,7 +578,7 @@ export def "get-group-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_path_alias" $group_path_alias "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -590,7 +617,7 @@ export def "get-rest-method-flickr-groups-pools-get-context" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.pools.getContext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "get-group-photos-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.groups.pools.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -666,7 +693,7 @@ export def "get-person-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.people.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -714,7 +741,7 @@ export def "get-media-by-person-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "min_upload_date" $min_upload_date "scalar") (serialize-qp "max_upload_date" $max_upload_date "scalar") (serialize-qp "min_taken_date" $min_taken_date "scalar") (serialize-qp "max_taken_date" $max_taken_date "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "privacy_filter" $privacy_filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.people.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -755,7 +782,7 @@ export def "get-photolist-context-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "photolist_id" $photolist_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photolist.getContext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -794,7 +821,7 @@ export def "get-photostream-context-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.getContext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -834,7 +861,7 @@ export def "get-photo-exif-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "secret" $secret "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.getExif" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -873,7 +900,7 @@ export def "get-photo-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -912,7 +939,7 @@ export def "get-photo-sizes-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.getSizes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -949,7 +976,7 @@ export def "get-license-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.licenses.getInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1018,7 +1045,7 @@ export def "get-media-by-search" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "min_upload_date" $min_upload_date "scalar") (serialize-qp "max_upload_date" $max_upload_date "scalar") (serialize-qp "min_taken_date" $min_taken_date "scalar") (serialize-qp "max_taken_date" $max_taken_date "scalar") (serialize-qp "license" $license "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "privacy_filter" $privacy_filter "scalar") (serialize-qp "bbox" $bbox "scalar") (serialize-qp "accuracy" $accuracy "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "machine_tags" $machine_tags "scalar") (serialize-qp "machine_tag_mode" $machine_tag_mode "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "contacts" $contacts "scalar") (serialize-qp "woe_id" $woe_id "scalar") (serialize-qp "place_id" $place_id "scalar") (serialize-qp "media" $media "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "geo_context" $geo_context "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "radius_units" $radius_units "scalar") (serialize-qp "is_commons" $is_commons "scalar") (serialize-qp "in_gallery" $in_gallery "scalar") (serialize-qp "is_getty" $is_getty "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photos.search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1058,7 +1085,7 @@ export def "get-album-context-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photo_id" $photo_id "scalar") (serialize-qp "photoset_id" $photoset_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photosets.getContext" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1099,7 +1126,7 @@ export def "get-albums-by-person-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photosets.getList" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1138,7 +1165,7 @@ export def "get-album-by-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "photoset_id" $photoset_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.photosets.getPhotos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1176,7 +1203,7 @@ export def "get-rest-method-flickr-test-echo" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "echo" $echo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest" "method=flickr.test.echo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1222,10 +1249,10 @@ export def "upload-photo" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/upload" $auth.query)
   let req_body = {"api_key": $api_key, "content_type": $content_type, "description": $description, "hidden": $hidden, "is_family": $is_family, "is_friend": $is_friend, "is_public": $is_public, "photo": $photo, "safety_level": $safety_level, "tags": $tags, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["photo"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"

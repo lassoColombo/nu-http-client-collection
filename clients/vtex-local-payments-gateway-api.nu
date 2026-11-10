@@ -22,7 +22,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
-  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })
   let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
   let locs = ($active | each {|p| $p.location } | uniq)
   let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
@@ -96,9 +96,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -119,6 +121,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,7 +217,7 @@ export def "2-send-payments-public" [
   --order-id: string # required, e.g. {{orderId}}
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --body: list
 ]: any -> any {
@@ -204,13 +231,13 @@ export def "2-send-payments-public" [
   let qp = [(serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pub/transactions/{transaction_id}/payments") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -242,7 +269,7 @@ export def "affiliations" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -250,9 +277,9 @@ export def "affiliations" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/affiliations" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -284,7 +311,7 @@ export def "insert-affiliation" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   configuration: list # item shape: {name: string, value: string}
   implementation: string
   --is-configured: oneof<nothing, bool>
@@ -298,15 +325,15 @@ export def "insert-affiliation" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/affiliations" $auth.query)
   let req_body = {"configuration": $configuration, "implementation": $implementation, "isConfigured": $is_configured, "isdelivered": $isdelivered, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isConfigured") == null) { error make --unspanned { msg: "required body field 'isConfigured' missing: pass --is-configured or pipe a record" } }
   if (($req_body | get -o "isdelivered") == null) { error make --unspanned { msg: "required body field 'isdelivered' missing: pass --isdelivered or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -339,7 +366,7 @@ export def "affiliation-by-id" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -348,9 +375,9 @@ export def "affiliation-by-id" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({affiliation_id: (encode-path-segment $affiliation_id)} | format pattern "/api/pvt/affiliations/{affiliation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -382,7 +409,7 @@ export def "update-affiliation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   configuration: list # item shape: {name: string, value: string}
   id: string
@@ -399,15 +426,15 @@ export def "update-affiliation" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({affiliation_id: (encode-path-segment $affiliation_id)} | format pattern "/api/pvt/affiliations/{affiliation_id}") $auth.query)
   let req_body = {"configuration": $configuration, "id": $id, "implementation": $implementation, "isConfigured": $is_configured, "isdelivered": $isdelivered, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "isConfigured") == null) { error make --unspanned { msg: "required body field 'isConfigured' missing: pass --is-configured or pipe a record" } }
   if (($req_body | get -o "isdelivered") == null) { error make --unspanned { msg: "required body field 'isdelivered' missing: pass --isdelivered or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -444,7 +471,7 @@ export def "installmentsoptions" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record<installments: table<options: list, payment: record>, value: float>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -454,9 +481,9 @@ export def "installmentsoptions" [
   let qp = [(serialize-qp "request.value" $request_value "scalar") (serialize-qp "request.salesChannel" $request_sales_channel "scalar") (serialize-qp "request.paymentDetails[0].id" $request_payment_details_0_id "scalar") (serialize-qp "request.paymentDetails[0].value" $request_payment_details_0_value "scalar") (serialize-qp "request.paymentDetails[0].bin" $request_payment_details_0_bin "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/pvt/installments" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -488,7 +515,7 @@ export def "available-payment-methods" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<table<affiliationId: string, allowCommercialCondition: bool, allowCommercialPolicy: bool, allowCountry: bool, allowInstallments: bool, allowIssuer: bool, allowMultiple: bool, allowNotification: bool, allowPeriod: bool, antifraudConnectorImplementation: string, connectorId: int, connectorImplementation: string, description: string, dueDate: string, fields: string, groupName: string, id: int, implementation: string, isAvailable: bool, isCustom: bool, isSelfAuthorized: bool, name: string, requiresDocument: bool, requiresPhone: bool, rules: list<record>, validator: record<cardCodeMask: string, cardCodeRegex: string, mask: string, regex: string, useBillingAddress: bool, useCardHolderName: bool, useCvv: bool, useExpirationDate: bool, validCardLengths: string, weights: list>>, string, record, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -496,9 +523,9 @@ export def "available-payment-methods" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/merchants/payment-systems" $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -530,7 +557,7 @@ export def "rules" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -538,9 +565,9 @@ export def "rules" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/rules" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -571,7 +598,7 @@ export def "insert-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   antifraud: record # e.g. {affiliationId: , implementation: } — shape: {affiliationId: string, implementation: string}
   --begin-date: string # nullable
@@ -599,15 +626,15 @@ export def "insert-rule" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/rules" $auth.query)
   let req_body = {"antifraud": $antifraud, "beginDate": $begin_date, "condition": $condition, "connector": $connector, "country": $country, "dateIntervals": $date_intervals, "enabled": $enabled, "endDate": $end_date, "installmentOptions": $installment_options, "installmentsService": $installments_service, "isDefault": $is_default, "isSelfAuthorized": $is_self_authorized, "issuer": $issuer, "multiMerchantList": $multi_merchant_list, "name": $name, "paymentSystem": $payment_system, "requiresAuthentication": $requires_authentication, "salesChannels": $sales_channels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   if (($req_body | get -o "isDefault") == null) { error make --unspanned { msg: "required body field 'isDefault' missing: pass --is-default or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -640,7 +667,7 @@ export def "rule" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -649,9 +676,9 @@ export def "rule" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/api/pvt/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -684,7 +711,7 @@ export def "rule-by-id" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -693,9 +720,9 @@ export def "rule-by-id" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/api/pvt/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -725,7 +752,7 @@ export def "put-rule-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
@@ -755,14 +782,14 @@ export def "put-rule-by-id" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({rule_id: (encode-path-segment $rule_id)} | format pattern "/api/pvt/rules/{rule_id}") $auth.query)
   let req_body = {"antifraud": $antifraud, "beginDate": $begin_date, "condition": $condition, "connector": $connector, "country": $country, "dateIntervals": $date_intervals, "enabled": $enabled, "endDate": $end_date, "id": $id, "installmentOptions": $installment_options, "isDefault": $is_default, "isSelfAuthorized": $is_self_authorized, "issuer": $issuer, "multiMerchantList": $multi_merchant_list, "name": $name, "paymentSystem": $payment_system, "salesChannels": $sales_channels} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "enabled") == null) { error make --unspanned { msg: "required body field 'enabled' missing: pass --enabled or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -793,7 +820,7 @@ export def "1-createanewtransaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   channel: string
   reference_id: string
@@ -808,13 +835,13 @@ export def "1-createanewtransaction" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base "/api/pvt/transactions" $auth.query)
   let req_body = {"channel": $channel, "referenceId": $reference_id, "salesChannel": $sales_channel, "urn": $urn, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -847,7 +874,7 @@ export def "transaction-details" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record<acceptHeader: string, antifraudAffiliationId: string, antifraudTid: string, authorizationDate: string, authorizationToken: string, buyer: string, cancelationDate: string, cancelationToken: string, cancellations: record<href: string>, channel: string, commitmentDate: string, commitmentToken: string, fields: table<name: string, value: string>, id: string, interactions: record<href: string>, ipAddress: string, markedForRecurrence: bool, owner: string, payments: record<href: string>, receiverUri: string, referenceKey: string, refundingDate: string, refundingToken: string, refunds: record<href: string>, salesChannel: string, settlements: record<href: string>, softDescriptor: string, startDate: string, status: string, timeoutStatus: int, totalRefunds: float, transactionId: string, urn: string, userAgent: string, value: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -856,9 +883,9 @@ export def "transaction-details" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -890,7 +917,7 @@ export def "3-send-additional-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --name: string # Type of data that will be added to the transaction.
   --value: string # Data to be added to the transaction.
@@ -903,13 +930,13 @@ export def "3-send-additional-data" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/additional-data") $auth.query)
   let req_body = {"name": $name, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -941,11 +968,11 @@ export def "4-doauthorization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --prepare-for-recurrency: oneof<nothing, bool>
   soft_descriptor: string
-  --body-transaction-id: string
+  --body-transaction-id: string # (spec name: transactionId)
 ]: any -> any {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
@@ -955,15 +982,15 @@ export def "4-doauthorization" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/authorization-request") $auth.query)
   let req_body = {"prepareForRecurrency": $prepare_for_recurrency, "softDescriptor": $soft_descriptor, "transactionId": $body_transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "prepareForRecurrency") == null) { error make --unspanned { msg: "required body field 'prepareForRecurrency' missing: pass --prepare-for-recurrency or pipe a record" } }
   if (($req_body | get -o "transactionId") == null) { error make --unspanned { msg: "required body field 'transactionId' missing: pass --body-transaction-id or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -995,7 +1022,7 @@ export def "cancelthetransaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --minicart: record # This field is filled with the content of the cart of the transaction, which can be obtained using [Get Orders](https://developers.vtex.com/vtex-rest-api/reference/orders#getorder) or [Transaction Details](https://developers.vtex.com/vtex-rest-api/reference/transaction-process#transactiondetails) endpoints. It should only be included for transactions with split payment. (default: {minicart: {freight: 200, items: [{discount: 50, id: 122323, name: Tenis Preto I, quantity: 1, shippingDiscount: 0, value: 1000}, {discount: 50, id: 122324, name: Tenis Nike Azul, quantity: 1, shippingDiscount: 0, value: 1100}], tax: 0}, value: 2300}) — shape: {freight?: int, items?: list, tax?: int}
   value: int # Value of the purchase. (format: int32)
@@ -1008,13 +1035,13 @@ export def "cancelthetransaction" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/cancellation-request") $auth.query)
   let req_body = {"minicart": $minicart, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1046,7 +1073,7 @@ export def "2-send-payments-with-saved-credit-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --body: list
 ]: any -> any {
@@ -1058,13 +1085,13 @@ export def "2-send-payments-with-saved-credit-card" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/payments") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1098,7 +1125,7 @@ export def "payment-details" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record<ConnectorResponses: string, ShowConnectorResponses: bool, allowInstallments: bool, allowIssuer: bool, allowNotification: bool, connector: string, connectorResponse: string, currencyCode: string, description: string, fields: table<name: string, value: string>, group: string, id: string, installments: int, installmentsInterestRate: int, installmentsValue: int, isAvailable: bool, isCustom: bool, merchantName: string, paymentSystem: int, paymentSystemName: string, provider: string, referenceValue: int, returnCode: string, returnMessage: string, self: record<href: string>, sheets: string, status: string, tid: string, value: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1108,9 +1135,9 @@ export def "payment-details" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/api/pvt/transactions/{transaction_id}/payments/{payment_id}") $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1142,7 +1169,7 @@ export def "refundthetransaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   --minicart: record # This field is filled with the content of the cart of the transaction, which can be obtained using [Get Orders](https://developers.vtex.com/vtex-rest-api/reference/orders#getorder) or [Transaction Details](https://developers.vtex.com/vtex-rest-api/reference/transaction-process#transactiondetails) endpoints. It should only be included for transactions with split payment. (default: {minicart: {freight: 200, items: [{discount: 50, id: 122323, name: Tenis Preto I, quantity: 1, shippingDiscount: 0, value: 1000}, {discount: 50, id: 122324, name: Tenis Nike Azul, quantity: 1, shippingDiscount: 0, value: 1100}], tax: 0}, value: 2300}) — shape: {freight?: int, items?: list, tax?: int}
   value: int # Value of the purchase. (format: int32)
@@ -1155,13 +1182,13 @@ export def "refundthetransaction" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/refunding-request") $auth.query)
   let req_body = {"minicart": $minicart, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1193,7 +1220,7 @@ export def "settlethetransaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
   value: int # format: int32
 ]: any -> oneof<record<cancelledValue: int, connectorRefundedValue: int, message: string, processingDate: string, refundedToken: string, refundedValue: int, status: int, statusDetail: string, token: string>, string, nothing> {
@@ -1205,13 +1232,13 @@ export def "settlethetransaction" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/settlement-request") $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1244,7 +1271,7 @@ export def "transaction-settlement-details" [
   --x-provider-api-app-key: string # The AppKey configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppKey}})
   --x-provider-api-app-token: string # The AppToken configured by the merchant (optional configuration) (required, e.g. {{X-PROVIDER-API-AppToken}})
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json (required, e.g. application/json)
-  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json (required, e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<record<actions: table<connectorResponse: string, date: string, payment: record, paymentId: string, type: string, value: int>, requests: table<date: string, id: string, value: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PAYMENTS_GATEWAY_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PAYMENTS_GATEWAY_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
@@ -1253,9 +1280,9 @@ export def "transaction-settlement-details" [
   if ($x_provider_api_app_token == null) { error make --unspanned { msg: "required header parameter 'X-PROVIDER-API-AppToken' missing: pass --x-provider-api-app-token" } }
   let full_url = (build-url $base ({transaction_id: (encode-path-segment $transaction_id)} | format pattern "/api/pvt/transactions/{transaction_id}/settlements") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-PROVIDER-API-AppKey": $x_provider_api_app_key, "X-PROVIDER-API-AppToken": $x_provider_api_app_token, "Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

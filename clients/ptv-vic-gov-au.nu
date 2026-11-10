@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -171,7 +198,7 @@ export def "departures-get-for-stop" [
   --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results > 0.
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
   --include-geopath: oneof<nothing, bool> # Indicates if the route geopath should be returned
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
@@ -182,7 +209,7 @@ export def "departures-get-for-stop" [
   let qp = [(serialize-qp "platform_numbers" $platform_numbers "multi") (serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_type: (encode-path-segment $route_type), stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -223,7 +250,7 @@ export def "departures-get-for-stop-and-route" [
   --look-backwards: oneof<nothing, bool> # Indicates if filtering runs (and their departures) to those that arrive at destination before date_utc (default = false). Requires max_results > 0.
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, Stop, Route, Run, Direction, Disruption, VehiclePosition, VehicleDescriptor or None. Run must be expanded to receive VehiclePosition and VehicleDescriptor information.
   --include-geopath: oneof<nothing, bool> # Indicates if the route geopath should be returned
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, stop_id: int>, directions: record, disruptions: record, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
@@ -235,7 +262,7 @@ export def "departures-get-for-stop-and-route" [
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "include_cancelled" $include_cancelled "scalar") (serialize-qp "look_backwards" $look_backwards "scalar") (serialize-qp "expand" $expand "multi") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_type: (encode-path-segment $route_type), stop_id: (encode-path-segment $stop_id), route_id: (encode-path-segment $route_id)} | format pattern "/v3/departures/route_type/{route_type}/stop/{stop_id}/route/{route_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -266,7 +293,7 @@ export def "directions-for-route" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
@@ -276,7 +303,7 @@ export def "directions-for-route" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/directions/route/{route_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -307,7 +334,7 @@ export def "directions-for-direction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
@@ -317,7 +344,7 @@ export def "directions-for-direction" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({direction_id: (encode-path-segment $direction_id)} | format pattern "/v3/directions/{direction_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -349,7 +376,7 @@ export def "directions-for-direction-and-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<directions: table<direction_id: int, direction_name: string, route_direction_description: string, route_id: int, route_type: int>, status: record<health: int, version: string>>, string, nothing> {
@@ -360,7 +387,7 @@ export def "directions-for-direction-and-type" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({direction_id: (encode-path-segment $direction_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/directions/{direction_id}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -393,7 +420,7 @@ export def "disruptions-get-all-disruptions" [
   --route-types: list<int> # Filter by route_type; values returned via RouteTypes API
   --disruption-modes: list<int> # Filter by disruption_mode; values returned via v3/disruptions/modes API
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
@@ -402,7 +429,7 @@ export def "disruptions-get-all-disruptions" [
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "disruption_modes" $disruption_modes "multi") (serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/disruptions" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -432,7 +459,7 @@ export def "disruptions-get-disruption-modes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruption_modes: table<disruption_mode: int, disruption_mode_name: string>, status: record<health: int, version: string>>, string, nothing> {
@@ -441,7 +468,7 @@ export def "disruptions-get-disruption-modes" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/disruptions/modes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -473,7 +500,7 @@ export def "disruptions-get-disruptions-by-route" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
@@ -483,7 +510,7 @@ export def "disruptions-get-disruptions-by-route" [
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/disruptions/route/{route_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -516,7 +543,7 @@ export def "disruptions-get-disruptions-by-route-and-stop" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
@@ -527,7 +554,7 @@ export def "disruptions-get-disruptions-by-route-and-stop" [
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/disruptions/route/{route_id}/stop/{stop_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -559,7 +586,7 @@ export def "disruptions-get-disruptions-by-stop" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --disruption-status: string@disruption-status-completer # Filter by status of disruption
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record<ferry: list<record>, general: list<record>, interstate_train: list<record>, metro_bus: list<record>, metro_train: list<record>, metro_tram: list<record>, night_bus: list<record>, regional_bus: list<record>, regional_coach: list<record>, regional_train: list<record>, school_bus: list<record>, skybus: list<record>, taxi: list<record>, telebus: list<record>>, status: record<health: int, version: string>>, string, nothing> {
@@ -569,7 +596,7 @@ export def "disruptions-get-disruptions-by-stop" [
   let qp = [(serialize-qp "disruption_status" $disruption_status "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stop_id: (encode-path-segment $stop_id)} | format pattern "/v3/disruptions/stop/{stop_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -600,7 +627,7 @@ export def "disruptions-get-disruption-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruption: record<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list<record>, stops: list<record>, title: string, to_date: string, url: string>, status: record<health: int, version: string>>, string, nothing> {
@@ -610,7 +637,7 @@ export def "disruptions-get-disruption-by-id" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({disruption_id: (encode-path-segment $disruption_id)} | format pattern "/v3/disruptions/{disruption_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -646,7 +673,7 @@ export def "fare-estimate-get-fare-estimate-by-zone" [
   --journey-touch-off-utc: string # JourneyTouchOffUtc in format yyyy-M-d h:m (e.g 2016-5-31 16:53). (format: date-time)
   --is-journey-in-free-tram-zone: oneof<nothing, bool>
   --travelled-route-types: list<int>
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> any {
@@ -657,7 +684,7 @@ export def "fare-estimate-get-fare-estimate-by-zone" [
   let qp = [(serialize-qp "journey_touch_on_utc" $journey_touch_on_utc "scalar") (serialize-qp "journey_touch_off_utc" $journey_touch_off_utc "scalar") (serialize-qp "is_journey_in_free_tram_zone" $is_journey_in_free_tram_zone "scalar") (serialize-qp "travelled_route_types" $travelled_route_types "multi") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({min_zone: (encode-path-segment $min_zone), max_zone: (encode-path-segment $max_zone)} | format pattern "/v3/fare_estimate/min_zone/{min_zone}/max_zone/{max_zone}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -688,7 +715,7 @@ export def "outlets-get-all-outlets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --max-results: int # Maximum number of results returned (default = 30) (format: int32)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>>, string, nothing> {
@@ -697,7 +724,7 @@ export def "outlets-get-all-outlets" [
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/outlets" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -731,7 +758,7 @@ export def "outlets-get-outlets-by-geolocation" [
   --accept: string@accept-completer # Response content type
   --max-distance: float # Filter by maximum distance (in metres) from location specified via latitude and longitude parameters (default = 300) (format: double)
   --max-results: int # Maximum number of results returned (default = 30) (format: int32)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, status: record<health: int, version: string>>, string, nothing> {
@@ -742,7 +769,7 @@ export def "outlets-get-outlets-by-geolocation" [
   let qp = [(serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v3/outlets/location/{latitude},{longitude}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -779,7 +806,7 @@ export def "patterns-get-pattern-by-run" [
   --date-utc: string # Filter by the date and time of the request (ISO 8601 UTC format) (format: date-time)
   --include-skipped-stops: oneof<nothing, bool> # Include any skipped stops in a stopping pattern. Defaults to false.
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<departures: table<at_platform: bool, departure_sequence: int, direction_id: int, disruption_ids: list, estimated_departure_utc: string, flags: string, platform_number: string, route_id: int, run_id: int, run_ref: string, scheduled_departure_utc: string, skipped_stops: list, stop_id: int>, directions: record, disruptions: table<colour: string, description: string, display_on_board: bool, display_status: bool, disruption_id: int, disruption_status: string, disruption_type: string, from_date: string, last_updated: string, published_on: string, routes: list, stops: list, title: string, to_date: string, url: string>, routes: record, runs: record, status: record<health: int, version: string>, stops: record>, string, nothing> {
@@ -791,7 +818,7 @@ export def "patterns-get-pattern-by-run" [
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "stop_id" $stop_id "scalar") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_skipped_stops" $include_skipped_stops "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/pattern/run/{run_ref}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -821,7 +848,7 @@ export def "route-types-get-route-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<route_types: table<route_type: int, route_type_name: string>, status: record<health: int, version: string>>, string, nothing> {
@@ -830,7 +857,7 @@ export def "route-types-get-route-types" [
   let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/route_types" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -862,7 +889,7 @@ export def "routes-one-or-more-routes" [
   --accept: string@accept-completer # Response content type
   --route-types: list<int> # Filter by route_type; values returned via RouteTypes API
   --route-name: string # Filter by name of route (accepts partial route name matches)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<route: record, status: record<health: int, version: string>>, string, nothing> {
@@ -871,7 +898,7 @@ export def "routes-one-or-more-routes" [
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "route_name" $route_name "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/routes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -904,7 +931,7 @@ export def "routes-route-from-id" [
   --accept: string@accept-completer # Response content type
   --include-geopath: oneof<nothing, bool> # Indicates kif geopath data will be returned (default = false)
   --geopath-utc: string # Filter geopaths by date (ISO 8601 UTC format) (default = current date) (format: date-time)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<route: record, status: record<health: int, version: string>>, string, nothing> {
@@ -914,7 +941,7 @@ export def "routes-route-from-id" [
   let qp = [(serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/routes/{route_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -947,7 +974,7 @@ export def "runs-for-route" [
   --accept: string@accept-completer # Response content type
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None.
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
@@ -957,7 +984,7 @@ export def "runs-for-route" [
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id)} | format pattern "/v3/runs/route/{route_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -991,7 +1018,7 @@ export def "runs-for-route-and-route-type" [
   --accept: string@accept-completer # Response content type
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is All. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
@@ -1003,7 +1030,7 @@ export def "runs-for-route-and-route-type" [
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/route/{route_id}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1037,7 +1064,7 @@ export def "runs-for-run" [
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<runs: table<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record, vehicle_position: record>, status: record<health: int, version: string>>, string, nothing> {
@@ -1048,7 +1075,7 @@ export def "runs-for-run" [
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref)} | format pattern "/v3/runs/{run_ref}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1083,7 +1110,7 @@ export def "runs-for-run-and-route-type" [
   --expand: list<string> # List of objects to be returned in full (i.e. expanded) - options include: All, VehiclePosition, VehicleDescriptor, or None. Default is None. (required)
   --date-utc: string # Date of the request. (optional - defaults to now) (format: date-time)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<run: record<destination_name: string, direction_id: int, express_stop_count: int, final_stop_id: int, geopath: list<record>, route_id: int, route_type: int, run_id: int, run_ref: string, run_sequence: int, status: string, vehicle_descriptor: record<air_conditioned: bool, description: string, id: string, length: string, low_floor: bool, operator: string, supplier: string>, vehicle_position: record<bearing: float, datetime_utc: string, direction: string, easting: float, expiry_time: string, latitude: float, longitude: float, northing: float, supplier: string>>, status: record<health: int, version: string>>, string, nothing> {
@@ -1095,7 +1122,7 @@ export def "runs-for-run-and-route-type" [
   let qp = [(serialize-qp "expand" $expand "multi") (serialize-qp "date_utc" $date_utc "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({run_ref: (encode-path-segment $run_ref), route_type: (encode-path-segment $route_type)} | format pattern "/v3/runs/{run_ref}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1135,7 +1162,7 @@ export def "search-search" [
   --match-stop-by-suburb: oneof<nothing, bool> # Indicates whether to find stops by suburbs in the search term (default = true)
   --match-route-by-suburb: oneof<nothing, bool> # Indicates whether to find routes by suburbs in the search term (default = true)
   --match-stop-by-gtfs-stop-id: oneof<nothing, bool> # Indicates whether to search for stops according to a metlink stop ID (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<outlets: table<outlet_business: string, outlet_business_hour_fri: string, outlet_business_hour_mon: string, outlet_business_hour_sat: string, outlet_business_hour_sun: string, outlet_business_hour_thur: string, outlet_business_hour_tue: string, outlet_business_hour_wed: string, outlet_distance: float, outlet_latitude: float, outlet_longitude: float, outlet_name: string, outlet_notes: string, outlet_postcode: int, outlet_slid_spid: string, outlet_suburb: string>, routes: table<route_gtfs_id: string, route_id: int, route_name: string, route_number: string, route_service_status: record, route_type: int>, status: record<health: int, version: string>, stops: table<route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>>, string, nothing> {
@@ -1145,7 +1172,7 @@ export def "search-search" [
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "include_addresses" $include_addresses "scalar") (serialize-qp "include_outlets" $include_outlets "scalar") (serialize-qp "match_stop_by_suburb" $match_stop_by_suburb "scalar") (serialize-qp "match_route_by_suburb" $match_route_by_suburb "scalar") (serialize-qp "match_stop_by_gtfs_stop_id" $match_stop_by_gtfs_stop_id "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({search_term: (encode-path-segment $search_term)} | format pattern "/v3/search/{search_term}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1181,7 +1208,7 @@ export def "stops-stops-by-geolocation" [
   --max-results: int # Maximum number of results returned (default = 30) (format: int32)
   --max-distance: float # Filter by maximum distance (in metres) from location specified via latitude and longitude parameters (default = 300) (format: double)
   --stop-disruptions: oneof<nothing, bool> # Indicates if stop disruption information will be returned (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, routes: list, stop_distance: float, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string>>, string, nothing> {
@@ -1192,7 +1219,7 @@ export def "stops-stops-by-geolocation" [
   let qp = [(serialize-qp "route_types" $route_types "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "max_distance" $max_distance "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({latitude: (encode-path-segment $latitude), longitude: (encode-path-segment $longitude)} | format pattern "/v3/stops/location/{latitude},{longitude}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1228,7 +1255,7 @@ export def "stops-stops-for-route" [
   --stop-disruptions: oneof<nothing, bool> # Indicates if stop disruption information will be returned (default = false)
   --include-geopath: oneof<nothing, bool> # Indicates if geopath data will be returned (default = false)
   --geopath-utc: string # Filter geopaths by date (ISO 8601 UTC format) (default = current date) (format: date-time)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record, geopath: list<record>, status: record<health: int, version: string>, stops: table<disruption_ids: list, route_type: int, stop_id: int, stop_landmark: string, stop_latitude: float, stop_longitude: float, stop_name: string, stop_sequence: int, stop_suburb: string, stop_ticket: record>>, string, nothing> {
@@ -1239,7 +1266,7 @@ export def "stops-stops-for-route" [
   let qp = [(serialize-qp "direction_id" $direction_id "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "include_geopath" $include_geopath "scalar") (serialize-qp "geopath_utc" $geopath_utc "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({route_id: (encode-path-segment $route_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/stops/route/{route_id}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1279,7 +1306,7 @@ export def "stops-stop-details" [
   --gtfs: oneof<nothing, bool> # Incdicates whether the stop_id is a GTFS ID or not
   --stop-staffing: oneof<nothing, bool> # Indicates if stop staffing information will be returned (default = false)
   --stop-disruptions: oneof<nothing, bool> # Indicates if stop disruption information will be returned (default = false)
-  --qp-token: string # Please ignore
+  --qp-token: string # Please ignore (spec name: token)
   --devid: string # Your developer id
   --signature: string # Authentication signature for request
 ]: nothing -> oneof<record<disruptions: record, status: record<health: int, version: string>, stop: record<disruption_ids: list<int>, route_type: int, routes: list<record>, station_description: string, station_type: string, stop_accessibility: record<audio_customer_information: bool, escalator: bool, hearing_loop: bool, lift: bool, lighting: bool, platform_number: int, stairs: bool, stop_accessible: bool, tactile_ground_surface_indicator: bool, waiting_room: bool, wheelchair: record>, stop_amenities: record<car_parking: string, cctv: bool, taxi_rank: bool, toilet: bool>, stop_id: int, stop_landmark: string, stop_location: record<gps: record>, stop_name: string, stop_staffing: record<fri_am_from: string, fri_am_to: string, fri_pm_from: string, fri_pm_to: string, mon_am_from: string, mon_am_to: string, mon_pm_from: string, mon_pm_to: string, ph_additional_text: string, ph_from: string, ph_to: string, sat_am_from: string, sat_am_to: string, sat_pm_from: string, sat_pm_to: string, sun_am_from: string, sun_am_to: string, sun_pm_from: string, sun_pm_to: string, thu_am_from: string, thu_am_to: string, thu_pm_from: string, thu_pm_to: string, tue_am_from: string, tue_am_to: string, tue_pm_from: string, tue_pm_to: string, wed_am_from: string, wed_am_to: string, wed_pm_To: string, wed_pm_from: string>>>, string, nothing> {
@@ -1290,7 +1317,7 @@ export def "stops-stop-details" [
   let qp = [(serialize-qp "stop_location" $stop_location "scalar") (serialize-qp "stop_amenities" $stop_amenities "scalar") (serialize-qp "stop_accessibility" $stop_accessibility "scalar") (serialize-qp "stop_contact" $stop_contact "scalar") (serialize-qp "stop_ticket" $stop_ticket "scalar") (serialize-qp "gtfs" $gtfs "scalar") (serialize-qp "stop_staffing" $stop_staffing "scalar") (serialize-qp "stop_disruptions" $stop_disruptions "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devid" $devid "scalar") (serialize-qp "signature" $signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stop_id: (encode-path-segment $stop_id), route_type: (encode-path-segment $route_type)} | format pattern "/v3/stops/{stop_id}/route_type/{route_type}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

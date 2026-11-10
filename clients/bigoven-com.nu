@@ -86,9 +86,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -109,6 +111,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -191,7 +218,7 @@ export def "collection-get-collection" [
   let qp = [(serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "test" $test "scalar") (serialize-qp "sessionForLogging" $session_for_logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -228,7 +255,7 @@ export def "collection-get-collection-meta" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/collection/{id}/meta") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -265,7 +292,7 @@ export def "collection-collections" [
   let qp = [(serialize-qp "test" $test "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collections" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -300,7 +327,7 @@ export def "grocery-list-delete" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -335,7 +362,7 @@ export def "grocery-list-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -370,7 +397,7 @@ export def "grocery-list-grocery-list-remove-marked-items" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/clearcheckedlines" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -407,9 +434,9 @@ export def "grocery-list-department" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/department" $auth.query)
   let req_body = {"items": $items} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -449,9 +476,9 @@ export def "post-grocerylist-item" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/item" $auth.query)
   let req_body = {"department": $department, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -488,7 +515,7 @@ export def "grocery-list-delete-item-by-guid" [
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
   let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -520,7 +547,7 @@ export def "grocery-list-grocery-list-item-guid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --department: string # Gets or sets the department.
-  --body-guid: string # Gets or sets the unique identifier.
+  --body-guid: string # Gets or sets the unique identifier. (spec name: guid)
   --ischecked: oneof<nothing, bool> # Gets or sets the ischecked.
   --name: string # Gets or sets the name.
   --notes: string # Gets or sets the notes.
@@ -533,9 +560,9 @@ export def "grocery-list-grocery-list-item-guid" [
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
   let full_url = (build-url $base ({guid: (encode-path-segment $guid)} | format pattern "/grocerylist/item/{guid}") $auth.query)
   let req_body = {"department": $department, "guid": $body_guid, "ischecked": $ischecked, "name": $name, "notes": $notes, "quantity": $quantity, "unit": $unit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -572,9 +599,9 @@ export def "grocery-list-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/line" $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -613,9 +640,9 @@ export def "grocery-list-add-recipe" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/recipe" $auth.query)
   let req_body = {"markAsPending": $mark_as_pending, "recipeId": $recipe_id, "scale": $scale} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -653,9 +680,9 @@ export def "grocery-list-post-grocery-list-sync" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grocerylist/sync" $auth.query)
   let req_body = {"list": $list, "since": $since} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -690,7 +717,7 @@ export def "images-upload-user-avatar" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image/avatar" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -725,7 +752,7 @@ export def "me-index" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -767,9 +794,9 @@ export def "me-put-me" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
   let req_body = {"Accounting": $accounting, "BOAuthToken": $bo_auth_token, "LastChangeLogID": $last_change_log_id, "Personal": $personal, "Preferences": $preferences, "Profile": $profile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -807,9 +834,9 @@ export def "me-put-me-personal" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/personal" $auth.query)
   let req_body = {"Email": $email, "Location": $location} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -846,9 +873,9 @@ export def "me-put-me-preferences" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/preferences" $auth.query)
   let req_body = {"EatingStyle": $eating_style} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -883,7 +910,7 @@ export def "me-get-options" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/preferences/options" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -928,9 +955,9 @@ export def "put-me-profile" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/profile" $auth.query)
   let req_body = {"AboutMe": $about_me, "BackgroundUrl": $background_url, "Counts": $counts, "FirstName": $first_name, "FullName": $full_name, "HomeUrl": $home_url, "LastName": $last_name, "PhotoUrl": $photo_url, "UserID": $user_id, "UserName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -965,7 +992,7 @@ export def "me-skinny" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/skinny" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1046,9 +1073,9 @@ export def "recipe-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe" $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1129,9 +1156,9 @@ export def "recipe-put" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe" $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "AdTags": $ad_tags, "AdminBoost": $admin_boost, "AllCategoriesText": $all_categories_text, "BookmarkImageURL": $bookmark_image_url, "BookmarkSiteLogo": $bookmark_site_logo, "BookmarkURL": $bookmark_url, "Category": $category, "Collection": $collection, "CollectionID": $collection_id, "CreationDate": $creation_date, "Cuisine": $cuisine, "Description": $description, "FavoriteCount": $favorite_count, "HeroPhotoUrl": $hero_photo_url, "ImageSquares": $image_squares, "ImageURL": $image_url, "Ingredients": $ingredients, "IngredientsTextBlock": $ingredients_text_block, "Instructions": $instructions, "IsBookmark": $is_bookmark, "IsPrivate": $is_private, "IsRecipeScan": $is_recipe_scan, "IsSponsored": $is_sponsored, "LastModified": $last_modified, "MaxImageSquare": $max_image_square, "MedalCount": $medal_count, "MenuCount": $menu_count, "Microcategory": $microcategory, "NotesCount": $notes_count, "NutritionInfo": $nutrition_info, "Poster": $poster, "PrimaryIngredient": $primary_ingredient, "RecipeID": $recipe_id, "ReviewCount": $review_count, "StarRating": $star_rating, "Subcategory": $subcategory, "Title": $title, "TotalMinutes": $total_minutes, "VariantOfRecipeID": $variant_of_recipe_id, "VerifiedByClass": $verified_by_class, "VerifiedDateTime": $verified_date_time, "WebURL": $web_url, "YieldNumber": $yield_number, "YieldUnit": $yield_unit} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1170,7 +1197,7 @@ export def "recipe-auto-complete" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1210,7 +1237,7 @@ export def "recipe-auto-complete-all-recipes" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/all" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1250,7 +1277,7 @@ export def "recipe-auto-complete-my-recipes" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/autocomplete/mine" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1285,7 +1312,7 @@ export def "recipe-categories" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe/categories" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1323,7 +1350,7 @@ export def "recipe-get-active-recipe" [
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/active/recipe" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1365,7 +1392,7 @@ export def "recipe-get-step" [
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/saved/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1405,7 +1432,7 @@ export def "recipe-get-step-number" [
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/get/step/number" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1440,7 +1467,7 @@ export def "images-get-pending-by-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipe/photos/pending" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1482,7 +1509,7 @@ export def "recipe-get-steps" [
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "recipeId" $recipe_id "scalar") (serialize-qp "stepId" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/post/step" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1519,7 +1546,7 @@ export def "review-delete-reply" [
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
   let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1558,9 +1585,9 @@ export def "review-put-reply" [
   if ($reply_id | is-empty) { error make --unspanned { msg: "path parameter 'replyId' must be non-empty" } }
   let full_url = (build-url $base ({reply_id: (encode-path-segment $reply_id)} | format pattern "/recipe/review/replies/{reply_id}") $auth.query)
   let req_body = {"Comment": $comment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1596,7 +1623,7 @@ export def "get-recipe-review-review-id" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1639,9 +1666,9 @@ export def "review-put" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1681,7 +1708,7 @@ export def "review-get-replies" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1720,9 +1747,9 @@ export def "review-post-reply" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/recipe/review/{review_id}/replies") $auth.query)
   let req_body = {"Comment": $comment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1761,7 +1788,7 @@ export def "recipe-scan" [
   let qp = [(serialize-qp "test" $test "scalar") (serialize-qp "devicetype" $devicetype "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipe/scan" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1800,7 +1827,7 @@ export def "recipe-get-recipe-with-steps" [
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/steps/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1837,7 +1864,7 @@ export def "recipe-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1876,7 +1903,7 @@ export def "recipe-get" [
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1913,7 +1940,7 @@ export def "recipe-zap-recipe" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipe/{id}/zap") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1952,9 +1979,9 @@ export def "recipe-feedback" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/feedback") $auth.query)
   let req_body = {"feedback": $feedback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1995,7 +2022,7 @@ export def "images-upload-recipe-image" [
   let qp = [(serialize-qp "caption" $caption "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/image") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2032,7 +2059,7 @@ export def "images-get" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/images") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2070,7 +2097,7 @@ export def "note-post" [
   --id: int # Gets or sets the identifier. (format: int32)
   --notes: string # Gets or sets the notes.
   --people: string # Gets or sets the people.
-  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32)
+  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32) (spec name: RecipeID)
   --user-id: int # Gets or sets the user identifier. (format: int32)
   --variations: string # Gets or sets the variations.
 ]: any -> oneof<record<CreationDate: string, Date: string, DateDT: string, GUID: string, ID: int, Notes: string, People: string, RecipeID: int, UserID: int, Variations: string>, string, nothing> {
@@ -2080,9 +2107,9 @@ export def "note-post" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/note") $auth.query)
   let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2121,7 +2148,7 @@ export def "note-delete" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2160,7 +2187,7 @@ export def "note-get" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2199,7 +2226,7 @@ export def "note-put" [
   --id: int # Gets or sets the identifier. (format: int32)
   --notes: string # Gets or sets the notes.
   --people: string # Gets or sets the people.
-  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32)
+  --body-recipe-id: int # Gets or sets the recipe identifier. (format: int32) (spec name: RecipeID)
   --user-id: int # Gets or sets the user identifier. (format: int32)
   --variations: string # Gets or sets the variations.
 ]: any -> oneof<record<CreationDate: string, Date: string, DateDT: string, GUID: string, ID: int, Notes: string, People: string, RecipeID: int, UserID: int, Variations: string>, string, nothing> {
@@ -2210,9 +2237,9 @@ export def "note-put" [
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), note_id: (encode-path-segment $note_id)} | format pattern "/recipe/{recipe_id}/note/{note_id}") $auth.query)
   let req_body = {"CreationDate": $creation_date, "Date": $date, "DateDT": $date_dt, "GUID": $guid, "ID": $id, "Notes": $notes, "People": $people, "RecipeID": $body_recipe_id, "UserID": $user_id, "Variations": $variations} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2252,7 +2279,7 @@ export def "note-get-notes" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/notes") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2292,7 +2319,7 @@ export def "images-get-recipe-photos" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/photos") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2332,7 +2359,7 @@ export def "recipe-related" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/related") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2368,7 +2395,7 @@ export def "get-recipe-recipe-id-review" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2411,9 +2438,9 @@ export def "review-post" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/review") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "MakeAgain": $make_again, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2452,7 +2479,7 @@ export def "review-delete" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2491,7 +2518,7 @@ export def "review-get" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2538,9 +2565,9 @@ export def "review-put-legacy" [
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id), review_id: (encode-path-segment $review_id)} | format pattern "/recipe/{recipe_id}/review/{review_id}") $auth.query)
   let req_body = {"ActiveMinutes": $active_minutes, "Comment": $comment, "GUID": $guid, "MakeAgain": $make_again, "ParentID": $parent_id, "StarRating": $star_rating, "TotalMinutes": $total_minutes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2580,7 +2607,7 @@ export def "review-get-reviews" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/reviews") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2617,7 +2644,7 @@ export def "images-get-scan-images" [
   if ($recipe_id | is-empty) { error make --unspanned { msg: "path parameter 'recipeId' must be non-empty" } }
   let full_url = (build-url $base ({recipe_id: (encode-path-segment $recipe_id)} | format pattern "/recipe/{recipe_id}/scans") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2654,7 +2681,7 @@ export def "recipe-recipe-search" [
   --title-kw: string # Search just in the recipe title for the keyword
   --user-id: int # Set the target userid to search their public recipes (format: int32)
   --username: string # Set the target username to search their public recipes
-  --qp-token: string
+  --qp-token: string # (spec name: token)
   --photos: oneof<nothing, bool> # if set to true, limit search results to photos only
   --boostmine: oneof<nothing, bool> # if set to true, boost my own recipes in my folders so they show up high in the list (at the expense of other sort orders)
   --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish > Casseroles".
@@ -2692,7 +2719,7 @@ export def "recipe-recipe-search" [
   let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "rpp" $rpp "scalar") (serialize-qp "pg" $pg "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2727,7 +2754,7 @@ export def "recipe-get-random-recipe" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/random" $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2765,7 +2792,7 @@ export def "recipe-raves" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/raves" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2803,7 +2830,7 @@ export def "recipe-recent-views" [
   let qp = [(serialize-qp "pg" $pg "scalar") (serialize-qp "rpp" $rpp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/recentviews" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2840,7 +2867,7 @@ export def "recipe-recipe-search-random" [
   --title-kw: string # Search just in the recipe title for the keyword
   --user-id: int # Set the target userid to search their public recipes (format: int32)
   --username: string # Set the target username to search their public recipes
-  --qp-token: string
+  --qp-token: string # (spec name: token)
   --photos: oneof<nothing, bool> # if set to true, limit search results to photos only
   --boostmine: oneof<nothing, bool> # if set to true, boost my own recipes in my folders so they show up high in the list (at the expense of other sort orders)
   --include-cat: string # integer of the subcategory you'd like to limit searches to (see the /recipe/categories endpoint for available id numbers). For instance, 58 is "Main Dish > Casseroles".
@@ -2876,7 +2903,7 @@ export def "recipe-recipe-search-random" [
   let qp = [(serialize-qp "any_kw" $any_kw "scalar") (serialize-qp "folder" $folder "scalar") (serialize-qp "coll" $coll "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "title_kw" $title_kw "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "photos" $photos "scalar") (serialize-qp "boostmine" $boostmine "scalar") (serialize-qp "include_cat" $include_cat "scalar") (serialize-qp "exclude_cat" $exclude_cat "scalar") (serialize-qp "include_primarycat" $include_primarycat "scalar") (serialize-qp "exclude_primarycat" $exclude_primarycat "scalar") (serialize-qp "include_ing" $include_ing "scalar") (serialize-qp "exclude_ing" $exclude_ing "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "db" $db "scalar") (serialize-qp "userset" $userset "scalar") (serialize-qp "servingsMin" $servings_min "scalar") (serialize-qp "totalMins" $total_mins "scalar") (serialize-qp "maxIngredients" $max_ingredients "scalar") (serialize-qp "minIngredients" $min_ingredients "scalar") (serialize-qp "vtn" $vtn "scalar") (serialize-qp "vgn" $vgn "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "glf" $glf "scalar") (serialize-qp "ntf" $ntf "scalar") (serialize-qp "dyf" $dyf "scalar") (serialize-qp "sff" $sff "scalar") (serialize-qp "slf" $slf "scalar") (serialize-qp "tnf" $tnf "scalar") (serialize-qp "wmf" $wmf "scalar") (serialize-qp "rmf" $rmf "scalar") (serialize-qp "cps" $cps "scalar") (serialize-qp "champion" $champion "scalar") (serialize-qp "synonyms" $synonyms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/top25random" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2915,7 +2942,7 @@ export def "recipe-get-v2" [
   let qp = [(serialize-qp "prefetch" $prefetch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -189,16 +216,17 @@ export def "create-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<_thread: string, adherence: record, details: record, effective_from: string, effective_to: string, frequency_goal: record, identifiers: list, intake: record, metric_required: bool, metrics: list, static_title: string, title: string, tracking: bool, type: string, windows: list>, id: string, relationships: record<plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/action" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -210,7 +238,7 @@ export def "create-action" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get an action
@@ -234,7 +262,7 @@ export def "fetch-action" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/action/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -264,17 +292,18 @@ export def "update-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<_thread: string, adherence: record, details: record, effective_from: string, effective_to: string, frequency_goal: record, identifiers: list, intake: record, metric_required: bool, metrics: list, static_title: string, title: string, tracking: bool, type: string, windows: list>, id: string, relationships: record<plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/action/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -286,7 +315,7 @@ export def "update-action" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create bundle
@@ -303,16 +332,17 @@ export def "create-bundle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<_thread: string, effective_from: string, effective_to: string, title: string, type: string>, id: string, relationships: record<actions: record, plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bundle" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -324,7 +354,7 @@ export def "create-bundle" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a bundle
@@ -348,7 +378,7 @@ export def "fetch-bundle" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundle/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -378,17 +408,18 @@ export def "update-bundle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<_thread: string, effective_from: string, effective_to: string, title: string, type: string>, id: string, relationships: record<actions: record, plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundle/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -400,7 +431,7 @@ export def "update-bundle" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List calendar events
@@ -439,7 +470,7 @@ export def "fetch-calendar-events" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[attendees]" $filter_attendees "scalar") (serialize-qp "filter[type]" $filter_type "scalar") (serialize-qp "filter[completed]" $filter_completed "scalar") (serialize-qp "filter[start_at]" $filter_start_at "scalar") (serialize-qp "filter[end_at]" $filter_end_at "scalar") (serialize-qp "filter[completed_at]" $filter_completed_at "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendar_event" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -468,16 +499,17 @@ export def "create-calendar-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes: record, relationships: record, type: "calendar_event"}
 ]: any -> oneof<record<data: record<attributes: record<all_day: bool, attendees: list, completed_at: string, completed_by: record, description: string, end_at: string, location: string, start_at: string, time_zone: string, title: string, type: string>, id: string, links: record<self: string>, relationships: record<owner: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calendar_event" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -489,7 +521,7 @@ export def "create-calendar-event" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Delete a calendar event
@@ -513,7 +545,7 @@ export def "delete-calendar-event" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calendar_event/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -549,7 +581,7 @@ export def "fetch-calendar-event" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calendar_event/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -579,17 +611,18 @@ export def "update-calendar-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  --data: record # shape: {attributes?: record, id: string, relationships?: record, type: "calendar_event"}
 ]: any -> oneof<record<data: record<attributes: record<all_day: bool, attendees: list, completed_at: string, completed_by: record, description: string, end_at: string, location: string, start_at: string, time_zone: string, title: string, type: string>, id: string, links: record<self: string>, relationships: record<owner: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/calendar_event/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -601,7 +634,7 @@ export def "update-calendar-event" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Create calendar event response
@@ -618,16 +651,17 @@ export def "create-calendar-event-response" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes: record, relationships: record, type: "calendar_event_response"}
 ]: any -> oneof<record<data: record<attributes: record<attendee: record, response_status: string>, relationships: record<calendar_event: record, user: record>, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calendar_event_response" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -639,7 +673,7 @@ export def "create-calendar-event-response" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # List coaches
@@ -664,7 +698,7 @@ export def "fetch-coaches" [
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/coach" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -700,7 +734,7 @@ export def "fetch-coach" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coach/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -739,7 +773,7 @@ export def "fetch-email-histories" [
   let qp = [(serialize-qp "filter[receiver]" $filter_receiver "scalar") (serialize-qp "filter[sender]" $filter_sender "scalar") (serialize-qp "filter[emailType]" $filter_email_type "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email_history" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -775,7 +809,7 @@ export def "fetch-email-history" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/email_history/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -813,7 +847,7 @@ export def "fetch-groups" [
   let qp = [(serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[name]" $filter_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/group" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -842,16 +876,17 @@ export def "create-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes: record, id: string, type: "group"}
 ]: any -> oneof<record<data: record<attributes: record<bio: string, name: string>, id: string, links: record<self: string>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/group" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -863,7 +898,7 @@ export def "create-group" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Get a group
@@ -887,7 +922,7 @@ export def "fetch-group" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/group/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -930,7 +965,7 @@ export def "fetch-health-profiles" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/health_profile" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,7 +1003,7 @@ export def "fetch-health-profile" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/health_profile/{id}") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1011,7 +1046,7 @@ export def "fetch-health-profile-answers" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/health_profile_answer" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1049,7 +1084,7 @@ export def "fetch-health-profile-answer" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/health_profile_answer/{id}") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1088,7 +1123,7 @@ export def "fetch-health-profile-questions" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/health_profile_question" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,7 +1161,7 @@ export def "fetch-health-profile-question" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/health_profile_question/{id}") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1160,7 +1195,7 @@ export def "fetch-health-question-definitions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health_question_definition" $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1196,7 +1231,7 @@ export def "fetch-health-question-definition" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/health_question_definition/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1234,9 +1269,9 @@ export def "create-token" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oauth/token" $qp $auth.query)
   let req_body = {"data": $data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1272,7 +1307,7 @@ export def "fetch-token-groups" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/oauth/token/{id}/groups") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1308,7 +1343,7 @@ export def "fetch-token-organization" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/oauth/token/{id}/organization") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1344,7 +1379,7 @@ export def "fetch-organization" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/organization/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1390,7 +1425,7 @@ export def "fetch-patients" [
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[identifier][system]" $filter_identifier_system "scalar") (serialize-qp "filter[identifier][value]" $filter_identifier_value "scalar") (serialize-qp "filter[archived]" $filter_archived "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/patient" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1419,16 +1454,18 @@ export def "create-patient" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # Note that `data` can either be a single object or an array of objects matching the schema specified here (bulk create). — shape: {attributes: record, id?: string, relationships?: record, type: "patient"}
+  --meta: record # shape: {ignore_duplicates?: bool}
 ]: any -> oneof<record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/patient" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data, "meta": $meta} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -1440,7 +1477,7 @@ export def "create-patient" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [201]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [201]
 }
 
 # Upsert patient
@@ -1457,16 +1494,18 @@ export def "upsert-patient" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes: record, id?: string, relationships?: record, type: "patient"}
+  meta: record # shape: {query: record}
 ]: any -> oneof<record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/patient" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data, "meta": $meta} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "put"
     url: $full_url
@@ -1478,7 +1517,7 @@ export def "upsert-patient" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-put $req $req_body $insecure $raw $allow_errors $full [200]
+  send-put $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a patient
@@ -1502,7 +1541,7 @@ export def "fetch-patient" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1532,17 +1571,18 @@ export def "update-patient" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes: record, id?: string, relationships?: record, type: "patient"}
 ]: any -> oneof<record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -1554,7 +1594,7 @@ export def "update-patient" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List coaches for a patient
@@ -1578,7 +1618,7 @@ export def "fetch-patient-coaches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient/{id}/coaches") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1614,7 +1654,7 @@ export def "fetch-patient-groups" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient/{id}/groups") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1656,7 +1696,7 @@ export def "fetch-patient-health-metrics" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/patient_health_metric" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1685,16 +1725,18 @@ export def "create-patient-health-metric" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # Note that `data` can either be a single object or an array of objects matching the schema specified here (bulk create). — shape: {attributes?: record, id: string, relationships?: record, type: string}
+  --meta: record # shape: {ignore_duplicates?: bool}
 ]: any -> oneof<record<data: record<attributes: record<code: record, diastolic: float, occurred_at: string, systolic: float, type: string, unit: string, value: any>, id: string, relationships: record<patient: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/patient_health_metric" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data, "meta": $meta} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -1706,7 +1748,7 @@ export def "create-patient-health-metric" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a patient health metric
@@ -1730,7 +1772,7 @@ export def "fetch-patient-health-metric" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient_health_metric/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1769,7 +1811,7 @@ export def "fetch-patient-plan-summaries" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/patient_plan_summary" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1807,7 +1849,7 @@ export def "fetch-patient-plan-summary" [
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient_plan_summary/{id}") $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1837,17 +1879,18 @@ export def "update-patient-plan-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id: string, relationships?: record, type: "patient_plan_summary"}
 ]: any -> oneof<record<data: record<attributes: record<adherence: record, critical: record, effective_from: string, time_zone: string, window_notification_times: record, window_order: list>, id: string, links: record<self: string>, relationships: record<actions: record, bundles: record, current_results: record, patient: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/patient_plan_summary/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "patch"
     url: $full_url
@@ -1859,7 +1902,7 @@ export def "update-patient-plan-summary" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
+  send-patch $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # List patient health results
@@ -1894,7 +1937,7 @@ export def "fetch-patient-health-results" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[actions]" $filter_actions "scalar") (serialize-qp "filter[start_at]" $filter_start_at "scalar") (serialize-qp "filter[end_at]" $filter_end_at "scalar") (serialize-qp "filter[threads]" $filter_threads "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[after]" $page_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/result" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1930,7 +1973,7 @@ export def "fetch-patient-health-result" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/result/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1970,7 +2013,7 @@ export def "fetch-rewards" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[reward_program_activation]" $filter_reward_program_activation "scalar") (serialize-qp "filter[thread]" $filter_thread "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1999,16 +2042,17 @@ export def "create-reward" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id?: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<_thread: string, allocated_at: string, allocated_unit: string, allocated_value: float, description: string, earned_at: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, target_at: string>, id: string, relationships: record<patient: record, reward_program_activation: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reward" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -2020,7 +2064,7 @@ export def "create-reward" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a reward
@@ -2044,7 +2088,7 @@ export def "fetch-reward" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2084,7 +2128,7 @@ export def "fetch-reward-earnings" [
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[ready_for_fulfillment]" $filter_ready_for_fulfillment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_earning" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2113,16 +2157,17 @@ export def "create-reward-earning" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id?: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<earned_at: string, earned_unit: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, ready_for_fulfillment: bool>, id: string, relationships: record<group: record, patient: record, reward: record, reward_program_activation: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reward_earning" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -2134,7 +2179,7 @@ export def "create-reward-earning" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a reward earning
@@ -2158,7 +2203,7 @@ export def "fetch-reward-earning" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward_earning/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2195,7 +2240,7 @@ export def "fetch-reward-earning-fulfillments" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_earning_fulfillment" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2224,16 +2269,17 @@ export def "create-reward-earning-fulfillment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id?: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<fulfilled_at: string, fulfilled_unit: string, fulfilled_value: float>, id: string, relationships: record<patient: record, reward_earning: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reward_earning_fulfillment" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -2245,7 +2291,7 @@ export def "create-reward-earning-fulfillment" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a reward earning fulfillment
@@ -2269,7 +2315,7 @@ export def "fetch-reward-earning-fulfillment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward_earning_fulfillment/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2306,7 +2352,7 @@ export def "fetch-reward-programs" [
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_program" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2335,16 +2381,17 @@ export def "create-reward-program" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id?: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<budget_unit: string, budget_value: float, description: string, duration_active: float, end_at: string, frozen: bool, fulfill_as_earned: bool, name: string, start_at: string, tagline: string>, id: string, relationships: record<group: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reward_program" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -2356,7 +2403,7 @@ export def "create-reward-program" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a reward program
@@ -2380,7 +2427,7 @@ export def "fetch-reward-program" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward_program/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2416,7 +2463,7 @@ export def "fetch-reward-program-group" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward_program/{id}/group") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2454,7 +2501,7 @@ export def "fetch-reward-program-activations" [
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reward_program_activation" $qp $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2483,16 +2530,17 @@ export def "create-reward-program-activation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: any
+  data: record # shape: {attributes?: record, id?: string, relationships?: record, type: string}
 ]: any -> oneof<record<data: record<attributes: record<activated_at: string, active: bool, allocated_count: float, budget_unit: string, deactivated_at: string, earned_count: float, expires_at: string, fulfill_as_earned: bool, total_allocated_value: float, total_earned_value: float>, id: string, relationships: record<patient: record, reward_program: record>, type: string>, meta: record<ignored: list<string>, req_id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reward_program_activation" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = {"data": $data} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body_wire = (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body })
   let req = {
     method: "post"
     url: $full_url
@@ -2504,7 +2552,7 @@ export def "create-reward-program-activation" [
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
-  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+  send-post $req $req_body_wire $insecure $raw $allow_errors $full [200]
 }
 
 # Get a reward program activation
@@ -2528,7 +2576,7 @@ export def "fetch-reward-program-activation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reward_program_activation/{id}") $auth.query)
   let accept_val = "application/vnd.api+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -201,9 +228,9 @@ export def "get-generated-items-v1-history-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -242,11 +269,11 @@ export def "delete-history-items-v1-history-delete-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/delete" $auth.query)
   let req_body = {"history_item_ids": $history_item_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -283,11 +310,11 @@ export def "download-history-items-v1-history-download-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/download" $auth.query)
   let req_body = {"history_item_ids": $history_item_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -324,9 +351,9 @@ export def "delete-history-item-v1-history-history-item-id-delete" [
   if ($history_item_id | is-empty) { error make --unspanned { msg: "path parameter 'history_item_id' must be non-empty" } }
   let full_url = (build-url $base ({history_item_id: (encode-path-segment $history_item_id)} | format pattern "/v1/history/{history_item_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -363,9 +390,9 @@ export def "get-audio-from-history-item-v1-history-history-item-id-audio-get" [
   if ($history_item_id | is-empty) { error make --unspanned { msg: "path parameter 'history_item_id' must be non-empty" } }
   let full_url = (build-url $base ({history_item_id: (encode-path-segment $history_item_id)} | format pattern "/v1/history/{history_item_id}/audio") $auth.query)
   let accept_val = "audio/mpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -405,11 +432,11 @@ export def "text-to-speech-v1-text-to-speech-voice-id-post" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/text-to-speech/{voice_id}") $auth.query)
   let req_body = {"text": $text, "voice_settings": $voice_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "audio/mpeg"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -449,11 +476,11 @@ export def "text-to-speech-v1-text-to-speech-voice-id-stream-post" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/text-to-speech/{voice_id}/stream") $auth.query)
   let req_body = {"text": $text, "voice_settings": $voice_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -488,9 +515,9 @@ export def "get-user-info-v1-user-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -525,9 +552,9 @@ export def "get-user-subscription-info-v1-user-subscription-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user/subscription" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -562,9 +589,9 @@ export def "get-voices-v1-voices-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -604,12 +631,12 @@ export def "add-voice-v1-voices-add-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/add" $auth.query)
   let req_body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -644,7 +671,7 @@ export def "get-default-voice-settings-v1-voices-settings-default-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/settings/default" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -681,9 +708,9 @@ export def "delete-voice-v1-voices-voice-id-delete" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -722,9 +749,9 @@ export def "get-voice-v1-voices-voice-id-get" [
   let qp = [(serialize-qp "with_settings" $with_settings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -766,12 +793,12 @@ export def "edit-voice-v1-voices-voice-id-edit-post" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/edit") $auth.query)
   let req_body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -811,9 +838,9 @@ export def "delete-sample-v1-voices-voice-id-samples-sample-id-delete" [
   if ($sample_id | is-empty) { error make --unspanned { msg: "path parameter 'sample_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id), sample_id: (encode-path-segment $sample_id)} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -852,9 +879,9 @@ export def "get-audio-from-sample-v1-voices-voice-id-samples-sample-id-audio-get
   if ($sample_id | is-empty) { error make --unspanned { msg: "path parameter 'sample_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id), sample_id: (encode-path-segment $sample_id)} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}/audio") $auth.query)
   let accept_val = "audio/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -891,9 +918,9 @@ export def "get-voice-settings-v1-voices-voice-id-settings-get" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -933,11 +960,11 @@ export def "edit-voice-settings-v1-voices-voice-id-settings-edit-post" [
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
   let full_url = (build-url $base ({voice_id: (encode-path-segment $voice_id)} | format pattern "/v1/voices/{voice_id}/settings/edit") $auth.query)
   let req_body = {"similarity_boost": $similarity_boost, "stability": $stability} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

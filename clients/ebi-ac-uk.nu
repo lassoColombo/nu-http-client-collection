@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -167,7 +194,7 @@ export def "get-activities-using-get" [
   let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pchemblValue" $pchembl_value "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/activities" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -208,7 +235,7 @@ export def "get-assays-using-get" [
   let qp = [(serialize-qp "assayChemblId" $assay_chembl_id "multi") (serialize-qp "assayOrg" $assay_org "multi") (serialize-qp "assayType" $assay_type "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetChemblId" $target_chembl_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/assays" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -250,7 +277,7 @@ export def "get-drugs-using-get" [
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "chemblId" $chembl_id "multi") (serialize-qp "identifier" $identifier "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pubchemCid" $pubchem_cid "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/drugs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -293,7 +320,7 @@ export def "get-efo-using-get" [
   let qp = [(serialize-qp "doid" $doid "multi") (serialize-qp "label" $label "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "mesh" $mesh "multi") (serialize-qp "oboId" $obo_id "multi") (serialize-qp "omimId" $omim_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/efo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -333,7 +360,7 @@ export def "get-hpo-using-get" [
   let qp = [(serialize-qp "genesymbol" $genesymbol "multi") (serialize-qp "hpotermname" $hpotermname "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "synonym" $synonym "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/hpo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -373,7 +400,7 @@ export def "get-intact-using-get" [
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "confidence" $confidence "scalar") (serialize-qp "gene" $gene "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/intact" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -413,7 +440,7 @@ export def "get-molecules-using-get" [
   let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "moleculeChemblId" $molecule_chembl_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/molecules" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -461,7 +488,7 @@ export def "get-proteins-using-get" [
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "ec" $ec "multi") (serialize-qp "fullName" $full_name "multi") (serialize-qp "gene" $gene "multi") (serialize-qp "go" $go "multi") (serialize-qp "interpro" $interpro "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "omim" $omim "multi") (serialize-qp "orphanet" $orphanet "multi") (serialize-qp "page" $page "scalar") (serialize-qp "pfam" $pfam "multi") (serialize-qp "reactome" $reactome "multi") (serialize-qp "taxId" $tax_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/proteins" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -501,7 +528,7 @@ export def "get-bioassays-using-get" [
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "assayPubchemId" $assay_pubchem_id "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "ncbiProteinId" $ncbi_protein_id "multi") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/bioassays" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -540,7 +567,7 @@ export def "get-bioassays-using-get-1" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "outcome" $outcome "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sids" $sids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/bioassays/sids" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -580,7 +607,7 @@ export def "get-compounds-using-get" [
   let qp = [(serialize-qp "canonicalSmiles" $canonical_smiles "multi") (serialize-qp "cid" $cid "multi") (serialize-qp "inchiKey" $inchi_key "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/compounds" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "get-substances-using-get" [
   let qp = [(serialize-qp "cid" $cid "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sid" $sid "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/pubchem/substances" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -658,7 +685,7 @@ export def "get-targets-using-get" [
   let qp = [(serialize-qp "accession" $accession "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "targetIds" $target_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/targets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

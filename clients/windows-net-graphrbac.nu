@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -193,7 +220,7 @@ export def "applications-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -265,9 +292,9 @@ export def "applications-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/applications") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -309,7 +336,7 @@ export def "applications-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -351,7 +378,7 @@ export def "applications-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -425,9 +452,9 @@ export def "applications-patch" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}") $qp $auth.query)
   let req_body = {"displayName": $display_name, "identifierUris": $identifier_uris, "allowGuestsSignIn": $allow_guests_sign_in, "allowPassthroughUsers": $allow_passthrough_users, "appLogoUrl": $app_logo_url, "appPermissions": $app_permissions, "appRoles": $app_roles, "availableToOtherTenants": $available_to_other_tenants, "errorUrl": $error_url, "groupMembershipClaims": $group_membership_claims, "homepage": $homepage, "informationalUrls": $informational_urls, "isDeviceOnlyAuthSupported": $is_device_only_auth_supported, "keyCredentials": $key_credentials, "knownClientApplications": $known_client_applications, "logoutUrl": $logout_url, "oauth2AllowImplicitFlow": $oauth2_allow_implicit_flow, "oauth2AllowUrlPathMatching": $oauth2_allow_url_path_matching, "oauth2Permissions": $oauth2_permissions, "oauth2RequirePostResponse": $oauth2_require_post_response, "optionalClaims": $optional_claims, "orgRestrictions": $org_restrictions, "passwordCredentials": $password_credentials, "preAuthorizedApplications": $pre_authorized_applications, "publicClient": $public_client, "publisherDomain": $publisher_domain, "replyUrls": $reply_urls, "requiredResourceAccess": $required_resource_access, "samlMetadataUrl": $saml_metadata_url, "signInAudience": $sign_in_audience, "wwwHomepage": $www_homepage} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -471,9 +498,9 @@ export def "applications-add-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -517,7 +544,7 @@ export def "applications-remove-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -559,7 +586,7 @@ export def "applications-list-key-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,9 +630,9 @@ export def "applications-update-key-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -647,7 +674,7 @@ export def "applications-list-owners" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -689,7 +716,7 @@ export def "applications-list-password-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -733,9 +760,9 @@ export def "applications-update-password-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/applications/{application_object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -776,7 +803,7 @@ export def "deleted-applications-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/deletedApplications") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -818,7 +845,7 @@ export def "deleted-applications-hard-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_object_id: (encode-path-segment $application_object_id)} | format pattern "/{tenant_id}/deletedApplications/{application_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -860,7 +887,7 @@ export def "deleted-applications-restore" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/deletedApplications/{object_id}/restore") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -901,7 +928,7 @@ export def "domains-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/domains") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -943,7 +970,7 @@ export def "domains-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), domain_name: (encode-path-segment $domain_name)} | format pattern "/{tenant_id}/domains/{domain_name}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -987,9 +1014,9 @@ export def "objects-get-objects-by-object-ids" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/getObjectsByObjectIds") $qp $auth.query)
   let req_body = {"includeDirectoryObjectReferences": $include_directory_object_references, "objectIds": $object_ids, "types": $types} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1030,7 +1057,7 @@ export def "groups-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1075,11 +1102,11 @@ export def "groups-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/groups") $qp $auth.query)
   let req_body = {"displayName": $display_name, "mailEnabled": $mail_enabled, "mailNickname": $mail_nickname, "securityEnabled": $security_enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "mailEnabled") == null) { error make --unspanned { msg: "required body field 'mailEnabled' missing: pass --mail-enabled or pipe a record" } }
   if (($req_body | get -o "securityEnabled") == null) { error make --unspanned { msg: "required body field 'securityEnabled' missing: pass --security-enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1123,9 +1150,9 @@ export def "groups-add-member" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members") $qp $auth.query)
   let req_body = {"url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1169,7 +1196,7 @@ export def "groups-remove-member" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), group_object_id: (encode-path-segment $group_object_id), member_object_id: (encode-path-segment $member_object_id)} | format pattern "/{tenant_id}/groups/{group_object_id}/$links/members/{member_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1211,7 +1238,7 @@ export def "groups-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1253,7 +1280,7 @@ export def "groups-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1297,9 +1324,9 @@ export def "groups-add-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1343,7 +1370,7 @@ export def "groups-remove-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/groups/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1387,10 +1414,10 @@ export def "groups-get-member-groups" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "securityEnabledOnly") == null) { error make --unspanned { msg: "required body field 'securityEnabledOnly' missing: pass --security-enabled-only or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1432,7 +1459,7 @@ export def "groups-get-group-members" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/members") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1474,7 +1501,7 @@ export def "groups-list-owners" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/groups/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1517,9 +1544,9 @@ export def "groups-is-member-of" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/isMemberOf") $qp $auth.query)
   let req_body = {"groupId": $group_id, "memberId": $member_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1559,7 +1586,7 @@ export def "signed-in-user-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1599,7 +1626,7 @@ export def "signed-in-user-list-owned-objects" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/me/ownedObjects") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1639,7 +1666,7 @@ export def "o-auth2-permission-grant-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1688,9 +1715,9 @@ export def "o-auth2-permission-grant-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants") $qp $auth.query)
   let req_body = {"clientId": $client_id, "consentType": $consent_type, "expiryTime": $expiry_time, "objectId": $object_id, "odata.type": $odata_type, "principalId": $principal_id, "resourceId": $resource_id, "scope": $scope, "startTime": $start_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1732,7 +1759,7 @@ export def "o-auth2-permission-grant-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/oauth2PermissionGrants/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1773,7 +1800,7 @@ export def "service-principals-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1821,9 +1848,9 @@ export def "service-principals-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/servicePrincipals") $qp $auth.query)
   let req_body = {"appId": $app_id, "accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1865,7 +1892,7 @@ export def "service-principals-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1907,7 +1934,7 @@ export def "service-principals-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1956,9 +1983,9 @@ export def "service-principals-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "appRoleAssignmentRequired": $app_role_assignment_required, "keyCredentials": $key_credentials, "passwordCredentials": $password_credentials, "servicePrincipalType": $service_principal_type, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2002,9 +2029,9 @@ export def "service-principals-add-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners") $qp $auth.query)
   let req_body = {"url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2048,7 +2075,7 @@ export def "service-principals-remove-owner" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id), owner_object_id: (encode-path-segment $owner_object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/$links/owners/{owner_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2090,7 +2117,7 @@ export def "service-principals-list-app-role-assigned-to" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignedTo") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2132,7 +2159,7 @@ export def "service-principals-list-app-role-assignments" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/appRoleAssignments") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2174,7 +2201,7 @@ export def "service-principals-list-key-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2218,9 +2245,9 @@ export def "service-principals-update-key-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/keyCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2262,7 +2289,7 @@ export def "service-principals-list-owners" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/owners") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2304,7 +2331,7 @@ export def "service-principals-list-password-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2348,9 +2375,9 @@ export def "service-principals-update-password-credentials" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/servicePrincipals/{object_id}/passwordCredentials") $qp $auth.query)
   let req_body = {"value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2392,7 +2419,7 @@ export def "applications-get-service-principals-id-by-app-id" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), application_id: (encode-path-segment $application_id)} | format pattern "/{tenant_id}/servicePrincipalsByAppId/{application_id}/objectId") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2435,7 +2462,7 @@ export def "users-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2487,10 +2514,10 @@ export def "users-create" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id)} | format pattern "/{tenant_id}/users") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "accountEnabled") == null) { error make --unspanned { msg: "required body field 'accountEnabled' missing: pass --account-enabled or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2534,10 +2561,10 @@ export def "users-get-member-groups" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), object_id: (encode-path-segment $object_id)} | format pattern "/{tenant_id}/users/{object_id}/getMemberGroups") $qp $auth.query)
   let req_body = {"securityEnabledOnly": $security_enabled_only} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "securityEnabledOnly") == null) { error make --unspanned { msg: "required body field 'securityEnabledOnly' missing: pass --security-enabled-only or pipe a record" } }
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2579,7 +2606,7 @@ export def "users-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2621,7 +2648,7 @@ export def "users-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2675,9 +2702,9 @@ export def "users-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tenant_id: (encode-path-segment $tenant_id), upn_or_object_id: (encode-path-segment $upn_or_object_id)} | format pattern "/{tenant_id}/users/{upn_or_object_id}") $qp $auth.query)
   let req_body = {"accountEnabled": $account_enabled, "displayName": $display_name, "mail": $mail, "mailNickname": $mail_nickname, "passwordProfile": $password_profile, "userPrincipalName": $user_principal_name, "givenName": $given_name, "immutableId": $immutable_id, "surname": $surname, "usageLocation": $usage_location, "userType": $user_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url

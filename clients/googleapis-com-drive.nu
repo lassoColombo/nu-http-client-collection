@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,7 +217,7 @@ export def "drive-about-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/about" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,7 +274,7 @@ export def "drive-changes-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeCorpusRemovals" $include_corpus_removals "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeRemoved" $include_removed "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "restrictToMyDrive" $restrict_to_my_drive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -293,7 +320,7 @@ export def "drive-changes-get-start-page-token" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes/startPageToken" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -351,7 +378,7 @@ export def "drive-changes-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -361,9 +388,9 @@ export def "drive-changes-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeCorpusRemovals" $include_corpus_removals "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeRemoved" $include_removed "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "restrictToMyDrive" $restrict_to_my_drive "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changes/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -407,7 +434,7 @@ export def "drive-channels-stop" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> any {
   let input = $in
@@ -416,9 +443,9 @@ export def "drive-channels-stop" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -464,7 +491,7 @@ export def "drive-drives-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -521,9 +548,9 @@ export def "drive-drives-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/drives" $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -569,7 +596,7 @@ export def "drive-drives-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "allowItemDeletion" $allow_item_deletion "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -614,7 +641,7 @@ export def "drive-drives-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -672,9 +699,9 @@ export def "drive-drives-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}") $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "hidden": $hidden, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -718,7 +745,7 @@ export def "drive-drives-hide" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/hide") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -762,7 +789,7 @@ export def "drive-drives-unhide" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drive_id: (encode-path-segment $drive_id)} | format pattern "/drives/{drive_id}/unhide") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -819,7 +846,7 @@ export def "drive-files-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "corpora" $corpora "scalar") (serialize-qp "corpus" $corpus "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "includeItemsFromAllDrives" $include_items_from_all_drives "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "includeTeamDriveItems" $include_team_drive_items "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "spaces" $spaces "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "teamDriveId" $team_drive_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -872,9 +899,9 @@ export def "drive-files-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -919,7 +946,7 @@ export def "drive-files-generate-ids" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "space" $space "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/generateIds" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -963,7 +990,7 @@ export def "drive-files-empty-trash" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "driveId" $drive_id "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/trash" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1010,7 +1037,7 @@ export def "drive-files-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1059,7 +1086,7 @@ export def "drive-files-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1115,9 +1142,9 @@ export def "drive-files-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "addParents" $add_parents "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "removeParents" $remove_parents "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useContentAsIndexableText" $use_content_as_indexable_text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1165,7 +1192,7 @@ export def "drive-comments-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startModifiedTime" $start_modified_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1222,9 +1249,9 @@ export def "drive-comments-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/comments") $qp $auth.query)
   let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1270,7 +1297,7 @@ export def "drive-comments-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1317,7 +1344,7 @@ export def "drive-comments-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1376,9 +1403,9 @@ export def "drive-comments-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}") $qp $auth.query)
   let req_body = {"anchor": $anchor, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time, "quotedFileContent": $quoted_file_content, "replies": $replies, "resolved": $resolved} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1427,7 +1454,7 @@ export def "drive-replies-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1483,9 +1510,9 @@ export def "drive-replies-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies") $qp $auth.query)
   let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1533,7 +1560,7 @@ export def "drive-replies-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1582,7 +1609,7 @@ export def "drive-replies-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1640,9 +1667,9 @@ export def "drive-replies-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), comment_id: (encode-path-segment $comment_id), reply_id: (encode-path-segment $reply_id)} | format pattern "/files/{file_id}/comments/{comment_id}/replies/{reply_id}") $qp $auth.query)
   let req_body = {"action": $action, "author": $author, "content": $content, "createdTime": $created_time, "deleted": $deleted, "htmlContent": $html_content, "id": $id, "kind": $kind, "modifiedTime": $modified_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1756,9 +1783,9 @@ export def "drive-files-copy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "ignoreDefaultVisibility" $ignore_default_visibility "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "keepRevisionForever" $keep_revision_forever "scalar") (serialize-qp "ocrLanguage" $ocr_language "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/copy") $qp $auth.query)
   let req_body = {"appProperties": $app_properties, "capabilities": $capabilities, "contentHints": $content_hints, "contentRestrictions": $content_restrictions, "copyRequiresWriterPermission": $copy_requires_writer_permission, "createdTime": $created_time, "description": $description, "driveId": $drive_id, "explicitlyTrashed": $explicitly_trashed, "fileExtension": $file_extension, "folderColorRgb": $folder_color_rgb, "fullFileExtension": $full_file_extension, "hasAugmentedPermissions": $has_augmented_permissions, "hasThumbnail": $has_thumbnail, "headRevisionId": $head_revision_id, "iconLink": $icon_link, "id": $id, "imageMediaMetadata": $image_media_metadata, "isAppAuthorized": $is_app_authorized, "kind": $kind, "labelInfo": $label_info, "lastModifyingUser": $last_modifying_user, "linkShareMetadata": $link_share_metadata, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedByMe": $modified_by_me, "modifiedByMeTime": $modified_by_me_time, "modifiedTime": $modified_time, "name": $name, "originalFilename": $original_filename, "ownedByMe": $owned_by_me, "owners": $owners, "parents": $parents, "permissionIds": $permission_ids, "permissions": $permissions, "properties": $properties, "quotaBytesUsed": $quota_bytes_used, "resourceKey": $resource_key, "sha1Checksum": $sha1_checksum, "sha256Checksum": $sha256_checksum, "shared": $shared, "sharedWithMeTime": $shared_with_me_time, "sharingUser": $sharing_user, "shortcutDetails": $shortcut_details, "size": $size, "spaces": $spaces, "starred": $starred, "teamDriveId": $team_drive_id, "thumbnailLink": $thumbnail_link, "thumbnailVersion": $thumbnail_version, "trashed": $trashed, "trashedTime": $trashed_time, "trashingUser": $trashing_user, "version": $version, "videoMediaMetadata": $video_media_metadata, "viewedByMe": $viewed_by_me, "viewedByMeTime": $viewed_by_me_time, "viewersCanCopyContent": $viewers_can_copy_content, "webContentLink": $web_content_link, "webViewLink": $web_view_link, "writersCanShare": $writers_can_share} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1804,7 +1831,7 @@ export def "drive-files-export" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "mimeType" $mime_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/export") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1850,7 +1877,7 @@ export def "drive-files-list-labels" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/listLabels") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1897,9 +1924,9 @@ export def "drive-files-modify-labels" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/modifyLabels") $qp $auth.query)
   let req_body = {"kind": $kind, "labelModifications": $label_modifications} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1949,7 +1976,7 @@ export def "drive-permissions-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2015,9 +2042,9 @@ export def "drive-permissions-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "emailMessage" $email_message "scalar") (serialize-qp "enforceSingleParent" $enforce_single_parent "scalar") (serialize-qp "moveToNewOwnersRoot" $move_to_new_owners_root "scalar") (serialize-qp "sendNotificationEmail" $send_notification_email "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/permissions") $qp $auth.query)
   let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2066,7 +2093,7 @@ export def "drive-permissions-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2115,7 +2142,7 @@ export def "drive-permissions-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2180,9 +2207,9 @@ export def "drive-permissions-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "removeExpiration" $remove_expiration "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar") (serialize-qp "transferOwnership" $transfer_ownership "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/files/{file_id}/permissions/{permission_id}") $qp $auth.query)
   let req_body = {"allowFileDiscovery": $allow_file_discovery, "deleted": $deleted, "displayName": $display_name, "domain": $domain, "emailAddress": $email_address, "expirationTime": $expiration_time, "id": $id, "kind": $kind, "pendingOwner": $pending_owner, "photoLink": $photo_link, "role": $role, "type": $type, "view": $view} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2228,7 +2255,7 @@ export def "drive-revisions-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/revisions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2274,7 +2301,7 @@ export def "drive-revisions-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2321,7 +2348,7 @@ export def "drive-revisions-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2382,9 +2409,9 @@ export def "drive-revisions-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), revision_id: (encode-path-segment $revision_id)} | format pattern "/files/{file_id}/revisions/{revision_id}") $qp $auth.query)
   let req_body = {"exportLinks": $export_links, "id": $id, "keepForever": $keep_forever, "kind": $kind, "lastModifyingUser": $last_modifying_user, "md5Checksum": $md5_checksum, "mimeType": $mime_type, "modifiedTime": $modified_time, "originalFilename": $original_filename, "publishAuto": $publish_auto, "published": $published, "publishedLink": $published_link, "publishedOutsideDomain": $published_outside_domain, "size": $size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2434,7 +2461,7 @@ export def "drive-files-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -2444,9 +2471,9 @@ export def "drive-files-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "acknowledgeAbuse" $acknowledge_abuse "scalar") (serialize-qp "includeLabels" $include_labels "scalar") (serialize-qp "includePermissionsForView" $include_permissions_for_view "scalar") (serialize-qp "supportsAllDrives" $supports_all_drives "scalar") (serialize-qp "supportsTeamDrives" $supports_team_drives "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2492,7 +2519,7 @@ export def "drive-teamdrives-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdrives" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2548,9 +2575,9 @@ export def "drive-teamdrives-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teamdrives" $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2594,7 +2621,7 @@ export def "drive-teamdrives-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2639,7 +2666,7 @@ export def "drive-teamdrives-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2696,9 +2723,9 @@ export def "drive-teamdrives-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "useDomainAdminAccess" $use_domain_admin_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_drive_id: (encode-path-segment $team_drive_id)} | format pattern "/teamdrives/{team_drive_id}") $qp $auth.query)
   let req_body = {"backgroundImageFile": $background_image_file, "backgroundImageLink": $background_image_link, "capabilities": $capabilities, "colorRgb": $color_rgb, "createdTime": $created_time, "id": $id, "kind": $kind, "name": $name, "orgUnitId": $org_unit_id, "restrictions": $restrictions, "themeId": $theme_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url

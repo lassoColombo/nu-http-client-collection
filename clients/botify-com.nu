@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -182,7 +209,7 @@ export def "get-project-analyses" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug)} | format pattern "/analyses/{username}/{project_slug}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -222,7 +249,7 @@ export def "get-analysis-summary" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -262,7 +289,7 @@ export def "get-crawl-statistics" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -306,7 +333,7 @@ export def "get-crawl-statistics-by-frequency" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "frequency" $frequency "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics/time") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -348,7 +375,7 @@ export def "get-crawl-statistics-urls" [
   if ($list_type | is-empty) { error make --unspanned { msg: "path parameter 'list_type' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug), list_type: (encode-path-segment $list_type)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/crawl_statistics/urls/{list_type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -395,7 +422,7 @@ export def "get-ganalytics-orphan-ur-ls" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug), medium: (encode-path-segment $medium), source: (encode-path-segment $source)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/ganalytics/orphan_urls/{medium}/{source}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -435,7 +462,7 @@ export def "get-links-percentiles" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/links/percentiles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -475,7 +502,7 @@ export def "get-page-rank-lost" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/pagerank/lost") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -515,7 +542,7 @@ export def "get-sitemaps-report" [
   if ($analysis_slug | is-empty) { error make --unspanned { msg: "path parameter 'analysis_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/report") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -558,7 +585,7 @@ export def "get-sitemaps-samples-out-of-config" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/samples/out_of_config") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -601,7 +628,7 @@ export def "get-sitemaps-samples-sitemaps-only" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/sitemaps/samples/sitemap_only") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -644,7 +671,7 @@ export def "get-links-top-domains" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/top_domains/domains") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -687,7 +714,7 @@ export def "get-links-top-subdomains" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/features/top_domains/subdomains") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -735,9 +762,9 @@ export def "get-urls" [
   let qp = [(serialize-qp "area" $area "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls") $qp $auth.query)
   let req_body = {"fields": $fields, "filters": $filters, "sort": $sort} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -781,9 +808,9 @@ export def "get-urls-aggs" [
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/aggs") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -825,7 +852,7 @@ export def "get-urls-datamodel" [
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/datamodel") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -868,7 +895,7 @@ export def "get-urls-exports" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/export") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -914,9 +941,9 @@ export def "create-urls-export" [
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/export") $qp $auth.query)
   let req_body = {"fields": $fields, "filters": $filters, "sort": $sort} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -958,7 +985,7 @@ export def "get-urls-export-status" [
   if ($url_export_id | is-empty) { error make --unspanned { msg: "path parameter 'url_export_id' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug), url_export_id: (encode-path-segment $url_export_id)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/export/{url_export_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1003,9 +1030,9 @@ export def "get-urls-suggested-filters" [
   let qp = [(serialize-qp "area" $area "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/suggested_filters") $qp $auth.query)
   let req_body = {"aggs": $aggs, "filters": $filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1049,7 +1076,7 @@ export def "get-url-detail" [
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), analysis_slug: (encode-path-segment $analysis_slug), url: (encode-path-segment $url)} | format pattern "/analyses/{username}/{project_slug}/{analysis_slug}/urls/{url}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1088,7 +1115,7 @@ export def "get-user-projects" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/projects/{username}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1126,7 +1153,7 @@ export def "test-url-rewriting-rules" [
   if ($project_slug | is-empty) { error make --unspanned { msg: "path parameter 'project_slug' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{username}/{project_slug}/features/url_rewriting/rules_validator") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1167,7 +1194,7 @@ export def "get-saved-filters" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{username}/{project_slug}/filters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1207,7 +1234,7 @@ export def "get-saved-filter" [
   if ($identifier | is-empty) { error make --unspanned { msg: "path parameter 'identifier' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug), identifier: (encode-path-segment $identifier)} | format pattern "/projects/{username}/{project_slug}/filters/{identifier}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1251,9 +1278,9 @@ export def "get-project-urls-aggs" [
   let qp = [(serialize-qp "area" $area "scalar") (serialize-qp "last_analysis_slug" $last_analysis_slug "scalar") (serialize-qp "nb_analyses" $nb_analyses "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project_slug: (encode-path-segment $project_slug)} | format pattern "/projects/{username}/{project_slug}/urls/aggs") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

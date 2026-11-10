@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -193,9 +220,9 @@ export def "get-domains-source-domains-language-target-domains-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_domains_language: (encode-path-segment $source_domains_language), target_domains_language: (encode-path-segment $target_domains_language)} | format pattern "/domains/{source_domains_language}/{target_domains_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -234,9 +261,9 @@ export def "get-domains-source-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/domains/{source_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -278,9 +305,9 @@ export def "get-entries-source-language-word-id-sentences" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_language}/{word_id}/sentences") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -322,9 +349,9 @@ export def "get-entries-source-lang-word-id" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -366,9 +393,9 @@ export def "get-entries-source-lang-word-id-antonyms" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/antonyms") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -412,9 +439,9 @@ export def "get-entries-source-lang-word-id-regions-region" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), region: (encode-path-segment $region)} | format pattern "/entries/{source_lang}/{word_id}/regions={region}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -456,9 +483,9 @@ export def "get-entries-source-lang-word-id-synonyms" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -500,9 +527,9 @@ export def "get-entries-source-lang-word-id-synonymsantonyms" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id)} | format pattern "/entries/{source_lang}/{word_id}/synonyms;antonyms") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -545,9 +572,9 @@ export def "get-entries-source-lang-word-id-filters" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/entries/{source_lang}/{word_id}/{filters}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -590,9 +617,9 @@ export def "get-entries-source-translation-language-word-id-translations-target-
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_translation_language: (encode-path-segment $source_translation_language), word_id: (encode-path-segment $word_id), target_translation_language: (encode-path-segment $target_translation_language)} | format pattern "/entries/{source_translation_language}/{word_id}/translations={target_translation_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -629,9 +656,9 @@ export def "get-filters" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base "/filters" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -670,9 +697,9 @@ export def "get-filters-endpoint" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/filters/{endpoint}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -711,9 +738,9 @@ export def "get-grammatical-features-source-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/grammaticalFeatures/{source_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -756,9 +783,9 @@ export def "get-inflections-source-lang-word-id-filters" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), word_id: (encode-path-segment $word_id), filters: (encode-path-segment $filters)} | format pattern "/inflections/{source_lang}/{word_id}/{filters}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -798,9 +825,9 @@ export def "get-languages" [
   let qp = [(serialize-qp "sourceLanguage" $source_language "scalar") (serialize-qp "targetLanguage" $target_language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/languages" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -839,9 +866,9 @@ export def "get-lexicalcategories-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({language: (encode-path-segment $language)} | format pattern "/lexicalcategories/{language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -880,9 +907,9 @@ export def "get-regions-source-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/regions/{source_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -921,9 +948,9 @@ export def "get-registers-source-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_language: (encode-path-segment $source_language)} | format pattern "/registers/{source_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -964,9 +991,9 @@ export def "get-registers-source-register-language-target-register-language" [
   let app_key = ($app_key | default "4dc1aebaa63721f0f8e79a55e2514bc7")
   let full_url = (build-url $base ({source_register_language: (encode-path-segment $source_register_language), target_register_language: (encode-path-segment $target_register_language)} | format pattern "/registers/{source_register_language}/{target_register_language}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1012,9 +1039,9 @@ export def "get-search-source-lang" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/search/{source_lang}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1062,9 +1089,9 @@ export def "get-search-source-search-language-translations-target-search-languag
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "regions" $regions "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_search_language: (encode-path-segment $source_search_language), target_search_language: (encode-path-segment $target_search_language)} | format pattern "/search/{source_search_language}/translations={target_search_language}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1121,9 +1148,9 @@ export def "get-stats-frequency-ngrams-source-lang-corpus-ngram-size" [
   let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "contains" $contains "scalar") (serialize-qp "punctuation" $punctuation "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minDocumentFrequency" $min_document_frequency "scalar") (serialize-qp "maxDocumentFrequency" $max_document_frequency "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), corpus: (encode-path-segment $corpus), ngram_size: (encode-path-segment $ngram_size)} | format pattern "/stats/frequency/ngrams/{source_lang}/{corpus}/{ngram_size}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1169,9 +1196,9 @@ export def "get-stats-frequency-word-source-lang" [
   let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/word/{source_lang}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1226,9 +1253,9 @@ export def "get-stats-frequency-words-source-lang" [
   let qp = [(serialize-qp "corpus" $corpus "scalar") (serialize-qp "wordform" $wordform "scalar") (serialize-qp "trueCase" $true_case "scalar") (serialize-qp "lemma" $lemma "scalar") (serialize-qp "lexicalCategory" $lexical_category "scalar") (serialize-qp "grammaticalFeatures" $grammatical_features "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "collate" $collate "scalar") (serialize-qp "minFrequency" $min_frequency "scalar") (serialize-qp "maxFrequency" $max_frequency "scalar") (serialize-qp "minNormalizedFrequency" $min_normalized_frequency "scalar") (serialize-qp "maxNormalizedFrequency" $max_normalized_frequency "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang)} | format pattern "/stats/frequency/words/{source_lang}/") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1278,9 +1305,9 @@ export def "get-wordlist-source-lang-filters-advanced" [
   let qp = [(serialize-qp "exclude" $exclude "scalar") (serialize-qp "exclude_senses" $exclude_senses "scalar") (serialize-qp "exclude_prime_senses" $exclude_prime_senses "scalar") (serialize-qp "word_length" $word_length "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_advanced: (encode-path-segment $filters_advanced)} | format pattern "/wordlist/{source_lang}/{filters_advanced}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1324,9 +1351,9 @@ export def "get-wordlist-source-lang-filters-basic" [
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_lang: (encode-path-segment $source_lang), filters_basic: (encode-path-segment $filters_basic)} | format pattern "/wordlist/{source_lang}/{filters_basic}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"app_id": $app_id, "app_key": $app_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

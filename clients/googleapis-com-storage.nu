@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -208,7 +235,7 @@ export def "storage-buckets-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -288,9 +315,9 @@ export def "storage-buckets-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/b" $qp $auth.query)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -338,7 +365,7 @@ export def "storage-buckets-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -387,7 +414,7 @@ export def "storage-buckets-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -469,9 +496,9 @@ export def "storage-buckets-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -553,9 +580,9 @@ export def "storage-buckets-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp $auth.query)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -601,7 +628,7 @@ export def "storage-bucket-access-controls-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -640,7 +667,7 @@ export def "storage-bucket-access-controls-insert" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
   --entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
@@ -659,9 +686,9 @@ export def "storage-bucket-access-controls-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -709,7 +736,7 @@ export def "storage-bucket-access-controls-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -757,7 +784,7 @@ export def "storage-bucket-access-controls-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -797,10 +824,10 @@ export def "storage-bucket-access-controls-patch" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
   --id: string # The ID of the access-control entry.
@@ -817,9 +844,9 @@ export def "storage-bucket-access-controls-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -859,10 +886,10 @@ export def "storage-bucket-access-controls-update" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
   --id: string # The ID of the access-control entry.
@@ -879,9 +906,9 @@ export def "storage-bucket-access-controls-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -929,7 +956,7 @@ export def "storage-default-object-access-controls-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,7 +995,7 @@ export def "storage-default-object-access-controls-insert" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
   --entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
@@ -989,9 +1016,9 @@ export def "storage-default-object-access-controls-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1039,7 +1066,7 @@ export def "storage-default-object-access-controls-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1087,7 +1114,7 @@ export def "storage-default-object-access-controls-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1127,10 +1154,10 @@ export def "storage-default-object-access-controls-patch" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
   --generation: string # The content generation of the object, if applied to an object. (format: int64)
@@ -1149,9 +1176,9 @@ export def "storage-default-object-access-controls-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1191,10 +1218,10 @@ export def "storage-default-object-access-controls-update" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
   --generation: string # The content generation of the object, if applied to an object. (format: int64)
@@ -1213,9 +1240,9 @@ export def "storage-default-object-access-controls-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp $auth.query)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1262,7 +1289,7 @@ export def "storage-buckets-get-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "optionsRequestedPolicyVersion" $options_requested_policy_version "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1314,9 +1341,9 @@ export def "storage-buckets-set-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp $auth.query)
   let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1364,7 +1391,7 @@ export def "storage-buckets-test-iam-permissions" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam/testPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1412,7 +1439,7 @@ export def "storage-buckets-lock-retention-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/lockRetentionPolicy") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1458,7 +1485,7 @@ export def "storage-notifications-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1514,9 +1541,9 @@ export def "storage-notifications-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp $auth.query)
   let req_body = {"custom_attributes": $custom_attributes, "etag": $etag, "event_types": $event_types, "id": $id, "kind": $kind, "object_name_prefix": $object_name_prefix, "payload_format": $payload_format, "selfLink": $self_link, "topic": $topic} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1564,7 +1591,7 @@ export def "storage-notifications-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1612,7 +1639,7 @@ export def "storage-notifications-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1668,7 +1695,7 @@ export def "storage-objects-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "matchGlob" $match_glob "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1725,9 +1752,9 @@ export def "storage-objects-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "contentEncoding" $content_encoding "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1783,7 +1810,7 @@ export def "storage-objects-watch-all" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -1793,9 +1820,9 @@ export def "storage-objects-watch-all" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1848,7 +1875,7 @@ export def "storage-objects-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1902,7 +1929,7 @@ export def "storage-objects-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1950,7 +1977,7 @@ export def "storage-objects-patch" [
   --projection: string@projection-completer # Set of properties to return. Defaults to full.
   --user-project: string # The project to be billed for this request, for Requester Pays buckets.
   --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-  --body-bucket: string # The name of the bucket containing this object.
+  --body-bucket: string # The name of the bucket containing this object. (spec name: bucket)
   --cache-control: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
   --component-count: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
   --content-disposition: string # Content-Disposition of the object data.
@@ -1962,7 +1989,7 @@ export def "storage-objects-patch" [
   --customer-encryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
   --event-based-hold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
-  --generation-body: string # The content generation of this object. Used for object versioning. (format: int64) (body field)
+  --body-generation: string # The content generation of this object. Used for object versioning. (format: int64) (spec name: generation)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
   --kms-key-name: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
@@ -1989,10 +2016,10 @@ export def "storage-objects-patch" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation_body, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $body_generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2040,7 +2067,7 @@ export def "storage-objects-update" [
   --projection: string@projection-completer # Set of properties to return. Defaults to full.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --acl: list # Access controls on the object. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-  --body-bucket: string # The name of the bucket containing this object.
+  --body-bucket: string # The name of the bucket containing this object. (spec name: bucket)
   --cache-control: string # Cache-Control directive for the object data. If omitted, and the object is accessible to all anonymous users, the default will be public, max-age=3600.
   --component-count: int # Number of underlying components that make up this object. Components are accumulated by compose operations. (format: int32)
   --content-disposition: string # Content-Disposition of the object data.
@@ -2052,7 +2079,7 @@ export def "storage-objects-update" [
   --customer-encryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
   --event-based-hold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
-  --generation-body: string # The content generation of this object. Used for object versioning. (format: int64) (body field)
+  --body-generation: string # The content generation of this object. Used for object versioning. (format: int64) (spec name: generation)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
   --kms-key-name: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
@@ -2079,10 +2106,10 @@ export def "storage-objects-update" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp $auth.query)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation_body, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $body_generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2131,7 +2158,7 @@ export def "storage-object-access-controls-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2172,16 +2199,16 @@ export def "storage-object-access-controls-insert" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
   --entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
+  --body-generation: string # The content generation of the object, if applied to an object. (format: int64) (spec name: generation)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
-  --body-object: string # The name of the object, if applied to an object.
+  --body-object: string # The name of the object, if applied to an object. (spec name: object)
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
@@ -2193,10 +2220,10 @@ export def "storage-object-access-controls-insert" [
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2247,7 +2274,7 @@ export def "storage-object-access-controls-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2298,7 +2325,7 @@ export def "storage-object-access-controls-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2340,16 +2367,16 @@ export def "storage-object-access-controls-patch" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
+  --body-generation: string # The content generation of the object, if applied to an object. (format: int64) (spec name: generation)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
-  --body-object: string # The name of the object, if applied to an object.
+  --body-object: string # The name of the object, if applied to an object. (spec name: object)
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
@@ -2362,10 +2389,10 @@ export def "storage-object-access-controls-patch" [
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2407,16 +2434,16 @@ export def "storage-object-access-controls-update" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --body-bucket: string # The name of the bucket.
+  --body-bucket: string # The name of the bucket. (spec name: bucket)
   --domain: string # The domain associated with the entity, if any.
   --email: string # The email address associated with the entity, if any.
-  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
+  --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com. (spec name: entity)
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
+  --body-generation: string # The content generation of the object, if applied to an object. (format: int64) (spec name: generation)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
-  --body-object: string # The name of the object, if applied to an object.
+  --body-object: string # The name of the object, if applied to an object. (spec name: object)
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
@@ -2429,10 +2456,10 @@ export def "storage-object-access-controls-update" [
   if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp $auth.query)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $body_generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2481,7 +2508,7 @@ export def "storage-objects-get-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2536,9 +2563,9 @@ export def "storage-objects-set-iam-policy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp $auth.query)
   let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2589,7 +2616,7 @@ export def "storage-objects-test-iam-permissions" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam/testPermissions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2645,9 +2672,9 @@ export def "storage-objects-compose" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{destination_bucket}/o/{destination_object}/compose") $qp $auth.query)
   let req_body = {"destination": $destination, "kind": $kind, "sourceObjects": $source_objects} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2744,9 +2771,9 @@ export def "storage-objects-copy" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/copyTo/b/{destination_bucket}/o/{destination_object}") $qp $auth.query)
   let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2845,9 +2872,9 @@ export def "storage-objects-rewrite" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "maxBytesRewrittenPerCall" $max_bytes_rewritten_per_call "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewrite_token "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/rewriteTo/b/{destination_bucket}/o/{destination_object}") $qp $auth.query)
   let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2892,7 +2919,7 @@ export def "storage-channels-stop" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel.
 ]: any -> any {
   let input = $in
@@ -2901,9 +2928,9 @@ export def "storage-channels-stop" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2953,7 +2980,7 @@ export def "storage-projects-hmac-keys-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "showDeletedKeys" $show_deleted_keys "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3001,7 +3028,7 @@ export def "storage-projects-hmac-keys-create" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3049,7 +3076,7 @@ export def "storage-projects-hmac-keys-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3097,7 +3124,7 @@ export def "storage-projects-hmac-keys-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3137,11 +3164,11 @@ export def "storage-projects-hmac-keys-update" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
-  --body-access-id: string # The ID of the HMAC Key.
+  --body-access-id: string # The ID of the HMAC Key. (spec name: accessId)
   --etag: string # HTTP 1.1 Entity tag for the HMAC key.
   --id: string # The ID of the HMAC key, including the Project ID and the Access ID.
   --kind: string # The kind of item this is. For HMAC Key metadata, this is always storage#hmacKeyMetadata. (default: storage#hmacKeyMetadata)
-  --body-project-id: string # Project ID owning the service account to which the key authenticates.
+  --body-project-id: string # Project ID owning the service account to which the key authenticates. (spec name: projectId)
   --self-link: string # The link to this resource.
   --service-account-email: string # The email address of the key's associated service account.
   --state: string # The state of the key. Can be one of ACTIVE, INACTIVE, or DELETED.
@@ -3156,9 +3183,9 @@ export def "storage-projects-hmac-keys-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp $auth.query)
   let req_body = {"accessId": $body_access_id, "etag": $etag, "id": $id, "kind": $kind, "projectId": $body_project_id, "selfLink": $self_link, "serviceAccountEmail": $service_account_email, "state": $state, "timeCreated": $time_created, "updated": $updated} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3204,7 +3231,7 @@ export def "storage-projects-service-account-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

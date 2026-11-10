@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -212,9 +239,9 @@ export def "get-account-list" [
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -269,9 +296,9 @@ export def "read-account-details" [
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -324,9 +351,9 @@ export def "get-balances" [
   if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/balances") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -388,9 +415,9 @@ export def "get-transaction-list" [
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "entryReferenceFrom" $entry_reference_from "scalar") (serialize-qp "bookingStatus" $booking_status "scalar") (serialize-qp "deltaList" $delta_list "scalar") (serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/transactions") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -445,9 +472,9 @@ export def "get-transaction-details" [
   if ($consent_id == null) { error make --unspanned { msg: "required header parameter 'Consent-ID' missing: pass --consent-id" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v1/accounts/{account_id}/transactions/{transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -514,13 +541,13 @@ export def "create-consent" [
   if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base "/v1/consents" $auth.query)
   let req_body = {"access": $access, "combinedServiceIndicator": $combined_service_indicator, "frequencyPerDay": $frequency_per_day, "recurringIndicator": $recurring_indicator, "validUntil": $valid_until} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "combinedServiceIndicator") == null) { error make --unspanned { msg: "required body field 'combinedServiceIndicator' missing: pass --combined-service-indicator or pipe a record" } }
   if (($req_body | get -o "recurringIndicator") == null) { error make --unspanned { msg: "required body field 'recurringIndicator' missing: pass --recurring-indicator or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Brand-Logging-Information": $tpp_brand_logging_information, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-IP-Address": $psu_ip_address, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -571,9 +598,9 @@ export def "delete-consent" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -624,9 +651,9 @@ export def "get-consent-information" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -677,9 +704,9 @@ export def "get-consent-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -743,11 +770,11 @@ export def "start-consent-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -800,9 +827,9 @@ export def "get-consent-sca-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -864,11 +891,11 @@ export def "update-consents-psu-data" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/consents/{consent_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -919,9 +946,9 @@ export def "get-consent-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -966,11 +993,11 @@ export def "check-availability-of-funds" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base "/v1/funds-confirmations" $auth.query)
   let req_body = {"account": $account, "cardNumber": $card_number, "instructedAmount": $instructed_amount, "payee": $payee} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Authorization": $authorization, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1034,11 +1061,11 @@ export def "create-signing-basket" [
   if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base "/v1/signing-baskets" $auth.query)
   let req_body = {"consentIds": $consent_ids, "paymentIds": $payment_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1089,9 +1116,9 @@ export def "delete-signing-basket" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1142,9 +1169,9 @@ export def "get-signing-basket" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1195,9 +1222,9 @@ export def "get-signing-basket-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1261,11 +1288,11 @@ export def "start-signing-basket-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1318,9 +1345,9 @@ export def "get-signing-basket-sca-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1382,11 +1409,11 @@ export def "update-signing-basket-psu-data" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1441,9 +1468,9 @@ export def "get-signing-basket-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1544,11 +1571,11 @@ export def "initiate-payment" [
   if ($psu_ip_address == null) { error make --unspanned { msg: "required header parameter 'PSU-IP-Address' missing: pass --psu-ip-address" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product)} | format pattern "/v1/{payment_service}/{payment_product}") $auth.query)
   let req_body = {"chargeBearer": $charge_bearer, "creditorAccount": $creditor_account, "creditorAddress": $creditor_address, "creditorAgent": $creditor_agent, "creditorAgentName": $creditor_agent_name, "creditorId": $creditor_id, "creditorName": $creditor_name, "creditorNameAndAddress": $creditor_name_and_address, "debtorAccount": $debtor_account, "debtorAgent": $debtor_agent, "debtorId": $debtor_id, "debtorName": $debtor_name, "endToEndIdentification": $end_to_end_identification, "equivalentAmount": $equivalent_amount, "exchangeRateInformation": $exchange_rate_information, "instructedAmount": $instructed_amount, "intermediaryAgent": $intermediary_agent, "purposeCode": $purpose_code, "remittanceInformationStructured": $remittance_information_structured, "remittanceInformationUnstructured": $remittance_information_unstructured, "requestedExecutionDate": $requested_execution_date, "serviceLevel": $service_level, "transactionCurrency": $transaction_currency, "ultimateCreditor": $ultimate_creditor, "ultimateDebtor": $ultimate_debtor, "dayOfExecution": $day_of_execution, "endDate": $end_date, "executionRule": $execution_rule, "frequency": $frequency, "startDate": $start_date, "batchBookingPreferred": $batch_booking_preferred, "payments": $payments, "requestedExecutionTime": $requested_execution_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "Consent-ID": $consent_id, "PSU-IP-Address": $psu_ip_address, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "TPP-Rejection-NoFunds-Preferred": $tpp_rejection_no_funds_preferred, "TPP-Brand-Logging-Information": $tpp_brand_logging_information, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1607,9 +1634,9 @@ export def "cancel-payment" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Explicit-Authorisation-Preferred": $tpp_explicit_authorisation_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1665,9 +1692,9 @@ export def "get-payment-information" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1722,9 +1749,9 @@ export def "get-payment-initiation-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1792,11 +1819,11 @@ export def "start-payment-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1853,9 +1880,9 @@ export def "get-payment-initiation-sca-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1921,11 +1948,11 @@ export def "update-payment-psu-data" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1980,9 +2007,9 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2050,11 +2077,11 @@ export def "start-payment-initiation-cancellation-authorisation" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "TPP-Redirect-Preferred": $tpp_redirect_preferred, "TPP-Redirect-URI": $tpp_redirect_uri, "TPP-Nok-Redirect-URI": $tpp_nok_redirect_uri, "TPP-Notification-URI": $tpp_notification_uri, "TPP-Notification-Content-Preferred": $tpp_notification_content_preferred, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2111,9 +2138,9 @@ export def "get-payment-cancellation-sca-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2179,11 +2206,11 @@ export def "update-payment-cancellation-psu-data" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id), authorisation_id: (encode-path-segment $authorisation_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/cancellation-authorisations/{authorisation_id}") $auth.query)
   let req_body = {"psuData": $psu_data, "authenticationMethodId": $authentication_method_id, "scaAuthenticationData": $sca_authentication_data, "confirmationCode": $confirmation_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-ID": $psu_id, "PSU-ID-Type": $psu_id_type, "PSU-Corporate-ID": $psu_corporate_id, "PSU-Corporate-ID-Type": $psu_corporate_id_type, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2239,9 +2266,9 @@ export def "get-payment-initiation-status" [
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
   let full_url = (build-url $base ({payment_service: (encode-path-segment $payment_service), payment_product: (encode-path-segment $payment_product), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{payment_service}/{payment_product}/{payment_id}/status") $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Request-ID": $x_request_id, "Digest": $digest, "Signature": $signature, "TPP-Signature-Certificate": $tpp_signature_certificate, "PSU-IP-Address": $psu_ip_address, "PSU-IP-Port": $psu_ip_port, "PSU-Accept": $psu_accept, "PSU-Accept-Charset": $psu_accept_charset, "PSU-Accept-Encoding": $psu_accept_encoding, "PSU-Accept-Language": $psu_accept_language, "PSU-User-Agent": $psu_user_agent, "PSU-Http-Method": $psu_http_method, "PSU-Device-ID": $psu_device_id, "PSU-Geo-Location": $psu_geo_location} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

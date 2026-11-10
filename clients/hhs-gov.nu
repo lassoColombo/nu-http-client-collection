@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -162,7 +189,7 @@ export def "get-resources-json" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -199,7 +226,7 @@ export def "get-resources-campaigns-json" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/campaigns.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -234,7 +261,7 @@ export def "get-resources-campaigns-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -273,7 +300,7 @@ export def "get-resources-campaigns-id-media-json" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/campaigns/{id}/media.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -312,7 +339,7 @@ export def "get-resources-campaigns-id-syndicate-format" [
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/campaigns/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -349,7 +376,7 @@ export def "get-resources-languages-json" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/languages.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -384,7 +411,7 @@ export def "get-resources-languages-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/languages/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -471,7 +498,7 @@ export def "get-resources-media-json" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "mediaTypes" $media_types "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "descriptionContains" $description_contains "scalar") (serialize-qp "sourceUrl" $source_url "scalar") (serialize-qp "sourceUrlContains" $source_url_contains "scalar") (serialize-qp "customThumbnailUrl" $custom_thumbnail_url "scalar") (serialize-qp "customThumbnailUrlContains" $custom_thumbnail_url_contains "scalar") (serialize-qp "dateContentAuthored" $date_content_authored "scalar") (serialize-qp "dateContentUpdated" $date_content_updated "scalar") (serialize-qp "dateContentPublished" $date_content_published "scalar") (serialize-qp "dateContentReviewed" $date_content_reviewed "scalar") (serialize-qp "dateSyndicationCaptured" $date_syndication_captured "scalar") (serialize-qp "dateSyndicationUpdated" $date_syndication_updated "scalar") (serialize-qp "contentAuthoredSinceDate" $content_authored_since_date "scalar") (serialize-qp "contentAuthoredBeforeDate" $content_authored_before_date "scalar") (serialize-qp "contentAuthoredInRange" $content_authored_in_range "scalar") (serialize-qp "contentUpdatedSinceDate" $content_updated_since_date "scalar") (serialize-qp "contentUpdatedBeforeDate" $content_updated_before_date "scalar") (serialize-qp "contentUpdatedInRange" $content_updated_in_range "scalar") (serialize-qp "contentPublishedSinceDate" $content_published_since_date "scalar") (serialize-qp "contentPublishedBeforeDate" $content_published_before_date "scalar") (serialize-qp "contentPublishedInRange" $content_published_in_range "scalar") (serialize-qp "contentReviewedSinceDate" $content_reviewed_since_date "scalar") (serialize-qp "contentReviewedBeforeDate" $content_reviewed_before_date "scalar") (serialize-qp "contentReviewedInRange" $content_reviewed_in_range "scalar") (serialize-qp "syndicationCapturedSinceDate" $syndication_captured_since_date "scalar") (serialize-qp "syndicationCapturedBeforeDate" $syndication_captured_before_date "scalar") (serialize-qp "syndicationCapturedInRange" $syndication_captured_in_range "scalar") (serialize-qp "syndicationUpdatedSinceDate" $syndication_updated_since_date "scalar") (serialize-qp "syndicationUpdatedBeforeDate" $syndication_updated_before_date "scalar") (serialize-qp "syndicationUpdatedInRange" $syndication_updated_in_range "scalar") (serialize-qp "syndicationVisibleSinceDate" $syndication_visible_since_date "scalar") (serialize-qp "syndicationVisibleBeforeDate" $syndication_visible_before_date "scalar") (serialize-qp "syndicationVisibleInRange" $syndication_visible_in_range "scalar") (serialize-qp "languageId" $language_id "scalar") (serialize-qp "languageName" $language_name "scalar") (serialize-qp "languageIsoCode" $language_iso_code "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "hashContains" $hash_contains "scalar") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "sourceName" $source_name "scalar") (serialize-qp "sourceNameContains" $source_name_contains "scalar") (serialize-qp "sourceAcronym" $source_acronym "scalar") (serialize-qp "sourceAcronymContains" $source_acronym_contains "scalar") (serialize-qp "tagIds" $tag_ids "scalar") (serialize-qp "restrictToSet" $restrict_to_set "scalar") (serialize-qp "createdBy" $created_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -508,7 +535,7 @@ export def "get-resources-media-featured-json" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media/featured.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -546,7 +573,7 @@ export def "get-resources-media-most-popular-media-format" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/media/mostPopularMedia.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -584,7 +611,7 @@ export def "get-resources-media-search-results-json" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/media/searchResults.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -619,7 +646,7 @@ export def "get-resources-media-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -656,7 +683,7 @@ export def "get-resources-media-id-content" [
   let qp = [(serialize-qp "calledByBuild" $called_by_build "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/content") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -700,7 +727,7 @@ export def "get-resources-media-id-embed-json" [
   let qp = [(serialize-qp "flavor" $flavor "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iframeName" $iframe_name "scalar") (serialize-qp "excludeJquery" $exclude_jquery "scalar") (serialize-qp "excludeDiv" $exclude_div "scalar") (serialize-qp "divId" $div_id "scalar") (serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/embed.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -735,7 +762,7 @@ export def "get-resources-media-id-preview-jpg" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/preview.jpg") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -776,7 +803,7 @@ export def "get-resources-media-id-related-media-format" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/relatedMedia.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -825,7 +852,7 @@ export def "get-resources-media-id-syndicate-format" [
   let qp = [(serialize-qp "cssClass" $css_class "scalar") (serialize-qp "stripStyles" $strip_styles "scalar") (serialize-qp "stripScripts" $strip_scripts "scalar") (serialize-qp "stripImages" $strip_images "scalar") (serialize-qp "stripBreaks" $strip_breaks "scalar") (serialize-qp "stripClasses" $strip_classes "scalar") (serialize-qp "font-size" $font_size "scalar") (serialize-qp "imageFloat" $image_float "scalar") (serialize-qp "imageMargin" $image_margin "scalar") (serialize-qp "autoplay" $autoplay "scalar") (serialize-qp "rel" $rel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/media/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -860,7 +887,7 @@ export def "get-resources-media-id-thumbnail-jpg" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/thumbnail.jpg") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -895,7 +922,7 @@ export def "get-resources-media-id-youtube-meta-data-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/media/{id}/youtubeMetaData.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -930,7 +957,7 @@ export def "get-resources-media-types-format" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/mediaTypes.{format}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -967,7 +994,7 @@ export def "get-resources-sources-json" [
   let qp = [(serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resources/sources.json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1002,7 +1029,7 @@ export def "get-resources-sources-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/sources/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1041,7 +1068,7 @@ export def "get-resources-sources-id-syndicate-format" [
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/sources/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1085,7 +1112,7 @@ export def "get-resources-tags-format" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "nameContains" $name_contains "scalar") (serialize-qp "mediaId" $media_id "scalar") (serialize-qp "typeId" $type_id "scalar") (serialize-qp "typeName" $type_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1120,7 +1147,7 @@ export def "get-resources-tags-tag-languages-format" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagLanguages.{format}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1155,7 +1182,7 @@ export def "get-resources-tags-tag-types-format" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/resources/tags/tagTypes.{format}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1192,7 +1219,7 @@ export def "get-resources-tags-id-format" [
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}.{format}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1233,7 +1260,7 @@ export def "get-resources-tags-id-media-format" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/media.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1274,7 +1301,7 @@ export def "get-resources-tags-id-related-format" [
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/related.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1313,7 +1340,7 @@ export def "get-resources-tags-id-syndicate-format" [
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/resources/tags/{id}/syndicate.{format}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1350,7 +1377,7 @@ export def "get-resources-user-media-lists-id-json" [
   let qp = [(serialize-qp "displayMethod" $display_method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resources/userMediaLists/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

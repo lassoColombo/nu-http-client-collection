@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -196,7 +223,7 @@ export def "get-about" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/about" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -229,7 +256,7 @@ export def "get-architectures" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/architectures" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -264,7 +291,7 @@ export def "get-architectures-architecture-name" [
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
   let full_url = (build-url $base ({architecture_name: (encode-path-segment $architecture_name)} | format pattern "/architectures/{architecture_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -297,7 +324,7 @@ export def "get-attribute" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attribute" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -332,7 +359,7 @@ export def "delete-attribute-namespace" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -367,7 +394,7 @@ export def "get-attribute-namespace" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -402,7 +429,7 @@ export def "delete-attribute-namespace-meta" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -437,7 +464,7 @@ export def "get-attribute-namespace-meta" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -474,9 +501,9 @@ export def "post-attribute-namespace-meta" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -513,9 +540,9 @@ export def "put-attribute-namespace-meta" [
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/attribute/{namespace}/_meta") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -552,7 +579,7 @@ export def "delete-attribute-namespace-attribute-name" [
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -589,7 +616,7 @@ export def "delete-attribute-namespace-attribute-name-meta" [
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -626,7 +653,7 @@ export def "get-attribute-namespace-attribute-name-meta" [
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -665,9 +692,9 @@ export def "post-attribute-namespace-attribute-name-meta" [
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -706,9 +733,9 @@ export def "put-attribute-namespace-attribute-name-meta" [
   if ($attribute_name | is-empty) { error make --unspanned { msg: "path parameter 'attribute_name' must be non-empty" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), attribute_name: (encode-path-segment $attribute_name)} | format pattern "/attribute/{namespace}/{attribute_name}/_meta") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -741,7 +768,7 @@ export def "get-build" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/build" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -776,7 +803,7 @@ export def "get-build-project-name" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -817,7 +844,7 @@ export def "post-build-project-name" [
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -860,7 +887,7 @@ export def "get-build-project-name-result" [
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "lastbuild" $lastbuild "scalar") (serialize-qp "locallink" $locallink "scalar") (serialize-qp "multibuild" $multibuild "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/build/{project_name}/_result") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -897,7 +924,7 @@ export def "get-build-project-name-repository-name" [
   if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/build/{project_name}/{repository_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -934,7 +961,7 @@ export def "get-build-project-name-repository-name-buildconfig" [
   if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/build/{project_name}/{repository_name}/_buildconfig") $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -976,7 +1003,7 @@ export def "get-build-project-name-repository-name-architecture-name-builddepinf
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1015,7 +1042,7 @@ export def "get-build-project-name-repository-name-architecture-name-repository"
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_repository") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1056,7 +1083,7 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1098,7 +1125,7 @@ export def "get-build-project-repository-arch-package-buildinfo" [
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1140,7 +1167,7 @@ export def "get-build-project-repository-arch-package-history" [
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1181,7 +1208,7 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1223,7 +1250,7 @@ export def "get-build-project-repository-arch-package-log" [
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log") $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1264,7 +1291,7 @@ export def "get-build-project-name-repository-name-architecture-name-package-nam
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1306,7 +1333,7 @@ export def "get-build-project-repository-arch-package-status" [
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1350,7 +1377,7 @@ export def "get-build-project-repository-architecture-package-file" [
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") $auth.query)
   let accept_val = "application/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1396,9 +1423,9 @@ export def "put-build-project-repository-architecture-package-file" [
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-array $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1445,7 +1472,7 @@ export def "get-build-project-repository-architecture-package-file-view-fileinfo
   let qp = [(serialize-qp "view" $view "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), package_name: (encode-path-segment $package_name), file_name: (encode-path-segment $file_name)} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}") "view=fileinfo" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1478,7 +1505,7 @@ export def "get-configuration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1513,9 +1540,9 @@ export def "put-configuration" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1548,7 +1575,7 @@ export def "get-distributions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1583,9 +1610,9 @@ export def "post-distributions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1620,9 +1647,9 @@ export def "put-distributions-bulk-replace" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions/bulk_replace" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1655,7 +1682,7 @@ export def "get-distributions-include-remotes" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions/include_remotes" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1690,7 +1717,7 @@ export def "delete-distributions-distribution-id" [
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
   let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1725,7 +1752,7 @@ export def "get-distributions-distribution-id" [
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
   let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1762,9 +1789,9 @@ export def "put-distributions-distribution-id" [
   if ($distribution_id | is-empty) { error make --unspanned { msg: "path parameter 'distribution_id' must be non-empty" } }
   let full_url = (build-url $base ({distribution_id: (encode-path-segment $distribution_id)} | format pattern "/distributions/{distribution_id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1797,7 +1824,7 @@ export def "get-group" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/group" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1832,7 +1859,7 @@ export def "delete-group-group-title" [
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1867,7 +1894,7 @@ export def "get-group-group-title" [
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1906,7 +1933,7 @@ export def "post-group-group-title" [
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1943,9 +1970,9 @@ export def "put-group-group-title" [
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
   let full_url = (build-url $base ({group_title: (encode-path-segment $group_title)} | format pattern "/group/{group_title}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1978,7 +2005,7 @@ export def "get-issue-trackers" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issue_trackers" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2013,9 +2040,9 @@ export def "post-issue-trackers" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issue_trackers" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2050,7 +2077,7 @@ export def "delete-issue-trackers-issue-tracker-name" [
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2085,7 +2112,7 @@ export def "get-issue-trackers-issue-tracker-name" [
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2122,9 +2149,9 @@ export def "put-issue-trackers-issue-tracker-name" [
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name)} | format pattern "/issue_trackers/{issue_tracker_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2161,7 +2188,7 @@ export def "get-issue-trackers-issue-tracker-name-issues-issue-name" [
   if ($issue_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_name' must be non-empty" } }
   let full_url = (build-url $base ({issue_tracker_name: (encode-path-segment $issue_tracker_name), issue_name: (encode-path-segment $issue_name)} | format pattern "/issue_trackers/{issue_tracker_name}/issues/{issue_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2196,7 +2223,7 @@ export def "get-person" [
   let qp = [(serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/person" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2234,9 +2261,9 @@ export def "post-person" [
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/person" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2271,9 +2298,9 @@ export def "post-person-register" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/person/register" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2308,7 +2335,7 @@ export def "get-person-login" [
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2348,9 +2375,9 @@ export def "post-person-login" [
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2387,9 +2414,9 @@ export def "put-person-login" [
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2424,7 +2451,7 @@ export def "get-person-login-group" [
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/group") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2459,7 +2486,7 @@ export def "get-person-login-token" [
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/token") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2499,7 +2526,7 @@ export def "post-person-login-token" [
   let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "scm_token" $scm_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({login: (encode-path-segment $login)} | format pattern "/person/{login}/token") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2536,7 +2563,7 @@ export def "delete-person-login-token-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({login: (encode-path-segment $login), id: (encode-path-segment $id)} | format pattern "/person/{login}/token/{id}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2569,7 +2596,7 @@ export def "get-published" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/published" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2604,7 +2631,7 @@ export def "get-published-project-name" [
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name)} | format pattern "/published/{project_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2641,7 +2668,7 @@ export def "get-published-project-name-repository-name" [
   if ($repository_name | is-empty) { error make --unspanned { msg: "path parameter 'repository_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2680,7 +2707,7 @@ export def "get-published-project-name-repository-name-architecture-name" [
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2722,7 +2749,7 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
   if ($binary_filename | is-empty) { error make --unspanned { msg: "path parameter 'binary_filename' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}") $auth.query)
   let accept_val = ($accept | default "application/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2763,7 +2790,7 @@ export def "get-published-project-name-repository-name-architecture-name-binary-
   if ($binary_filename | is-empty) { error make --unspanned { msg: "path parameter 'binary_filename' must be non-empty" } }
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name), architecture_name: (encode-path-segment $architecture_name), binary_filename: (encode-path-segment $binary_filename)} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}") "view=ymp" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2802,7 +2829,7 @@ export def "get-published-project-name-repository-name-view-status" [
   let qp = [(serialize-qp "view" $view "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_name: (encode-path-segment $project_name), repository_name: (encode-path-segment $repository_name)} | format pattern "/published/{project_name}/{repository_name}") "view=status" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2835,7 +2862,7 @@ export def "get-request" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/request" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2876,9 +2903,9 @@ export def "post-request" [
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "addrevision" $addrevision "scalar") (serialize-qp "ignore_delegate" $ignore_delegate "scalar") (serialize-qp "ignore_build_state" $ignore_build_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/request" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2913,7 +2940,7 @@ export def "delete-request-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2951,7 +2978,7 @@ export def "get-request-id" [
   let qp = [(serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2997,7 +3024,7 @@ export def "post-request-id" [
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "newstate" $newstate "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "by_user" $by_user "scalar") (serialize-qp "by_group" $by_group "scalar") (serialize-qp "by_project" $by_project "scalar") (serialize-qp "by_package" $by_package "scalar") (serialize-qp "incident" $incident "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3034,9 +3061,9 @@ export def "put-request-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3076,7 +3103,7 @@ export def "post-request-id-cmd-diff" [
   let qp = [(serialize-qp "diff_to_superseded" $diff_to_superseded "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "withissues" $withissues "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/request/{id}") "cmd=diff" $qp $auth.query)
   let accept_val = ($accept | default "application/xml; charset=utf-8")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3120,7 +3147,7 @@ export def "get-request-view-collection" [
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "roles" $roles "scalar") (serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/request" "view=collection" $qp $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3153,7 +3180,7 @@ export def "get-worker-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/worker/status" $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3190,7 +3217,7 @@ export def "get-worker-architecture-name-worker-id" [
   if ($worker_id | is-empty) { error make --unspanned { msg: "path parameter 'worker_id' must be non-empty" } }
   let full_url = (build-url $base ({architecture_name: (encode-path-segment $architecture_name), worker_id: (encode-path-segment $worker_id)} | format pattern "/worker/{architecture_name}:{worker_id}") $auth.query)
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3234,9 +3261,9 @@ export def "post-worker-cmd-checkconstraints" [
   let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "package" $package "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/worker" "cmd=checkconstraints" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/xml; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

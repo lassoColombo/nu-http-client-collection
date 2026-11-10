@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -182,9 +209,9 @@ export def "generatere-kyc-aadhar-otp-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/aadhaar/generateOTP" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -225,11 +252,11 @@ export def "verify-aadhar-otp-only-using-post-1" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/aadhaar/verifyOTP" $auth.query)
   let req_body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -266,9 +293,9 @@ export def "get-benefits-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/benefits" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -309,11 +336,11 @@ export def "change-password-via-aadhar-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/byAadhaar" $auth.query)
   let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -354,11 +381,11 @@ export def "change-password-via-mobile-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/byMobile" $auth.query)
   let req_body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -395,9 +422,9 @@ export def "generate-aadhar-otp-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/generateAadhaarOTP" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -434,9 +461,9 @@ export def "generate-mobile-otp-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/passwd/generateMobileOTP" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -476,11 +503,11 @@ export def "change-password-via-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/change/password" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -517,9 +544,9 @@ export def "generate-card-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getCard" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -556,9 +583,9 @@ export def "generate-png-card-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getPngCard" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -595,9 +622,9 @@ export def "generate-svg-card-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/getSvgCard" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -634,9 +661,9 @@ export def "delete-account-using-delete" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -673,9 +700,9 @@ export def "get-account-information-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -731,11 +758,11 @@ export def "update-account-information-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/profile" $auth.query)
   let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -773,9 +800,9 @@ export def "get-qr-code-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/account/qrCode" $auth.query)
   let accept_val = ($accept | default "*/*")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -812,11 +839,11 @@ export def "validate-token-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/token" $auth.query)
   let req_body = {"authToken": $auth_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -854,11 +881,11 @@ export def "authenticate-with-password-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authPassword" $auth.query)
   let req_body = {"healthId": $health_id, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -895,11 +922,11 @@ export def "authenticate-user-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authWithMobile" $auth.query)
   let req_body = {"healthid": $healthid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -932,7 +959,7 @@ export def "auth-with-mobile-token-using-post" [
   --gender: string
   --health-id: string
   --name: string
-  --body-token: string
+  --body-token: string # (spec name: token)
   txn_id: string
   --year-of-birth: string
 ]: any -> oneof<record<token: string>, string, nothing> {
@@ -941,11 +968,11 @@ export def "auth-with-mobile-token-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authWithMobileToken" $auth.query)
   let req_body = {"gender": $gender, "healthId": $health_id, "name": $name, "token": $body_token, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -980,9 +1007,9 @@ export def "cert-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/cert" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1022,11 +1049,11 @@ export def "confirm-with-aadhaar-bio-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithAadhaarBio" $auth.query)
   let req_body = {"authType": $auth_type, "bioType": $bio_type, "pid": $pid, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1064,11 +1091,11 @@ export def "confirm-with-aadhaar-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithAadhaarOtp" $auth.query)
   let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1108,11 +1135,11 @@ export def "confirm-with-demographics-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithDemographics" $auth.query)
   let req_body = {"gender": $gender, "name": $name, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1150,11 +1177,11 @@ export def "confirm-with-mobile-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithMobileOTP" $auth.query)
   let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1192,11 +1219,11 @@ export def "auth-account-password-request-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithPassword" $auth.query)
   let req_body = {"password": $password, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1234,11 +1261,11 @@ export def "initiate-auth-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/init" $auth.query)
   let req_body = {"authMethod": $auth_method, "healthid": $healthid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1275,11 +1302,11 @@ export def "resend-auth-mobile-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/resendAuthOTP" $auth.query)
   let req_body = {"txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1317,11 +1344,11 @@ export def "retrieval-health-id-by-aadhar-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/aadhaar" $auth.query)
   let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1358,11 +1385,11 @@ export def "generate-aadhar-otp-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/aadhaar/generateOtp" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1408,11 +1435,11 @@ export def "retrieval-health-id-by-mobile-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/mobile" $auth.query)
   let req_body = {"dayOfBirth": $day_of_birth, "firstName": $first_name, "gender": $gender, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "otp": $otp, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1449,11 +1476,11 @@ export def "generate-mobile-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/mobile/generateOtp" $auth.query)
   let req_body = {"mobile": $mobile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1491,9 +1518,9 @@ export def "get-districts-in-state-using-get" [
   let qp = [(serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ha/lgd/districts" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1528,9 +1555,9 @@ export def "get-states-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/lgd/states" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1568,11 +1595,11 @@ export def "delete-tag-using-delete" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags" $auth.query)
   let req_body = {"healthId": $health_id, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1609,9 +1636,9 @@ export def "get-tags-using-get" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/ha/tags" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1649,11 +1676,11 @@ export def "add-tag-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags" $auth.query)
   let req_body = {"healthId": $health_id, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1691,11 +1718,11 @@ export def "authenticate-health-facility-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/authenticate" $auth.query)
   let req_body = {"hfrUid": $hfr_uid, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1734,11 +1761,11 @@ export def "change-password-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/change/password" $auth.query)
   let req_body = {"hfrUid": $hfr_uid, "newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1782,11 +1809,11 @@ export def "create-aadhaar-account-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/createHealthIdWithPreVerified" $auth.query)
   let req_body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1823,11 +1850,11 @@ export def "generate-password-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/generate/password" $auth.query)
   let req_body = {"hfrUid": $hfr_uid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1866,11 +1893,11 @@ export def "generate-facility-otp-using-post" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/health/facility/generateOtp" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1909,9 +1936,9 @@ export def "generate-svg-card-using-get-1" [
   if ($x_token == null) { error make --unspanned { msg: "required header parameter 'X-Token' missing: pass --x-token" } }
   let full_url = (build-url $base "/v1/health/facility/getSvgCard" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "Health-ID": $health_id, "X-Token": $x_token} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1948,11 +1975,11 @@ export def "reset-password-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/reset/password" $auth.query)
   let req_body = {"hfrUid": $hfr_uid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1989,11 +2016,11 @@ export def "generate-aadhar-otp-using-post-2" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/generateOtp" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2037,11 +2064,11 @@ export def "verify-aadhar-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyAadharOtp" $auth.query)
   let req_body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "otp": $otp, "txnId": $txn_id, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2086,11 +2113,11 @@ export def "verify-bio-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyBio" $auth.query)
   let req_body = {"aadhaar": $aadhaar, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "bioType": $bio_type, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "pid": $pid, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2136,11 +2163,11 @@ export def "create-health-id-by-demo-auth-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/createHealthId/demo/auth" $auth.query)
   let req_body = {"aadharNumber": $aadhar_number, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2178,11 +2205,11 @@ export def "delink-hid-benefit-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/delink" $auth.query)
   let req_body = {"benefitName": $benefit_name, "uidToken": $uid_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2223,11 +2250,11 @@ export def "link-hid-benefit-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/link" $auth.query)
   let req_body = {"benefitId": $benefit_id, "benefitName": $benefit_name, "stateCode": $state_code, "uidToken": $uid_token, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2277,11 +2304,11 @@ export def "create-health-id-by-mobile-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/mobile/createHealthId" $auth.query)
   let req_body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitDocType": $benefit_doc_type, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "docNumber": $doc_number, "fileType": $file_type, "gender": $gender, "name": $name, "otp": $otp, "txnId": $txn_id, "uploadedDoc": $uploaded_doc, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2318,11 +2345,11 @@ export def "generate-mobile-otp-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/mobile/generateOtp" $auth.query)
   let req_body = {"mobile": $mobile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2369,11 +2396,11 @@ export def "notify-benefit-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/notify/benefit" $auth.query)
   let req_body = {"aadharNumberOrUidToken": $aadhar_number_or_uid_token, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "stateCode": $state_code, "validity": $validity} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2410,11 +2437,11 @@ export def "find-by-aadhar-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/search/aadhaar" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2452,11 +2479,11 @@ export def "find-by-health-id-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/search/healthIdNumber" $auth.query)
   let req_body = {"benefitId": $benefit_id, "healthId": $health_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2494,11 +2521,11 @@ export def "update-mobile-information-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/mobile" $auth.query)
   let req_body = {"healthIdNumber": $health_id_number, "mobile": $mobile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2553,11 +2580,11 @@ export def "update-account-information-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/profile" $auth.query)
   let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "healthIdNumber": $health_id_number, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2594,11 +2621,11 @@ export def "update-status-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/status" $auth.query)
   let req_body = {"healthIdNumber": $health_id_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2645,11 +2672,11 @@ export def "verify-aadhar-otp-using-post-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithAadhaarOtp" $auth.query)
   let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "middleName": $middle_name, "mobile": $mobile, "otp": $otp, "password": $password, "profilePhoto": $profile_photo, "restrictions": $restrictions, "txnId": $txn_id, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2693,11 +2720,11 @@ export def "create-aadhaar-account-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithPreVerified" $auth.query)
   let req_body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2735,11 +2762,11 @@ export def "generate-mobile-otp-for-txn-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/generateMobileOTP" $auth.query)
   let req_body = {"mobile": $mobile, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2776,11 +2803,11 @@ export def "generate-aadhar-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/generateOtp" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2817,11 +2844,11 @@ export def "resend-aadhar-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/resendAadhaarOtp" $auth.query)
   let req_body = {"txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2858,11 +2885,11 @@ export def "get-health-id-numbers-by-aadhar-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/search/aadhar" $auth.query)
   let req_body = {"aadhaar": $aadhaar} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2902,11 +2929,11 @@ export def "verify-aadhar-bio-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyBio" $auth.query)
   let req_body = {"aadhaar": $aadhaar, "bioType": $bio_type, "pid": $pid, "restrictions": $restrictions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2944,11 +2971,11 @@ export def "verify-mobile-otp-for-txn-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyMobileOTP" $auth.query)
   let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2987,11 +3014,11 @@ export def "verify-aadhar-otp-only-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyOTP" $auth.query)
   let req_body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3038,7 +3065,7 @@ export def "verify-user-via-mobile-using-post" [
   --restrictions: string
   --state-code: string
   --subdistrict-code: string
-  --body-token: string
+  --body-token: string # (spec name: token)
   --town-code: string
   txn_id: string
   --village-code: string
@@ -3050,11 +3077,11 @@ export def "verify-user-via-mobile-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/createHealthId" $auth.query)
   let req_body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "gender": $gender, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "restrictions": $restrictions, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "token": $body_token, "townCode": $town_code, "txnId": $txn_id, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3091,11 +3118,11 @@ export def "generate-mobile-otp-using-post-1-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/generateOtp" $auth.query)
   let req_body = {"mobile": $mobile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3132,11 +3159,11 @@ export def "resent-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/resendOtp" $auth.query)
   let req_body = {"txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3174,11 +3201,11 @@ export def "verify-mobile-otp-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/verifyOtp" $auth.query)
   let req_body = {"otp": $otp, "txnId": $txn_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3215,11 +3242,11 @@ export def "search-user-by-userid-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/existsByHealthId" $auth.query)
   let req_body = {"healthId": $health_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3256,11 +3283,11 @@ export def "search-user-by-account-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/searchByHealthId" $auth.query)
   let req_body = {"healthId": $health_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3300,11 +3327,11 @@ export def "search-user-by-mobile-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/searchByMobile" $auth.query)
   let req_body = {"gender": $gender, "mobile": $mobile, "name": $name, "yearOfBirth": $year_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -195,7 +222,7 @@ export def "toolresults-projects-histories-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filterByName" $filter_by_name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -249,9 +276,9 @@ export def "toolresults-projects-histories-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories") $qp $auth.query)
   let req_body = {"displayName": $display_name, "historyId": $history_id, "name": $name, "testPlatform": $test_platform} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -301,7 +328,7 @@ export def "toolresults-projects-histories-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -353,7 +380,7 @@ export def "toolresults-projects-histories-executions-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -413,9 +440,9 @@ export def "toolresults-projects-histories-executions-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions") $qp $auth.query)
   let req_body = {"completionTime": $completion_time, "creationTime": $creation_time, "dimensionDefinitions": $dimension_definitions, "executionId": $execution_id, "outcome": $outcome, "specification": $specification, "state": $state, "testExecutionMatrixId": $test_execution_matrix_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -467,7 +494,7 @@ export def "toolresults-projects-histories-executions-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -514,7 +541,7 @@ export def "toolresults-projects-histories-executions-patch" [
   --completion-time: record # A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution. The count is relative to an epoch at UTC midnight on January 1, 1970, in the proleptic Gregorian calendar which extends the Gregorian calendar backwards to year one. All minutes are 60 seconds long. Leap seconds are "smeared" so that no leap second table is needed for interpretation, using a [24-hour linear smear](https://developers.google.com/time/smear). The range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z. By restricting to that range, we ensure that we can convert to and from [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) date strings. — shape: {nanos?: int, seconds?: string}
   --creation-time: record # A Timestamp represents a point in time independent of any time zone or local calendar, encoded as a count of seconds and fractions of seconds at nanosecond resolution. The count is relative to an epoch at UTC midnight on January 1, 1970, in the proleptic Gregorian calendar which extends the Gregorian calendar backwards to year one. All minutes are 60 seconds long. Leap seconds are "smeared" so that no leap second table is needed for interpretation, using a [24-hour linear smear](https://developers.google.com/time/smear). The range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z. By restricting to that range, we ensure that we can convert to and from [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) date strings. — shape: {nanos?: int, seconds?: string}
   --dimension-definitions: list # The dimensions along which different steps in this execution may vary. This must remain fixed over the life of the execution. Returns INVALID_ARGUMENT if this field is set in an update request. Returns INVALID_ARGUMENT if the same name occurs in more than one dimension_definition. Returns INVALID_ARGUMENT if the size of the list is over 100. - In response: present if set by create - In create request: optional - In update request: never set
-  --body-execution-id: string # A unique identifier within a History for this Execution. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response always set - In create/update request: never set
+  --body-execution-id: string # A unique identifier within a History for this Execution. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response always set - In create/update request: never set (spec name: executionId)
   --outcome: record # Interprets a result so that humans and machines can act on it. — shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
   --specification: record # The details about how to run the execution. — shape: {androidTest?: record, iosTest?: record}
   --state: string@state-completer # The initial state is IN_PROGRESS. The only legal state transitions is from IN_PROGRESS to COMPLETE. A PRECONDITION_FAILED will be returned if an invalid transition is requested. The state can only be set to COMPLETE once. A FAILED_PRECONDITION will be returned if the state is set to COMPLETE multiple times. If the state is set to COMPLETE, all the in-progress steps within the execution will be set as COMPLETE. If the outcome of the step is not set, the outcome will be set to INCONCLUSIVE. - In response always set - In create/update request: optional
@@ -529,9 +556,9 @@ export def "toolresults-projects-histories-executions-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}") $qp $auth.query)
   let req_body = {"completionTime": $completion_time, "creationTime": $creation_time, "dimensionDefinitions": $dimension_definitions, "executionId": $body_execution_id, "outcome": $outcome, "specification": $specification, "state": $state, "testExecutionMatrixId": $test_execution_matrix_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -583,7 +610,7 @@ export def "toolresults-projects-histories-executions-clusters-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/clusters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -637,7 +664,7 @@ export def "toolresults-projects-histories-executions-clusters-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), cluster_id: (encode-path-segment $cluster_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/clusters/{cluster_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -691,7 +718,7 @@ export def "toolresults-projects-histories-executions-environments-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/environments") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -745,7 +772,7 @@ export def "toolresults-projects-histories-executions-environments-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/environments/{environment_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -799,7 +826,7 @@ export def "toolresults-projects-histories-executions-steps-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -868,9 +895,9 @@ export def "toolresults-projects-histories-executions-steps-create" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps") $qp $auth.query)
   let req_body = {"completionTime": $completion_time, "creationTime": $creation_time, "description": $description, "deviceUsageDuration": $device_usage_duration, "dimensionValue": $dimension_value, "hasImages": $has_images, "labels": $labels, "multiStep": $multi_step, "name": $name, "outcome": $outcome, "runDuration": $run_duration, "state": $state, "stepId": $step_id, "testExecutionStep": $test_execution_step, "toolExecutionStep": $tool_execution_step} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -924,7 +951,7 @@ export def "toolresults-projects-histories-executions-steps-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -981,7 +1008,7 @@ export def "toolresults-projects-histories-executions-steps-patch" [
   --outcome: record # Interprets a result so that humans and machines can act on it. — shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
   --run-duration: record # A Duration represents a signed, fixed-length span of time represented as a count of seconds and fractions of seconds at nanosecond resolution. It is independent of any calendar and concepts like "day" or "month". It is related to Timestamp in that the difference between two Timestamp values is a Duration and it can be added or subtracted from a Timestamp. Range is approximately +-10,000 years. — shape: {nanos?: int, seconds?: string}
   --state: string@state-completer # The initial state is IN_PROGRESS. The only legal state transitions are * IN_PROGRESS -> COMPLETE A PRECONDITION_FAILED will be returned if an invalid transition is requested. It is valid to create Step with a state set to COMPLETE. The state can only be set to COMPLETE once. A PRECONDITION_FAILED will be returned if the state is set to COMPLETE multiple times. - In response: always set - In create/update request: optional
-  --body-step-id: string # A unique identifier within a Execution for this Step. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response: always set - In create/update request: never set
+  --body-step-id: string # A unique identifier within a Execution for this Step. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response: always set - In create/update request: never set (spec name: stepId)
   --test-execution-step: record # A step that represents running tests. It accepts ant-junit xml files which will be parsed into structured test results by the service. Xml file paths are updated in order to append more files, however they can't be deleted. Users can also add test results manually by using the test_result field. — shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
   --tool-execution-step: record # Generic tool step to be used for binaries we do not explicitly support. For example: running cp to copy artifacts from one location to another. — shape: {toolExecution?: record}
 ]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>>, string, nothing> {
@@ -995,9 +1022,9 @@ export def "toolresults-projects-histories-executions-steps-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}") $qp $auth.query)
   let req_body = {"completionTime": $completion_time, "creationTime": $creation_time, "description": $description, "deviceUsageDuration": $device_usage_duration, "dimensionValue": $dimension_value, "hasImages": $has_images, "labels": $labels, "multiStep": $multi_step, "name": $name, "outcome": $outcome, "runDuration": $run_duration, "state": $state, "stepId": $body_step_id, "testExecutionStep": $test_execution_step, "toolExecutionStep": $tool_execution_step} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1051,7 +1078,7 @@ export def "toolresults-projects-histories-executions-steps-get-perf-metrics-sum
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfMetricsSummary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1096,13 +1123,13 @@ export def "toolresults-projects-histories-executions-steps-perf-metrics-summary
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --app-start-time: record # shape: {fullyDrawnTime?: record, initialDisplayTime?: record}
-  --body-execution-id: string # A tool results execution ID. @OutputOnly
+  --body-execution-id: string # A tool results execution ID. @OutputOnly (spec name: executionId)
   --graphics-stats: record # Graphics statistics for the App. The information is collected from 'adb shell dumpsys graphicsstats'. For more info see: https://developer.android.com/training/testing/performance.html Statistics will only be present for API 23+. — shape: {buckets?: list, highInputLatencyCount?: string, jankyFrames?: string, missedVsyncCount?: string, p50Millis?: string, p90Millis?: string, p95Millis?: string, p99Millis?: string, slowBitmapUploadCount?: string, slowDrawCount?: string, slowUiThreadCount?: string, totalFrames?: string}
-  --body-history-id: string # A tool results history ID. @OutputOnly
+  --body-history-id: string # A tool results history ID. @OutputOnly (spec name: historyId)
   --perf-environment: record # Encapsulates performance environment info — shape: {cpuInfo?: record, memoryInfo?: record}
   --perf-metrics: list<string> # Set of resource collected
-  --body-project-id: string # The cloud project @OutputOnly
-  --body-step-id: string # A tool results step ID. @OutputOnly
+  --body-project-id: string # The cloud project @OutputOnly (spec name: projectId)
+  --body-step-id: string # A tool results step ID. @OutputOnly (spec name: stepId)
 ]: any -> oneof<record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1114,9 +1141,9 @@ export def "toolresults-projects-histories-executions-steps-perf-metrics-summary
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfMetricsSummary") $qp $auth.query)
   let req_body = {"appStartTime": $app_start_time, "executionId": $body_execution_id, "graphicsStats": $graphics_stats, "historyId": $body_history_id, "perfEnvironment": $perf_environment, "perfMetrics": $perf_metrics, "projectId": $body_project_id, "stepId": $body_step_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1171,7 +1198,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-l
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfSampleSeries") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1216,11 +1243,11 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-c
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --basic-perf-sample-series: record # Encapsulates the metadata for basic sample series represented by a line chart — shape: {perfMetricType?: "perfMetricTypeUnspecified"|"memory"|"cpu"|"network"|"graphics", perfUnit?: "perfUnitUnspecified"|"kibibyte"|"percent"|"bytesPerSecond"|"framesPerSecond"|"byte", sampleSeriesLabel?: "sampleSeriesTypeUnspecified"|"memoryRssPrivate"|"memoryRssShared"|"memoryRssTotal"|"memoryTotal"|"cpuUser"|"cpuKernel"|"cpuTotal"|"ntBytesTransferred"|"ntBytesReceived"|"networkSent"|"networkReceived"|"graphicsFrameRate"}
-  --body-execution-id: string # A tool results execution ID. @OutputOnly
-  --body-history-id: string # A tool results history ID. @OutputOnly
-  --body-project-id: string # The cloud project @OutputOnly
+  --body-execution-id: string # A tool results execution ID. @OutputOnly (spec name: executionId)
+  --body-history-id: string # A tool results history ID. @OutputOnly (spec name: historyId)
+  --body-project-id: string # The cloud project @OutputOnly (spec name: projectId)
   --sample-series-id: string # A sample series id @OutputOnly
-  --body-step-id: string # A tool results step ID. @OutputOnly
+  --body-step-id: string # A tool results step ID. @OutputOnly (spec name: stepId)
 ]: any -> oneof<record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1232,9 +1259,9 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-c
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfSampleSeries") $qp $auth.query)
   let req_body = {"basicPerfSampleSeries": $basic_perf_sample_series, "executionId": $body_execution_id, "historyId": $body_history_id, "projectId": $body_project_id, "sampleSeriesId": $sample_series_id, "stepId": $body_step_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1290,7 +1317,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-g
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id), sample_series_id: (encode-path-segment $sample_series_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfSampleSeries/{sample_series_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1348,7 +1375,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-s
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id), sample_series_id: (encode-path-segment $sample_series_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfSampleSeries/{sample_series_id}/samples") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1406,9 +1433,9 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-s
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id), sample_series_id: (encode-path-segment $sample_series_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/perfSampleSeries/{sample_series_id}/samples:batchCreate") $qp $auth.query)
   let req_body = {"perfSamples": $perf_samples} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1464,7 +1491,7 @@ export def "toolresults-projects-histories-executions-steps-test-cases-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/testCases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1520,7 +1547,7 @@ export def "toolresults-projects-histories-executions-steps-test-cases-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id), test_case_id: (encode-path-segment $test_case_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/testCases/{test_case_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1576,7 +1603,7 @@ export def "toolresults-projects-histories-executions-steps-thumbnails-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}/thumbnails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1632,9 +1659,9 @@ export def "toolresults-projects-histories-executions-steps-publish-xunit-xml-fi
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), history_id: (encode-path-segment $history_id), execution_id: (encode-path-segment $execution_id), step_id: (encode-path-segment $step_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/histories/{history_id}/executions/{execution_id}/steps/{step_id}:publishXunitXmlFiles") $qp $auth.query)
   let req_body = {"xunitXmlFiles": $xunit_xml_files} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1682,7 +1709,7 @@ export def "toolresults-projects-get-settings" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}/settings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1730,7 +1757,7 @@ export def "toolresults-projects-initialize-settings" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/toolresults/v1beta3/projects/{project_id}:initializeSettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1779,7 +1806,7 @@ export def "toolresults-projects-histories-executions-steps-accessibility-cluste
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/toolresults/v1beta3/{name}:accessibilityClusters") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

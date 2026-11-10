@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,9 +217,9 @@ export def "delete-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -232,9 +259,9 @@ export def "get-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -276,11 +303,11 @@ export def "patch-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}") $auth.query)
   let req_body = {"Employer": $employer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -322,11 +349,11 @@ export def "put-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}") $auth.query)
   let req_body = {"Employer": $employer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -368,9 +395,9 @@ export def "delete-cis-line-type" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -412,9 +439,9 @@ export def "get-cis-line-type-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -458,11 +485,11 @@ export def "put-cis-line-type-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}") $auth.query)
   let req_body = {"CisLineType": $cis_line_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -506,9 +533,9 @@ export def "delete-cis-line-type-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -552,9 +579,9 @@ export def "get-tag-from-cis-line-type" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -598,9 +625,9 @@ export def "put-cis-line-type-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -642,9 +669,9 @@ export def "get-tags-from-cis-line-type" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_line_type_id: (encode-path-segment $cis_line_type_id)} | format pattern "/Employer/{employer_id}/CisLineType/{cis_line_type_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -684,9 +711,9 @@ export def "get-cis-line-types-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -728,11 +755,11 @@ export def "post-cis-line-type-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes") $auth.query)
   let req_body = {"CisLineType": $cis_line_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -774,9 +801,9 @@ export def "get-cis-line-types-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/CisLineTypes/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -816,9 +843,9 @@ export def "get-all-cis-line-type-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisLineTypes/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -860,9 +887,9 @@ export def "delete-cis-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_transaction_id: (encode-path-segment $cis_transaction_id)} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -904,9 +931,9 @@ export def "get-cis-transaction-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), cis_transaction_id: (encode-path-segment $cis_transaction_id)} | format pattern "/Employer/{employer_id}/CisTransaction/{cis_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -946,9 +973,9 @@ export def "get-cis-transactions-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/CisTransactions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -990,9 +1017,9 @@ export def "delete-dps-message" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1034,9 +1061,9 @@ export def "get-dps-message-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1078,9 +1105,9 @@ export def "patch-dps-message" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1122,9 +1149,9 @@ export def "put-dps-message" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), dps_message_id: (encode-path-segment $dps_message_id)} | format pattern "/Employer/{employer_id}/DpsMessage/{dps_message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1164,9 +1191,9 @@ export def "get-dps-messages-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/DpsMessages") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1206,9 +1233,9 @@ export def "post-dps-message" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/DpsMessages") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1250,9 +1277,9 @@ export def "delete-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1294,9 +1321,9 @@ export def "get-employee-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1340,11 +1367,11 @@ export def "patch-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}") $auth.query)
   let req_body = {"Employee": $employee} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1388,11 +1415,11 @@ export def "put-employee-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}") $auth.query)
   let req_body = {"Employee": $employee} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1436,9 +1463,9 @@ export def "delete-ae-assessment" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1482,9 +1509,9 @@ export def "get-ae-assessment-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1530,11 +1557,11 @@ export def "put-new-ae-assessment" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), ae_assessment_id: (encode-path-segment $ae_assessment_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessment/{ae_assessment_id}") $auth.query)
   let req_body = {"AEAssessment": $ae_assessment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1576,9 +1603,9 @@ export def "get-ae-assessments-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1622,11 +1649,11 @@ export def "post-new-ae-assessment" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/AEAssessments") $auth.query)
   let req_body = {"AEAssessment": $ae_assessment} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1668,9 +1695,9 @@ export def "get-commentaries-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentaries") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1714,9 +1741,9 @@ export def "get-commentary-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), commentary_id: (encode-path-segment $commentary_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Commentary/{commentary_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1758,9 +1785,9 @@ export def "get-journal-lines-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/JournalLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1804,9 +1831,9 @@ export def "delete-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1850,9 +1877,9 @@ export def "get-pay-instruction-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1898,11 +1925,11 @@ export def "patch-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}") $auth.query)
   let req_body = {"PayInstruction": $pay_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1948,11 +1975,11 @@ export def "put-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}") $auth.query)
   let req_body = {"PayInstruction": $pay_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1998,9 +2025,9 @@ export def "delete-pay-instruction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2046,9 +2073,9 @@ export def "get-tag-from-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2094,9 +2121,9 @@ export def "put-pay-instruction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2140,9 +2167,9 @@ export def "get-tags-from-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_instruction_id: (encode-path-segment $pay_instruction_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstruction/{pay_instruction_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2184,9 +2211,9 @@ export def "get-pay-instructions-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2230,11 +2257,11 @@ export def "post-pay-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions") $auth.query)
   let req_body = {"PayInstruction": $pay_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2278,9 +2305,9 @@ export def "get-pay-instructions-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2322,9 +2349,9 @@ export def "get-all-pay-instruction-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayInstructions/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2368,9 +2395,9 @@ export def "get-pay-line-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2416,9 +2443,9 @@ export def "delete-pay-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2464,9 +2491,9 @@ export def "get-tag-from-pay-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2512,9 +2539,9 @@ export def "put-pay-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2558,9 +2585,9 @@ export def "get-tags-from-pay-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), pay_line_id: (encode-path-segment $pay_line_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLine/{pay_line_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2602,9 +2629,9 @@ export def "get-pay-lines-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2648,9 +2675,9 @@ export def "get-pay-lines-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2692,9 +2719,9 @@ export def "get-all-pay-line-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayLines/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2736,9 +2763,9 @@ export def "get-pay-runs-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/PayRuns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2782,9 +2809,9 @@ export def "delete-employee-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2828,9 +2855,9 @@ export def "get-employee-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2874,9 +2901,9 @@ export def "get-employee-revision-summary-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revision/{revision_number}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2918,9 +2945,9 @@ export def "get-employee-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2962,9 +2989,9 @@ export def "get-employee-revision-summaries" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Revisions/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3008,9 +3035,9 @@ export def "delete-employee-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3054,9 +3081,9 @@ export def "get-employee-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3100,9 +3127,9 @@ export def "put-employee-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3144,9 +3171,9 @@ export def "get-employee-secrets" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3188,9 +3215,9 @@ export def "post-employee-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Secrets") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3232,9 +3259,9 @@ export def "get-employee-summary-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3278,9 +3305,9 @@ export def "delete-employee-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3324,9 +3351,9 @@ export def "get-tag-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3370,9 +3397,9 @@ export def "put-employee-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3418,9 +3445,9 @@ export def "get-tag-from-employee-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tag/{tag_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3462,9 +3489,9 @@ export def "get-tags-from-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3508,9 +3535,9 @@ export def "get-tags-from-employee-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/Tags/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3554,9 +3581,9 @@ export def "delete-employee-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3600,9 +3627,9 @@ export def "get-employee-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3646,9 +3673,9 @@ export def "get-employee-summary-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), employee_id: (encode-path-segment $employee_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employee/{employee_id}/{effective_date}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3688,9 +3715,9 @@ export def "get-employees-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3732,11 +3759,11 @@ export def "post-employee-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees") $auth.query)
   let req_body = {"Employee": $employee} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3776,9 +3803,9 @@ export def "get-employee-summaries-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3820,9 +3847,9 @@ export def "get-employees-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Employees/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3862,9 +3889,9 @@ export def "get-all-employee-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Employees/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3906,9 +3933,9 @@ export def "get-employees-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employees/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3950,9 +3977,9 @@ export def "get-employee-summaries-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Employees/{effective_date}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3994,9 +4021,9 @@ export def "delete-holiday-scheme" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4038,9 +4065,9 @@ export def "get-holiday-scheme-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4084,11 +4111,11 @@ export def "patch-holiday-scheme" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}") $auth.query)
   let req_body = {"HolidayScheme": $holiday_scheme} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -4132,11 +4159,11 @@ export def "put-holiday-scheme-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}") $auth.query)
   let req_body = {"HolidayScheme": $holiday_scheme} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4180,9 +4207,9 @@ export def "delete-holiday-scheme-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4226,9 +4253,9 @@ export def "get-holiday-scheme-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4270,9 +4297,9 @@ export def "get-holiday-scheme-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4316,9 +4343,9 @@ export def "delete-holiday-scheme-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4362,9 +4389,9 @@ export def "get-tag-from-holiday-scheme" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4408,9 +4435,9 @@ export def "put-holiday-scheme-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4456,9 +4483,9 @@ export def "get-tag-from-holiday-scheme-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tag/{tag_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4500,9 +4527,9 @@ export def "get-tags-from-holiday-scheme" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4546,9 +4573,9 @@ export def "get-tags-from-holiday-scheme-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/Tags/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4592,9 +4619,9 @@ export def "delete-holiday-scheme-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4638,9 +4665,9 @@ export def "get-holiday-scheme-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), holiday_scheme_id: (encode-path-segment $holiday_scheme_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidayScheme/{holiday_scheme_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4680,9 +4707,9 @@ export def "get-holiday-schemes-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4724,11 +4751,11 @@ export def "post-holiday-scheme-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes") $auth.query)
   let req_body = {"HolidayScheme": $holiday_scheme} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4770,9 +4797,9 @@ export def "get-holiday-schemes-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4812,9 +4839,9 @@ export def "get-all-holiday-scheme-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/HolidaySchemes/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4856,9 +4883,9 @@ export def "get-holiday-schemes-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/HolidaySchemes/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4900,9 +4927,9 @@ export def "delete-journal-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4944,9 +4971,9 @@ export def "get-journal-instruction-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4988,9 +5015,9 @@ export def "put-journal-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/Employer/{employer_id}/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5030,9 +5057,9 @@ export def "get-journal-instructions-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalInstructions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5072,9 +5099,9 @@ export def "post-journal-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalInstructions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5116,9 +5143,9 @@ export def "get-journal-line-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5162,9 +5189,9 @@ export def "delete-journal-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5208,9 +5235,9 @@ export def "get-tag-from-journal-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5254,9 +5281,9 @@ export def "put-journal-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5298,9 +5325,9 @@ export def "get-tags-from-journal-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), journal_line_id: (encode-path-segment $journal_line_id)} | format pattern "/Employer/{employer_id}/JournalLine/{journal_line_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5340,9 +5367,9 @@ export def "get-journal-lines-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5384,9 +5411,9 @@ export def "get-all-journal-lines-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/JournalLines/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5426,9 +5453,9 @@ export def "get-all-journal-line-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/JournalLines/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5470,9 +5497,9 @@ export def "delete-nominal-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5514,9 +5541,9 @@ export def "get-nominal-code-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5560,11 +5587,11 @@ export def "put-nominal-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}") $auth.query)
   let req_body = {"NominalCode": $nominal_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5606,9 +5633,9 @@ export def "get-pay-codes-from-nominal-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), nominal_code_id: (encode-path-segment $nominal_code_id)} | format pattern "/Employer/{employer_id}/NominalCode/{nominal_code_id}/PayCodes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5648,9 +5675,9 @@ export def "get-nominal-codes-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/NominalCodes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5692,11 +5719,11 @@ export def "post-nominal-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/NominalCodes") $auth.query)
   let req_body = {"NominalCode": $nominal_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5738,9 +5765,9 @@ export def "delete-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5782,9 +5809,9 @@ export def "get-pay-code-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5828,11 +5855,11 @@ export def "patch-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}") $auth.query)
   let req_body = {"PayCode": $pay_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -5876,11 +5903,11 @@ export def "put-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}") $auth.query)
   let req_body = {"PayCode": $pay_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5924,9 +5951,9 @@ export def "delete-pay-code-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5970,9 +5997,9 @@ export def "get-pay-code-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6014,9 +6041,9 @@ export def "get-pay-code-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6060,9 +6087,9 @@ export def "delete-pay-code-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6106,9 +6133,9 @@ export def "get-tag-from-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6152,9 +6179,9 @@ export def "put-pay-code-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6196,9 +6223,9 @@ export def "get-tags-from-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6242,9 +6269,9 @@ export def "delete-pay-code-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6288,9 +6315,9 @@ export def "get-pay-code-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_code_id: (encode-path-segment $pay_code_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCode/{pay_code_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6330,9 +6357,9 @@ export def "get-pay-codes-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6374,11 +6401,11 @@ export def "post-pay-code" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes") $auth.query)
   let req_body = {"PayCode": $pay_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6420,9 +6447,9 @@ export def "get-pay-codes-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PayCodes/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6462,9 +6489,9 @@ export def "get-all-pay-code-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PayCodes/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6506,9 +6533,9 @@ export def "get-pay-codes-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PayCodes/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6550,9 +6577,9 @@ export def "delete-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6594,9 +6621,9 @@ export def "get-pay-schedule-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6640,11 +6667,11 @@ export def "put-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}") $auth.query)
   let req_body = {"PaySchedule": $pay_schedule} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6686,9 +6713,9 @@ export def "get-employees-from-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6732,9 +6759,9 @@ export def "get-employees-from-pay-schedule-on-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Employees/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6778,9 +6805,9 @@ export def "delete-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6824,9 +6851,9 @@ export def "get-pay-run-from-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6870,9 +6897,9 @@ export def "get-ae-assessments-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/AEAssessments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6916,9 +6943,9 @@ export def "get-commentaries-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Commentaries") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6964,9 +6991,9 @@ export def "delete-pay-run-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7012,9 +7039,9 @@ export def "get-commentary-from-pay-run-by-employee" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employee/{employee_id}/Commentary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7058,9 +7085,9 @@ export def "get-employees-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Employees") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7104,9 +7131,9 @@ export def "get-journal-lines-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/JournalLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7150,9 +7177,9 @@ export def "get-pay-lines-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/PayLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7196,9 +7223,9 @@ export def "get-report-lines-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/ReportLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7244,9 +7271,9 @@ export def "delete-pay-run-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7292,9 +7319,9 @@ export def "get-tag-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7340,9 +7367,9 @@ export def "put-pay-run-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7386,9 +7413,9 @@ export def "get-tags-from-pay-run" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), pay_run_id: (encode-path-segment $pay_run_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRun/{pay_run_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7430,9 +7457,9 @@ export def "get-pay-runs-from-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7476,9 +7503,9 @@ export def "get-pay-runs-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7520,9 +7547,9 @@ export def "get-all-pay-run-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/PayRuns/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7566,9 +7593,9 @@ export def "delete-pay-schedule-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7612,9 +7639,9 @@ export def "get-tag-from-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7658,9 +7685,9 @@ export def "put-pay-schedule-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -7702,9 +7729,9 @@ export def "get-tags-from-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pay_schedule_id: (encode-path-segment $pay_schedule_id)} | format pattern "/Employer/{employer_id}/PaySchedule/{pay_schedule_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7744,9 +7771,9 @@ export def "get-pay-schedules-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7788,11 +7815,11 @@ export def "post-pay-schedule" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules") $auth.query)
   let req_body = {"PaySchedule": $pay_schedule} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7834,9 +7861,9 @@ export def "get-pay-schedules-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/PaySchedules/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7876,9 +7903,9 @@ export def "get-all-pay-schedule-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/PaySchedules/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7920,9 +7947,9 @@ export def "delete-pension" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7964,9 +7991,9 @@ export def "get-pension-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8010,11 +8037,11 @@ export def "patch-pension" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}") $auth.query)
   let req_body = {"Pension": $pension} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -8058,11 +8085,11 @@ export def "put-pension-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}") $auth.query)
   let req_body = {"Pension": $pension} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8106,9 +8133,9 @@ export def "delete-pension-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8152,9 +8179,9 @@ export def "get-pension-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8196,9 +8223,9 @@ export def "get-pension-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8242,9 +8269,9 @@ export def "delete-pension-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8288,9 +8315,9 @@ export def "get-pension-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), pension_id: (encode-path-segment $pension_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pension/{pension_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8330,9 +8357,9 @@ export def "get-pensions-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Pensions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8374,11 +8401,11 @@ export def "post-pension-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Pensions") $auth.query)
   let req_body = {"Pension": $pension} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8420,9 +8447,9 @@ export def "get-pensions-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Pensions/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8464,9 +8491,9 @@ export def "get-report-line-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), report_line_id: (encode-path-segment $report_line_id)} | format pattern "/Employer/{employer_id}/ReportLine/{report_line_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8506,9 +8533,9 @@ export def "get-report-lines-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8550,9 +8577,9 @@ export def "delete-reporting-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8594,9 +8621,9 @@ export def "get-reporting-instruction-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8640,11 +8667,11 @@ export def "put-reporting-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), reporting_instruction_id: (encode-path-segment $reporting_instruction_id)} | format pattern "/Employer/{employer_id}/ReportingInstruction/{reporting_instruction_id}") $auth.query)
   let req_body = {"ReportingInstruction": $reporting_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -8684,9 +8711,9 @@ export def "get-reporting-instructions-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportingInstructions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8728,11 +8755,11 @@ export def "post-reporting-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ReportingInstructions") $auth.query)
   let req_body = {"ReportingInstruction": $reporting_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8774,9 +8801,9 @@ export def "delete-employer-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8818,9 +8845,9 @@ export def "get-employer-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8862,9 +8889,9 @@ export def "get-employer-revision-summary-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/Revision/{revision_number}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8904,9 +8931,9 @@ export def "get-employer-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8946,9 +8973,9 @@ export def "get-employer-revision-summaries" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Revisions/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8990,9 +9017,9 @@ export def "delete-rti-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9034,9 +9061,9 @@ export def "get-rti-transaction-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9078,9 +9105,9 @@ export def "get-rti-transaction-summary-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9124,9 +9151,9 @@ export def "delete-rti-transaction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9170,9 +9197,9 @@ export def "get-tag-from-rti-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9216,9 +9243,9 @@ export def "put-rti-transaction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9260,9 +9287,9 @@ export def "get-tags-from-rti-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), rti_transaction_id: (encode-path-segment $rti_transaction_id)} | format pattern "/Employer/{employer_id}/RtiTransaction/{rti_transaction_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9302,9 +9329,9 @@ export def "get-rti-transactions-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9344,9 +9371,9 @@ export def "get-rti-transaction-summaries-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9388,9 +9415,9 @@ export def "get-rti-transactions-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9430,9 +9457,9 @@ export def "get-all-rti-transaction-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/RtiTransactions/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9474,9 +9501,9 @@ export def "delete-employer-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9518,9 +9545,9 @@ export def "get-employer-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9562,9 +9589,9 @@ export def "put-employer-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), secret_id: (encode-path-segment $secret_id)} | format pattern "/Employer/{employer_id}/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9604,9 +9631,9 @@ export def "get-employer-secrets" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Secrets") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9646,9 +9673,9 @@ export def "post-employer-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Secrets") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -9690,9 +9717,9 @@ export def "delete-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9734,9 +9761,9 @@ export def "get-sub-contractor-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9780,11 +9807,11 @@ export def "patch-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}") $auth.query)
   let req_body = {"SubContractor": $sub_contractor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -9828,11 +9855,11 @@ export def "put-sub-contractor-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}") $auth.query)
   let req_body = {"SubContractor": $sub_contractor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -9876,9 +9903,9 @@ export def "delete-cis-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -9922,9 +9949,9 @@ export def "get-cis-instruction-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9968,9 +9995,9 @@ export def "patch-cis-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -10016,11 +10043,11 @@ export def "put-cis-instruction-into-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}") $auth.query)
   let req_body = {"CisInstruction": $cis_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -10066,9 +10093,9 @@ export def "delete-cis-instruction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -10114,9 +10141,9 @@ export def "get-tag-from-cis-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10162,9 +10189,9 @@ export def "put-cis-instruction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -10208,9 +10235,9 @@ export def "get-tags-from-cis-instruction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_instruction_id: (encode-path-segment $cis_instruction_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstruction/{cis_instruction_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10252,9 +10279,9 @@ export def "get-cis-instructions-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10298,11 +10325,11 @@ export def "post-cis-instruction-into-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions") $auth.query)
   let req_body = {"CisInstruction": $cis_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -10346,9 +10373,9 @@ export def "get-cis-instructions-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10390,9 +10417,9 @@ export def "get-all-cis-instruction-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisInstructions/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10436,9 +10463,9 @@ export def "delete-cis-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -10482,9 +10509,9 @@ export def "get-cis-line-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10530,9 +10557,9 @@ export def "delete-cis-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -10578,9 +10605,9 @@ export def "get-tag-from-cis-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10626,9 +10653,9 @@ export def "put-cis-line-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -10672,9 +10699,9 @@ export def "get-tags-from-cis-line" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), cis_line_id: (encode-path-segment $cis_line_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLine/{cis_line_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10716,9 +10743,9 @@ export def "get-cis-lines-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10762,9 +10789,9 @@ export def "get-cis-lines-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10806,9 +10833,9 @@ export def "get-all-cis-line-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/CisLines/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10850,9 +10877,9 @@ export def "get-journal-lines-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/JournalLines") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10896,9 +10923,9 @@ export def "delete-sub-contractor-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -10942,9 +10969,9 @@ export def "get-sub-contractor-revision-by-number" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), revision_number: (encode-path-segment $revision_number)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revision/{revision_number}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -10986,9 +11013,9 @@ export def "get-sub-contractor-revisions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Revisions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11032,9 +11059,9 @@ export def "delete-sub-contractor-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -11078,9 +11105,9 @@ export def "get-tag-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11124,9 +11151,9 @@ export def "put-sub-contractor-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -11172,9 +11199,9 @@ export def "get-tag-from-sub-contractor-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tag/{tag_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11216,9 +11243,9 @@ export def "get-tags-from-sub-contractor" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11262,9 +11289,9 @@ export def "get-tags-from-sub-contractor-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/Tags/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11308,9 +11335,9 @@ export def "delete-sub-contractor-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -11354,9 +11381,9 @@ export def "get-sub-contractor-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), sub_contractor_id: (encode-path-segment $sub_contractor_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractor/{sub_contractor_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11396,9 +11423,9 @@ export def "get-sub-contractors-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11440,11 +11467,11 @@ export def "post-sub-contractor-into-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors") $auth.query)
   let req_body = {"SubContractor": $sub_contractor} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -11486,9 +11513,9 @@ export def "get-sub-contractors-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/SubContractors/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11528,9 +11555,9 @@ export def "get-all-sub-contractor-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/SubContractors/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11572,9 +11599,9 @@ export def "get-sub-contractors-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/SubContractors/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11614,9 +11641,9 @@ export def "get-employer-summary" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11658,9 +11685,9 @@ export def "delete-employer-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -11702,9 +11729,9 @@ export def "get-tag-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11746,9 +11773,9 @@ export def "put-employer-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -11792,9 +11819,9 @@ export def "get-tag-from-employer-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Tag/{tag_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11834,9 +11861,9 @@ export def "get-tags-from-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11878,9 +11905,9 @@ export def "get-tags-from-employer-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/Tags/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -11922,9 +11949,9 @@ export def "delete-third-party-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -11966,9 +11993,9 @@ export def "get-third-party-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12012,9 +12039,9 @@ export def "delete-third-party-transaction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -12058,9 +12085,9 @@ export def "get-tag-from-third-party-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12104,9 +12131,9 @@ export def "put-third-party-transaction-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -12148,9 +12175,9 @@ export def "get-tags-from-third-party-transaction" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), third_party_transaction_id: (encode-path-segment $third_party_transaction_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransaction/{third_party_transaction_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12190,9 +12217,9 @@ export def "get-third-party-transactions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12234,9 +12261,9 @@ export def "get-all-third-party-transactions-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12276,9 +12303,9 @@ export def "get-all-third-party-transaction-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Employer/{employer_id}/ThirdPartyTransactions/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12320,9 +12347,9 @@ export def "delete-employer-revision" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -12364,9 +12391,9 @@ export def "get-employer-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12408,9 +12435,9 @@ export def "get-employer-summary-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), effective_date: (encode-path-segment $effective_date)} | format pattern "/Employer/{employer_id}/{effective_date}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12448,9 +12475,9 @@ export def "get-employers" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Employers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12490,11 +12517,11 @@ export def "post-employer" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Employers" $auth.query)
   let req_body = {"Employer": $employer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -12532,9 +12559,9 @@ export def "get-employer-summaries" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Employers/Summary" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12574,9 +12601,9 @@ export def "get-employers-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Employers/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12614,9 +12641,9 @@ export def "get-all-employer-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Employers/Tags" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12656,9 +12683,9 @@ export def "get-employers-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({effective_date: (encode-path-segment $effective_date)} | format pattern "/Employers/{effective_date}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12698,9 +12725,9 @@ export def "get-employer-summaries-by-effective-date" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({effective_date: (encode-path-segment $effective_date)} | format pattern "/Employers/{effective_date}/Summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12734,7 +12761,7 @@ export def "get-health-check" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Healthcheck" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -12772,9 +12799,9 @@ export def "get-batch-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Batch" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12814,11 +12841,11 @@ export def "post-new-batch-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Batch" $auth.query)
   let req_body = {"BatchJobInstruction": $batch_job_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -12858,9 +12885,9 @@ export def "delete-batch-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -12900,9 +12927,9 @@ export def "get-batch-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12942,9 +12969,9 @@ export def "get-batch-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -12984,9 +13011,9 @@ export def "get-batch-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Batch/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13024,9 +13051,9 @@ export def "get-cis-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Cis" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13066,11 +13093,11 @@ export def "post-new-cis-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Cis" $auth.query)
   let req_body = {"CisJobInstructionBase": $cis_job_instruction_base} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -13110,9 +13137,9 @@ export def "delete-cis-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -13152,9 +13179,9 @@ export def "get-cis-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13194,9 +13221,9 @@ export def "get-cis-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13236,9 +13263,9 @@ export def "get-cis-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Cis/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13276,9 +13303,9 @@ export def "get-dps-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Dps" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13318,11 +13345,11 @@ export def "post-new-dps-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Dps" $auth.query)
   let req_body = {"DpsJobInstruction": $dps_job_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -13362,9 +13389,9 @@ export def "delete-dps-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -13404,9 +13431,9 @@ export def "get-dps-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13446,9 +13473,9 @@ export def "get-dps-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13488,9 +13515,9 @@ export def "get-dps-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Dps/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13530,9 +13557,9 @@ export def "get-employer-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/Jobs/Employer/{employer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13570,9 +13597,9 @@ export def "get-pay-run-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/PayRuns" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13612,11 +13639,11 @@ export def "post-new-pay-run-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/PayRuns" $auth.query)
   let req_body = {"PayRunJobInstruction": $pay_run_job_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -13656,9 +13683,9 @@ export def "delete-pay-run-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -13698,9 +13725,9 @@ export def "get-pay-run-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13740,9 +13767,9 @@ export def "get-pay-run-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13782,9 +13809,9 @@ export def "get-pay-run-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/PayRuns/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13822,9 +13849,9 @@ export def "get-rti-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Rti" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13864,11 +13891,11 @@ export def "post-new-rti-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/Rti" $auth.query)
   let req_body = {"RtiJobInstruction": $rti_job_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -13908,9 +13935,9 @@ export def "delete-rti-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -13950,9 +13977,9 @@ export def "get-rti-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -13992,9 +14019,9 @@ export def "get-rti-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14034,9 +14061,9 @@ export def "get-rti-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/Rti/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14074,9 +14101,9 @@ export def "get-third-party-jobs" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/ThirdParty" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14116,11 +14143,11 @@ export def "post-new-third-party-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Jobs/ThirdParty" $auth.query)
   let req_body = {"ThirdPartyJobInstruction": $third_party_job_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -14160,9 +14187,9 @@ export def "delete-third-party-job" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -14202,9 +14229,9 @@ export def "get-third-party-job-info" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Info") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14244,9 +14271,9 @@ export def "get-third-party-job-progress" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Progress") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14286,9 +14313,9 @@ export def "get-third-party-job-status" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/Jobs/ThirdParty/{job_id}/Status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14328,9 +14355,9 @@ export def "delete-journal-instruction-template" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -14370,9 +14397,9 @@ export def "get-journal-instruction-template" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14412,9 +14439,9 @@ export def "put-journal-instruction-template" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({journal_instruction_id: (encode-path-segment $journal_instruction_id)} | format pattern "/JournalInstruction/{journal_instruction_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -14452,9 +14479,9 @@ export def "get-journal-instruction-templates" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/JournalInstructions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14492,9 +14519,9 @@ export def "post-journal-instruction-template" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/JournalInstructions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -14534,9 +14561,9 @@ export def "delete-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -14576,9 +14603,9 @@ export def "get-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14618,9 +14645,9 @@ export def "patch-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -14660,9 +14687,9 @@ export def "put-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -14704,9 +14731,9 @@ export def "delete-permission-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -14748,9 +14775,9 @@ export def "get-tag-from-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14792,9 +14819,9 @@ export def "put-permission-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/Permission/{permission_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -14834,9 +14861,9 @@ export def "get-tags-from-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({permission_id: (encode-path-segment $permission_id)} | format pattern "/Permission/{permission_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14874,9 +14901,9 @@ export def "get-permissions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Permissions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14914,9 +14941,9 @@ export def "post-permission" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Permissions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -14956,9 +14983,9 @@ export def "get-all-permissions-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Permissions/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -14996,9 +15023,9 @@ export def "get-all-permission-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Permissions/Tags" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15038,11 +15065,11 @@ export def "get-query-response" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Query" $auth.query)
   let req_body = {"Query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -15080,9 +15107,9 @@ export def "get-journal-expression-schema" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/ReferenceData/JournalExpressionDataTable" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15130,9 +15157,9 @@ export def "get-active-pay-instructions-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "ActiveOn" $active_on "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/ACTPAYINS/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15179,9 +15206,9 @@ export def "get-aoe-liability-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/AOELIABILITY/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15229,9 +15256,9 @@ export def "get-dps-message-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "MessageTypes" $message_types "scalar") (serialize-qp "MessageStatuses" $message_statuses "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/DPSMSG/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15274,9 +15301,9 @@ export def "get-employer-summary-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "ContextDate" $context_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/EMPSUM/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15324,9 +15351,9 @@ export def "get-gross-to-net-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/GRO2NET/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15372,9 +15399,9 @@ export def "get-holiday-balance-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "HolidayYearEnd" $holiday_year_end "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/HOLBAL/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15422,9 +15449,9 @@ export def "get-journal-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayFrequency" $pay_frequency "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "LedgerTarget" $ledger_target "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/JOURNAL/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15467,9 +15494,9 @@ export def "get-last-pay-date-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/LASTPAYDATE/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15517,9 +15544,9 @@ export def "get-net-pay-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/NETPAY/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15562,9 +15589,9 @@ export def "get-next-pay-period-dates-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/NEXTPERIOD/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15611,9 +15638,9 @@ export def "get-p11-summary-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P11SUM/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15656,9 +15683,9 @@ export def "get-p32-net-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P32/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15701,9 +15728,9 @@ export def "get-p32-summary-net-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P32SUM/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15747,9 +15774,9 @@ export def "get-p45-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P45/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15796,9 +15823,9 @@ export def "get-p60-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/P60/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15849,9 +15876,9 @@ export def "get-papdis-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAPDIS/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15905,9 +15932,9 @@ export def "get-pass-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "IntermediaryId" $intermediary_id "scalar") (serialize-qp "DocumentId" $document_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PASS/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -15959,9 +15986,9 @@ export def "get-pay-dashboard-payslip-report-ouput" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PublicationDate" $publication_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAYDASHBOARD/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16011,9 +16038,9 @@ export def "get-payslip3-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PAYSLIP3/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16058,9 +16085,9 @@ export def "get-pension-liability-report-output" [
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PensionKey" $pension_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Report/PENLIABILITY/run" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16100,9 +16127,9 @@ export def "delete-report-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -16142,9 +16169,9 @@ export def "get-report-definition-from-application" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16186,11 +16213,11 @@ export def "put-report-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}") $auth.query)
   let req_body = {"ReportDefinition": $report_definition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -16230,9 +16257,9 @@ export def "get-report-output" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({report_definition_id: (encode-path-segment $report_definition_id)} | format pattern "/Report/{report_definition_id}/run") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16270,9 +16297,9 @@ export def "get-report-definitions-from-application" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Reports" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16312,11 +16339,11 @@ export def "post-report-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Reports" $auth.query)
   let req_body = {"ReportDefinition": $report_definition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -16354,9 +16381,9 @@ export def "get-schemas" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Schemas" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16396,9 +16423,9 @@ export def "get-schema" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({dto_data_type: (encode-path-segment $dto_data_type)} | format pattern "/Schemas/{dto_data_type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16438,9 +16465,9 @@ export def "delete-application-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -16480,9 +16507,9 @@ export def "get-application-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16522,9 +16549,9 @@ export def "put-application-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/Secret/{secret_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -16562,9 +16589,9 @@ export def "get-application-secrets" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Secrets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16602,9 +16629,9 @@ export def "post-application-secret" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Secrets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -16644,9 +16671,9 @@ export def "get-template-model" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({dto_data_type: (encode-path-segment $dto_data_type)} | format pattern "/Template/{dto_data_type}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16684,9 +16711,9 @@ export def "get-templates" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Templates" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16726,9 +16753,9 @@ export def "delete-transform-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -16768,9 +16795,9 @@ export def "get-transform-definition-from-application" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16812,11 +16839,11 @@ export def "put-transform-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({transform_definition_id: (encode-path-segment $transform_definition_id)} | format pattern "/Transform/{transform_definition_id}") $auth.query)
   let req_body = {"TransformDefinition": $transform_definition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -16854,9 +16881,9 @@ export def "get-transform-definitions-from-application" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Transforms" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -16896,11 +16923,11 @@ export def "post-transform-definition" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Transforms" $auth.query)
   let req_body = {"TransformDefinition": $transform_definition} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -16940,9 +16967,9 @@ export def "delete-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -16982,9 +17009,9 @@ export def "get-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17024,9 +17051,9 @@ export def "patch-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -17066,9 +17093,9 @@ export def "put-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -17108,9 +17135,9 @@ export def "get-user-permissions" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}/Permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17152,9 +17179,9 @@ export def "delete-user-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -17196,9 +17223,9 @@ export def "get-tag-from-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17240,9 +17267,9 @@ export def "put-user-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), tag_id: (encode-path-segment $tag_id)} | format pattern "/User/{user_id}/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -17282,9 +17309,9 @@ export def "get-tags-from-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/User/{user_id}/Tags") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17322,9 +17349,9 @@ export def "get-users" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Users" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17362,9 +17389,9 @@ export def "post-user" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Users" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -17404,9 +17431,9 @@ export def "get-all-users-with-tag" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base ({tag_id: (encode-path-segment $tag_id)} | format pattern "/Users/Tag/{tag_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -17444,9 +17471,9 @@ export def "get-all-user-tags" [
   let api_version = ($api_version | default "default")
   let full_url = (build-url $base "/Users/Tags" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Api-Version": $api_version} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

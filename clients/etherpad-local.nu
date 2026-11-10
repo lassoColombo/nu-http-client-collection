@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -172,7 +199,7 @@ export def "append-chat-message-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendChatMessage" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -211,7 +238,7 @@ export def "append-chat-message-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "time" $time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendChatMessage" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -247,7 +274,7 @@ export def "append-text-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "append-text-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appendText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -317,7 +344,7 @@ export def "check-token-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkToken" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -351,7 +378,7 @@ export def "check-token-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkToken" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -388,7 +415,7 @@ export def "copy-pad-using-get" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -425,7 +452,7 @@ export def "copy-pad-using-post" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -462,7 +489,7 @@ export def "copy-pad-without-history-using-get" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -499,7 +526,7 @@ export def "copy-pad-without-history-using-post" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -535,7 +562,7 @@ export def "create-author-using-get" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -571,7 +598,7 @@ export def "create-author-using-post" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -608,7 +635,7 @@ export def "create-author-if-not-exists-for-using-get" [
   let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -645,7 +672,7 @@ export def "create-author-if-not-exists-for-using-post" [
   let qp = [(serialize-qp "authorMapper" $author_mapper "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -682,7 +709,7 @@ export def "create-diff-html-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createDiffHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -719,7 +746,7 @@ export def "create-diff-html-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "startRev" $start_rev "scalar") (serialize-qp "endRev" $end_rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createDiffHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -753,7 +780,7 @@ export def "create-group-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createGroup" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -787,7 +814,7 @@ export def "create-group-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createGroup" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -823,7 +850,7 @@ export def "create-group-if-not-exists-for-using-get" [
   let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -859,7 +886,7 @@ export def "create-group-if-not-exists-for-using-post" [
   let qp = [(serialize-qp "groupMapper" $group_mapper "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -897,7 +924,7 @@ export def "create-group-pad-using-get" [
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -935,7 +962,7 @@ export def "create-group-pad-using-post" [
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "padName" $pad_name "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createGroupPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -972,7 +999,7 @@ export def "create-pad-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1009,7 +1036,7 @@ export def "create-pad-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1047,7 +1074,7 @@ export def "create-session-using-get" [
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createSession" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1085,7 +1112,7 @@ export def "create-session-using-post" [
   let qp = [(serialize-qp "groupID" $group_id "scalar") (serialize-qp "authorID" $author_id "scalar") (serialize-qp "validUntil" $valid_until "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createSession" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1121,7 +1148,7 @@ export def "delete-group-using-get" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1157,7 +1184,7 @@ export def "delete-group-using-post" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1193,7 +1220,7 @@ export def "delete-pad-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletePad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1229,7 +1256,7 @@ export def "delete-pad-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deletePad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1265,7 +1292,7 @@ export def "delete-session-using-get" [
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteSession" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1301,7 +1328,7 @@ export def "delete-session-using-post" [
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deleteSession" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1336,7 +1363,7 @@ export def "get-attribute-pool-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAttributePool" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1371,7 +1398,7 @@ export def "get-attribute-pool-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAttributePool" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1407,7 +1434,7 @@ export def "get-author-name-using-get" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAuthorName" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1443,7 +1470,7 @@ export def "get-author-name-using-post" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getAuthorName" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1479,7 +1506,7 @@ export def "get-chat-head-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHead" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1515,7 +1542,7 @@ export def "get-chat-head-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHead" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1553,7 +1580,7 @@ export def "get-chat-history-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1591,7 +1618,7 @@ export def "get-chat-history-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getChatHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1628,7 +1655,7 @@ export def "get-html-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1665,7 +1692,7 @@ export def "get-html-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1701,7 +1728,7 @@ export def "get-last-edited-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLastEdited" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1737,7 +1764,7 @@ export def "get-last-edited-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getLastEdited" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1772,7 +1799,7 @@ export def "get-pad-id-using-get" [
   let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPadID" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1807,7 +1834,7 @@ export def "get-pad-id-using-post" [
   let qp = [(serialize-qp "roID" $ro_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPadID" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1843,7 +1870,7 @@ export def "get-public-status-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPublicStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1879,7 +1906,7 @@ export def "get-public-status-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPublicStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1915,7 +1942,7 @@ export def "get-read-only-id-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getReadOnlyID" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1951,7 +1978,7 @@ export def "get-read-only-id-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getReadOnlyID" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1987,7 +2014,7 @@ export def "get-revision-changeset-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionChangeset" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2023,7 +2050,7 @@ export def "get-revision-changeset-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionChangeset" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2059,7 +2086,7 @@ export def "get-revisions-count-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionsCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2095,7 +2122,7 @@ export def "get-revisions-count-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRevisionsCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2130,7 +2157,7 @@ export def "get-saved-revisions-count-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2165,7 +2192,7 @@ export def "get-saved-revisions-count-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2201,7 +2228,7 @@ export def "get-session-info-using-get" [
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSessionInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2237,7 +2264,7 @@ export def "get-session-info-using-post" [
   let qp = [(serialize-qp "sessionID" $session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSessionInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2270,7 +2297,7 @@ export def "get-stats-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2303,7 +2330,7 @@ export def "get-stats-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStats" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2340,7 +2367,7 @@ export def "get-text-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2377,7 +2404,7 @@ export def "get-text-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2410,7 +2437,7 @@ export def "list-all-groups-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllGroups" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2443,7 +2470,7 @@ export def "list-all-groups-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllGroups" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2477,7 +2504,7 @@ export def "list-all-pads-using-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllPads" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2511,7 +2538,7 @@ export def "list-all-pads-using-post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAllPads" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2547,7 +2574,7 @@ export def "list-authors-of-pad-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listAuthorsOfPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2583,7 +2610,7 @@ export def "list-authors-of-pad-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listAuthorsOfPad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2619,7 +2646,7 @@ export def "list-pads-using-get" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPads" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2655,7 +2682,7 @@ export def "list-pads-using-post" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPads" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2691,7 +2718,7 @@ export def "list-pads-of-author-using-get" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPadsOfAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2727,7 +2754,7 @@ export def "list-pads-of-author-using-post" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPadsOfAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2762,7 +2789,7 @@ export def "list-saved-revisions-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSavedRevisions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2797,7 +2824,7 @@ export def "list-saved-revisions-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSavedRevisions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2833,7 +2860,7 @@ export def "list-sessions-of-author-using-get" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2869,7 +2896,7 @@ export def "list-sessions-of-author-using-post" [
   let qp = [(serialize-qp "authorID" $author_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2904,7 +2931,7 @@ export def "list-sessions-of-group-using-get" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2939,7 +2966,7 @@ export def "list-sessions-of-group-using-post" [
   let qp = [(serialize-qp "groupID" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listSessionsOfGroup" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2976,7 +3003,7 @@ export def "move-pad-using-get" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/movePad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3013,7 +3040,7 @@ export def "move-pad-using-post" [
   let qp = [(serialize-qp "sourceID" $source_id "scalar") (serialize-qp "destinationID" $destination_id "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/movePad" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3049,7 +3076,7 @@ export def "pad-users-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3085,7 +3112,7 @@ export def "pad-users-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3121,7 +3148,7 @@ export def "pad-users-count-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsersCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3157,7 +3184,7 @@ export def "pad-users-count-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/padUsersCount" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3193,7 +3220,7 @@ export def "restore-revision-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restoreRevision" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3229,7 +3256,7 @@ export def "restore-revision-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/restoreRevision" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3265,7 +3292,7 @@ export def "save-revision-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveRevision" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3301,7 +3328,7 @@ export def "save-revision-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveRevision" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3338,7 +3365,7 @@ export def "send-clients-message-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendClientsMessage" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3375,7 +3402,7 @@ export def "send-clients-message-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "msg" $msg "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendClientsMessage" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3412,7 +3439,7 @@ export def "set-html-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3449,7 +3476,7 @@ export def "set-html-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "html" $html "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setHTML" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3486,7 +3513,7 @@ export def "set-public-status-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setPublicStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3523,7 +3550,7 @@ export def "set-public-status-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "publicStatus" $public_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setPublicStatus" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3560,7 +3587,7 @@ export def "set-text-using-get" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3597,7 +3624,7 @@ export def "set-text-using-post" [
   let qp = [(serialize-qp "padID" $pad_id "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/setText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -188,9 +215,9 @@ export def "get-business-names" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/business-names" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -225,9 +252,9 @@ export def "get-classifications-address-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/address-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -262,9 +289,9 @@ export def "get-classifications-business-name-lifecycle-states" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/business-name-lifecycle-states" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -299,9 +326,9 @@ export def "get-classifications-electronic-address-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/electronic-address-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -336,9 +363,9 @@ export def "get-classifications-genders" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/genders" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -373,9 +400,9 @@ export def "get-classifications-legal-entity-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/legal-entity-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -410,9 +437,9 @@ export def "get-classifications-license-lifecycle-states" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/license-lifecycle-states" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -447,9 +474,9 @@ export def "get-classifications-license-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/license-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -484,9 +511,9 @@ export def "get-classifications-name-directions" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-directions" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -521,9 +548,9 @@ export def "get-classifications-name-prefixes" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-prefixes" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -558,9 +585,9 @@ export def "get-classifications-name-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/name-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -595,9 +622,9 @@ export def "get-classifications-registered-identifier-types" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/registered-identifier-types" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -632,9 +659,9 @@ export def "get-classifications-roles" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/classifications/roles" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -672,9 +699,9 @@ export def "get-individuals" [
   let qp = [(serialize-qp "dateOfBirth" $date_of_birth "scalar") (serialize-qp "placeOfBirth" $place_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/individuals" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -716,11 +743,11 @@ export def "post-individuals" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/individuals" $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -757,9 +784,9 @@ export def "delete-individuals-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -796,9 +823,9 @@ export def "get-individuals-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -842,11 +869,11 @@ export def "put-individuals-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}") $auth.query)
   let req_body = {"addresses": $addresses, "dateOfBirth": $date_of_birth, "electronicAddresses": $electronic_addresses, "gender": $gender, "names": $names, "placeOfBirth": $place_of_birth} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -883,9 +910,9 @@ export def "get-individuals-party-id-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -931,11 +958,11 @@ export def "post-individuals-party-id-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/addresses") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -974,9 +1001,9 @@ export def "delete-individuals-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1015,9 +1042,9 @@ export def "get-individuals-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1065,11 +1092,11 @@ export def "put-individuals-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/addresses/{address_id}") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1106,9 +1133,9 @@ export def "get-individuals-party-id-business-names" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1148,11 +1175,11 @@ export def "post-individuals-party-id-business-names" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/business-names") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1191,9 +1218,9 @@ export def "delete-individuals-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1232,9 +1259,9 @@ export def "get-individuals-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1276,11 +1303,11 @@ export def "put-individuals-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/business-names/{product_id}") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1317,9 +1344,9 @@ export def "get-individuals-party-id-electronic-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1364,11 +1391,11 @@ export def "post-individuals-party-id-electronic-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/electronic-addresses") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1407,9 +1434,9 @@ export def "delete-individuals-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1448,9 +1475,9 @@ export def "get-individuals-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1497,11 +1524,11 @@ export def "put-individuals-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/individuals/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1538,9 +1565,9 @@ export def "get-individuals-party-id-licenses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1580,11 +1607,11 @@ export def "post-individuals-party-id-licenses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/licenses") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1623,9 +1650,9 @@ export def "delete-individuals-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1664,9 +1691,9 @@ export def "get-individuals-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1708,11 +1735,11 @@ export def "put-individuals-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/individuals/{party_id}/licenses/{product_id}") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1749,9 +1776,9 @@ export def "get-individuals-party-id-roles" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1793,11 +1820,11 @@ export def "post-individuals-party-id-roles" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/individuals/{party_id}/roles") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1836,9 +1863,9 @@ export def "delete-individuals-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1877,9 +1904,9 @@ export def "get-individuals-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1923,11 +1950,11 @@ export def "put-individuals-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/individuals/{party_id}/roles/{role_id}") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1962,9 +1989,9 @@ export def "get-licenses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/licenses" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2002,9 +2029,9 @@ export def "get-organisations" [
   let qp = [(serialize-qp "registeredIdentifier" $registered_identifier "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/organisations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2046,11 +2073,11 @@ export def "post-organisations" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base "/organisations" $auth.query)
   let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2087,9 +2114,9 @@ export def "delete-organisations-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2126,9 +2153,9 @@ export def "get-organisations-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2172,11 +2199,11 @@ export def "put-organisations-party-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}") $auth.query)
   let req_body = {"addresses": $addresses, "electronicAddresses": $electronic_addresses, "establishmentDate": $establishment_date, "legalEntityType": $legal_entity_type, "names": $names, "registeredIdentifiers": $registered_identifiers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2213,9 +2240,9 @@ export def "get-organisations-party-id-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2261,11 +2288,11 @@ export def "post-organisations-party-id-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/addresses") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2304,9 +2331,9 @@ export def "delete-organisations-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2345,9 +2372,9 @@ export def "get-organisations-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2395,11 +2422,11 @@ export def "put-organisations-party-id-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/addresses/{address_id}") $auth.query)
   let req_body = {"city": $city, "country": $country, "line1": $line1, "line2": $line2, "line3": $line3, "name": $name, "postalCode": $postal_code, "suburb": $suburb} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2436,9 +2463,9 @@ export def "get-organisations-party-id-business-names" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2478,11 +2505,11 @@ export def "post-organisations-party-id-business-names" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/business-names") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2521,9 +2548,9 @@ export def "delete-organisations-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2562,9 +2589,9 @@ export def "get-organisations-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2606,11 +2633,11 @@ export def "put-organisations-party-id-business-names-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/business-names/{product_id}") $auth.query)
   let req_body = {"lifecycleState": $lifecycle_state, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2647,9 +2674,9 @@ export def "get-organisations-party-id-electronic-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2694,11 +2721,11 @@ export def "post-organisations-party-id-electronic-addresses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/electronic-addresses") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2737,9 +2764,9 @@ export def "delete-organisations-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2778,9 +2805,9 @@ export def "get-organisations-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2827,11 +2854,11 @@ export def "put-organisations-party-id-electronic-addresses-address-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), address_id: (encode-path-segment $address_id)} | format pattern "/organisations/{party_id}/electronic-addresses/{address_id}") $auth.query)
   let req_body = {"areaCode": $area_code, "countryPrefix": $country_prefix, "electronicAddressType": $electronic_address_type, "email": $email, "extension": $extension, "number": $number, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2868,9 +2895,9 @@ export def "get-organisations-party-id-licenses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2910,11 +2937,11 @@ export def "post-organisations-party-id-licenses" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/licenses") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2953,9 +2980,9 @@ export def "delete-organisations-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2994,9 +3021,9 @@ export def "get-organisations-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3038,11 +3065,11 @@ export def "put-organisations-party-id-licenses-product-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), product_id: (encode-path-segment $product_id)} | format pattern "/organisations/{party_id}/licenses/{product_id}") $auth.query)
   let req_body = {"licenseType": $license_type, "lifecycleState": $lifecycle_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3079,9 +3106,9 @@ export def "get-organisations-party-id-roles" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3123,11 +3150,11 @@ export def "post-organisations-party-id-roles" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id)} | format pattern "/organisations/{party_id}/roles") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3166,9 +3193,9 @@ export def "delete-organisations-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3207,9 +3234,9 @@ export def "get-organisations-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3253,11 +3280,11 @@ export def "put-organisations-party-id-roles-role-id" [
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'apiKey' missing: pass --api-key" } }
   let full_url = (build-url $base ({party_id: (encode-path-segment $party_id), role_id: (encode-path-segment $role_id)} | format pattern "/organisations/{party_id}/roles/{role_id}") $auth.query)
   let req_body = {"partyRoleType": $party_role_type, "relatedPartyId": $related_party_id, "relatedPartyRoleType": $related_party_role_type, "relationshipType": $relationship_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"apiKey": $api_key} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url

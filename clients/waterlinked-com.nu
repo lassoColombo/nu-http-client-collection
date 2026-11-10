@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -194,7 +221,7 @@ export def "about-api-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/" $auth.query)
   let accept_val = "application/vnd.wupdater.apiversion"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -228,7 +255,7 @@ export def "about-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/about" $auth.query)
   let accept_val = "application/vnd.waterlinked.about+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -262,7 +289,7 @@ export def "about-factory-reset" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/about/factoryreset" $auth.query)
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -296,7 +323,7 @@ export def "about-led" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/about/led" $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -330,7 +357,7 @@ export def "about-status" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/about/status" $auth.query)
   let accept_val = "application/vnd.waterlinked.status+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -364,7 +391,7 @@ export def "about-temperature" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/about/temperature" $auth.query)
   let accept_val = "application/vnd.waterlinked.temperature+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -398,7 +425,7 @@ export def "config-get-antenna-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/antenna" $auth.query)
   let accept_val = "application/vnd.waterlinked.antenna_config+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -437,9 +464,9 @@ export def "config-modify-antenna-config" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/antenna" $auth.query)
   let req_body = {"antenna_rotation": $antenna_rotation, "depth": $depth, "x": $x, "y": $y} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -474,7 +501,7 @@ export def "config-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/generic" $auth.query)
   let accept_val = ($accept | default "application/vnd.waterlinked.configuration+json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -529,9 +556,9 @@ export def "config-modify" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/generic" $auth.query)
   let req_body = {"antenna_enabled": $antenna_enabled, "channel": $channel, "compass": $compass, "environment": $environment, "external_pps_enabled": $external_pps_enabled, "gps": $gps, "imu_vehicle_enabled": $imu_vehicle_enabled, "locator_type": $locator_type, "range_max_x": $range_max_x, "range_max_y": $range_max_y, "range_max_z": $range_max_z, "range_min_x": $range_min_x, "range_min_y": $range_min_y, "search_direction": $search_direction, "search_radius": $search_radius, "search_sector": $search_sector, "speed_of_sound": $speed_of_sound, "static_lat": $static_lat, "static_lon": $static_lon, "static_orientation": $static_orientation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -565,7 +592,7 @@ export def "config-get-ip" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/ip" $auth.query)
   let accept_val = "application/vnd.waterlinked.ip_config+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -605,10 +632,10 @@ export def "config-modify-ip" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/ip" $auth.query)
   let req_body = {"address": $address, "dhcp": $dhcp, "dns": $dns, "gateway": $gateway, "prefix": $prefix} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "dhcp") == null) { error make --unspanned { msg: "required body field 'dhcp' missing: pass --dhcp or pipe a record" } }
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -642,7 +669,7 @@ export def "config-list-receiver" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/receivers/" $auth.query)
   let accept_val = "application/vnd.waterlinked.receiver+json; type=collection"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -678,7 +705,7 @@ export def "config-show-receiver" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/config/receivers/{id}") $auth.query)
   let accept_val = "application/vnd.waterlinked.receiver+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -708,7 +735,7 @@ export def "config-modify-receiver" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-id: int # Unique receiver identifier (format: int64, e.g. 2339264502380679700)
+  --body-id: int # Unique receiver identifier (format: int64, e.g. 2339264502380679700) (spec name: id)
   x: float # Configured X position relative to master electronics (meter) (format: double, e.g. 0.0158212572962501)
   y: float # Configured Y position relative to master electronics (meter) (format: double, e.g. 0.08142596921667565)
   z: float # Configured Z position relative to master electronics (meter) (format: double, e.g. 0.34617068793186784)
@@ -719,10 +746,10 @@ export def "config-modify-receiver" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/config/receivers/{id}") $auth.query)
   let req_body = {"id": $body_id, "x": $x, "y": $y, "z": $z} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -756,7 +783,7 @@ export def "config-get-wifi" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/wifi" $auth.query)
   let accept_val = "application/vnd.waterlinked.wifi_config+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -794,9 +821,9 @@ export def "config-modify-wifi" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/wifi" $auth.query)
   let req_body = {"mode": $mode, "password": $password, "ssid": $ssid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -833,9 +860,9 @@ export def "external-set-depth" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/depth" $auth.query)
   let req_body = {"depth": $depth, "temp": $temp} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -869,7 +896,7 @@ export def "external-get-vehicle-imu" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/imu" $auth.query)
   let accept_val = "application/vnd.wl.external.vehicle.imu+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -910,9 +937,9 @@ export def "external-set-vehicle-imu" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/imu" $auth.query)
   let req_body = {"pitch": $pitch, "roll": $roll, "x": $x, "y": $y, "yaw": $yaw, "z": $z} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -955,9 +982,9 @@ export def "external-set-master" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/master" $auth.query)
   let req_body = {"cog": $cog, "fix_quality": $fix_quality, "hdop": $hdop, "lat": $lat, "lon": $lon, "numsats": $numsats, "orientation": $orientation, "sog": $sog} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -992,7 +1019,7 @@ export def "external-get-orientation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/orientation" $auth.query)
   let accept_val = ($accept | default "application/vnd.waterlinked.operation_response+json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1028,9 +1055,9 @@ export def "external-set-orientation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/external/orientation" $auth.query)
   let req_body = {"orientation": $orientation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/vnd.waterlinked.operation_response+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1064,7 +1091,7 @@ export def "imu-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/calibrate" $auth.query)
   let accept_val = "application/vnd.waterlinked.imu+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1100,9 +1127,9 @@ export def "imu-calibrate" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/calibrate" $auth.query)
   let req_body = {"action": $action} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1136,7 +1163,7 @@ export def "imu-reset-gyro" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/resetgyros" $auth.query)
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1172,9 +1199,9 @@ export def "imu-set-north" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/imu/setnorth" $auth.query)
   let req_body = {"heading": $heading} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "text/plain"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1208,7 +1235,7 @@ export def "poi-list" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/poi/" $auth.query)
   let accept_val = "application/vnd.waterlinked.poi+json; type=collection"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1250,10 +1277,10 @@ export def "poi-create" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/poi/" $auth.query)
   let req_body = {"depth": $depth, "icon": $icon, "id": $id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "visible") == null) { error make --unspanned { msg: "required body field 'visible' missing: pass --visible or pipe a record" } }
   let accept_val = "application/vnd.goa.error"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1289,7 +1316,7 @@ export def "poi-delete" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}") $auth.query)
   let accept_val = "application/vnd.goa.error"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1325,7 +1352,7 @@ export def "poi-show" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}") $auth.query)
   let accept_val = "application/vnd.waterlinked.poi+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1357,7 +1384,7 @@ export def "poi-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   depth: float # Depth of POI (format: double, e.g. 0.9848439086783396)
   icon: string # Icon of POI (e.g. Ut molestias laboriosam.)
-  --body-id: int # Unique POI id (format: int64, e.g. 3408207428662661600)
+  --body-id: int # Unique POI id (format: int64, e.g. 3408207428662661600) (spec name: id)
   lat: float # Latitude of POI (format: double, e.g. 0.8147274904139097)
   lng: float # Longitude of POI (format: double, e.g. 0.06472337355304676)
   name: string # Name of POI (e.g. Reprehenderit non architecto quia.)
@@ -1369,10 +1396,10 @@ export def "poi-update" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/poi/{id}") $auth.query)
   let req_body = {"depth": $depth, "icon": $icon, "id": $body_id, "lat": $lat, "lng": $lng, "name": $name, "visible": $visible} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "visible") == null) { error make --unspanned { msg: "required body field 'visible' missing: pass --visible or pipe a record" } }
   let accept_val = "application/vnd.goa.error"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1406,7 +1433,7 @@ export def "position-acoustic-filtered" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/position/acoustic/filtered" $auth.query)
   let accept_val = "application/vnd.waterlinked.accoustic.position+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1440,7 +1467,7 @@ export def "position-acoustic-raw" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/position/acoustic/raw" $auth.query)
   let accept_val = "application/vnd.waterlinked.accoustic.position+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1474,7 +1501,7 @@ export def "position-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/position/global" $auth.query)
   let accept_val = "application/vnd.wl.satellite.position+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1508,7 +1535,7 @@ export def "position-get-master" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/position/master" $auth.query)
   let accept_val = "application/vnd.wl.satellite.position+json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1542,7 +1569,7 @@ export def "status-report-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/status_report/" $auth.query)
   let accept_val = "application/vnd.wl.status.group+json; type=collection"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1577,7 +1604,7 @@ export def "warnings-get" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/warnings/" $auth.query)
   let accept_val = ($accept | default "application/vnd.waterlinked.operation_response+json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

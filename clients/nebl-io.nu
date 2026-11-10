@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -173,9 +200,9 @@ export def "json-rpc" [
   let base = ($base_url | default "http://127.0.0.1:6326")
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"id": $id, "jsonrpc": $jsonrpc, "method": $method, "params": $params} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -211,7 +238,7 @@ export def "get-address" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,7 +274,7 @@ export def "get-address-balance" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/balance") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -283,7 +310,7 @@ export def "get-address-total-received" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalReceived") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -319,7 +346,7 @@ export def "get-address-total-sent" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/totalSent") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -355,7 +382,7 @@ export def "get-address-unconfirmed-balance" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/unconfirmedBalance") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -391,7 +418,7 @@ export def "get-address-utxos" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ins/addr/{address}/utxo") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -427,7 +454,7 @@ export def "get-block-index" [
   if ($blockindex | is-empty) { error make --unspanned { msg: "path parameter 'blockindex' must be non-empty" } }
   let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/ins/block-index/{blockindex}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -463,7 +490,7 @@ export def "get-block" [
   if ($blockhash | is-empty) { error make --unspanned { msg: "path parameter 'blockhash' must be non-empty" } }
   let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/ins/block/{blockhash}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -499,7 +526,7 @@ export def "get-raw-tx" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/rawtx/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -535,7 +562,7 @@ export def "get-status" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ins/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -569,7 +596,7 @@ export def "get-sync" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ins/sync" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -605,9 +632,9 @@ export def "send-tx" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ins/tx/send" $auth.query)
   let req_body = {"rawtx": $rawtx} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -643,7 +670,7 @@ export def "get-tx" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ins/tx/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -681,7 +708,7 @@ export def "get-txs" [
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "pageNum" $page_num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ins/txs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -717,7 +744,7 @@ export def "get-address-info" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/ntp1/addressinfo/{address}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -753,9 +780,9 @@ export def "broadcast-tx" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/broadcast" $auth.query)
   let req_body = {"txHex": $tx_hex} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -794,9 +821,9 @@ export def "burn-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/burntoken" $auth.query)
   let req_body = {"burn": $burn, "fee": $fee, "from": $from, "transfer": $transfer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -839,10 +866,10 @@ export def "issue-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "reissuable") == null) { error make --unspanned { msg: "required body field 'reissuable' missing: pass --reissuable or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -883,9 +910,9 @@ export def "send-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntp1/sendtoken" $auth.query)
   let req_body = {"fee": $fee, "flags": $flags, "from": $from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -921,7 +948,7 @@ export def "get-token-holders" [
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/stakeholders/{tokenid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -957,7 +984,7 @@ export def "get-token-id" [
   if ($tokensymbol | is-empty) { error make --unspanned { msg: "path parameter 'tokensymbol' must be non-empty" } }
   let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/ntp1/tokenid/{tokensymbol}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -995,7 +1022,7 @@ export def "get-token-metadata" [
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/ntp1/tokenmetadata/{tokenid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1035,7 +1062,7 @@ export def "get-token-metadata-of-utxo" [
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1071,7 +1098,7 @@ export def "get-transaction-info" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/ntp1/transactioninfo/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1109,7 +1136,7 @@ export def "testnet-get-faucet" [
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "amount" $amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/testnet/faucet" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1145,7 +1172,7 @@ export def "testnet-get-address" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1181,7 +1208,7 @@ export def "testnet-get-address-balance" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/balance") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1217,7 +1244,7 @@ export def "testnet-get-address-total-received" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalReceived") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1253,7 +1280,7 @@ export def "testnet-get-address-total-sent" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/totalSent") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1289,7 +1316,7 @@ export def "testnet-get-address-unconfirmed-balance" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/unconfirmedBalance") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1325,7 +1352,7 @@ export def "testnet-get-address-utxos" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ins/addr/{address}/utxo") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1361,7 +1388,7 @@ export def "testnet-get-block-index" [
   if ($blockindex | is-empty) { error make --unspanned { msg: "path parameter 'blockindex' must be non-empty" } }
   let full_url = (build-url $base ({blockindex: (encode-path-segment $blockindex)} | format pattern "/testnet/ins/block-index/{blockindex}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1397,7 +1424,7 @@ export def "testnet-get-block" [
   if ($blockhash | is-empty) { error make --unspanned { msg: "path parameter 'blockhash' must be non-empty" } }
   let full_url = (build-url $base ({blockhash: (encode-path-segment $blockhash)} | format pattern "/testnet/ins/block/{blockhash}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1433,7 +1460,7 @@ export def "testnet-get-raw-tx" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/rawtx/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1469,7 +1496,7 @@ export def "testnet-get-status" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/testnet/ins/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1503,7 +1530,7 @@ export def "testnet-get-sync" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ins/sync" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1539,9 +1566,9 @@ export def "testnet-send-tx" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ins/tx/send" $auth.query)
   let req_body = {"rawtx": $rawtx} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1577,7 +1604,7 @@ export def "testnet-get-tx" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ins/tx/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1615,7 +1642,7 @@ export def "testnet-get-txs" [
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "pageNum" $page_num "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/testnet/ins/txs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1651,7 +1678,7 @@ export def "testnet-get-address-info" [
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/testnet/ntp1/addressinfo/{address}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1687,9 +1714,9 @@ export def "testnet-broadcast-tx" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/broadcast" $auth.query)
   let req_body = {"txHex": $tx_hex} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1728,9 +1755,9 @@ export def "testnet-burn-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/burntoken" $auth.query)
   let req_body = {"burn": $burn, "fee": $fee, "from": $from, "transfer": $transfer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1773,10 +1800,10 @@ export def "testnet-issue-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/issue" $auth.query)
   let req_body = {"amount": $amount, "divisibility": $divisibility, "fee": $fee, "flags": $flags, "issueAddress": $issue_address, "metadata": $metadata, "reissuable": $reissuable, "transfer": $transfer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "reissuable") == null) { error make --unspanned { msg: "required body field 'reissuable' missing: pass --reissuable or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1817,9 +1844,9 @@ export def "testnet-send-token" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/testnet/ntp1/sendtoken" $auth.query)
   let req_body = {"fee": $fee, "flags": $flags, "from": $from, "metadata": $metadata, "sendutxo": $sendutxo, "to": $to} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1855,7 +1882,7 @@ export def "testnet-get-token-holders" [
   if ($tokenid | is-empty) { error make --unspanned { msg: "path parameter 'tokenid' must be non-empty" } }
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/stakeholders/{tokenid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1891,7 +1918,7 @@ export def "testnet-get-token-id" [
   if ($tokensymbol | is-empty) { error make --unspanned { msg: "path parameter 'tokensymbol' must be non-empty" } }
   let full_url = (build-url $base ({tokensymbol: (encode-path-segment $tokensymbol)} | format pattern "/testnet/ntp1/tokenid/{tokensymbol}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1929,7 +1956,7 @@ export def "testnet-get-token-metadata" [
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1969,7 +1996,7 @@ export def "testnet-get-token-metadata-of-utxo" [
   let qp = [(serialize-qp "verbosity" $verbosity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tokenid: (encode-path-segment $tokenid), utxo: (encode-path-segment $utxo)} | format pattern "/testnet/ntp1/tokenmetadata/{tokenid}/{utxo}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2005,7 +2032,7 @@ export def "testnet-get-transaction-info" [
   if ($txid | is-empty) { error make --unspanned { msg: "path parameter 'txid' must be non-empty" } }
   let full_url = (build-url $base ({txid: (encode-path-segment $txid)} | format pattern "/testnet/ntp1/transactioninfo/{txid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

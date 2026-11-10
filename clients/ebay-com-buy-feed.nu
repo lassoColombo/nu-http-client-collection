@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -162,7 +189,7 @@ export def "get-item-feed" [
   --feed-scope: string # Specifies the type of feed file to return. Valid Values: NEWLY_LISTED - Returns the daily Item feed file containing all Good 'Til Cancelled items that were listed on the day specified by the date parameter in the category specified by the category_id parameter./item?feed_scope=NEWLY_LISTED&category_id=15032&date=20170925ALL_ACTIVE - Returns the weekly Item Bootstrap feed file containing all the Good 'Til Cancelled items in the category specified by the category_id parameter.Note: Bootstrap files are generated every Tuesday and the file is available on Wednesday. However, the exact time the file is available can vary so we recommend you download the Bootstrap file on Thursday. The items in the file are the items that were in the specified category on Sunday. /item?feed_scope=ALL_ACTIVE&category_id=15032 (required)
   --category-id: string # An eBay top-level category ID of the items to be returned in the feed file. The list of eBay category IDs changes over time and category IDs are not the same across all the eBay marketplaces. To get a list of the top-level categories for a marketplace, you can use the Taxonomy API getCategoryTree (/api-docs/commerce/taxonomy/resources/category_tree/methods/getCategoryTree) method. This method retrieves the complete category tree for the marketplace. The top-level categories are identified by the categoryTreeNodeLevel field. For example: "categoryTreeNodeLevel": 1 For details see Get Categories for Buy APIs (/api-docs/buy/buy-categories.html). Restriction: Must be a top-level (L1) category other than Real Estate. Items listed under Real Estate L1 categories are excluded from all feeds in all marketplaces. (required)
   --date: string # The date of the daily Item feed file (feed_scope=NEWLY_LISTED) you want. The date is required only for the daily Item feed file. If you specify a date for the Item Bootstrap file (feed_scope=ALL_ACTIVE), the date is ignored and the latest file is returned. The date the Item Bootstrap feed file was generated is returned in the Last-Modified response header. The Item feed files are generated every day and there are 14 daily files available. Note: The daily Item feed files are available each day after 9AM MST (US Mountain Standard Time), which is -7 hours UTC time. There is a 48 hour latency when generating the Item feed files. This means you can download the file for July 10th on July 12 after 9AM MST. Note: For categories with a large number of items, the latency can be up to 72 hours. Format: yyyyMMdd Requirements: Required when feed_scope=NEWLY_LISTED Must be within 3-14 days in the past
-  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate errors that are returned in JSON format.Default: application/json,text/tab-separated-values (required)
+  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate errors that are returned in JSON format.Default: application/json,text/tab-separated-values (required) (spec name: Accept)
   --x-ebay-c-marketplace-id: string # The ID of the eBay marketplace where the item is hosted. Note: This value is case sensitive.For example: X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, API Restrictions (/api-docs/buy/feed/overview.html#API). (required)
   --range: string # This header specifies the range in bytes of the chunks of the gzip file being returned. Format: bytes=startpos-endpos For example, the following retrieves the first 10 MBs of the feed file. Range bytes=0-10485760 For more information about using this header, see Retrieving a gzip feed file (/api-docs/buy/static/api-feed_beta.html#retrv-gzip). Maximum: 100 MB (10MB in the Sandbox) (required)
 ]: nothing -> oneof<record<items: table<acceptedPaymentMethods: string, additionalImageUrls: string, additionalShippingCostPerUnit: string, ageGroup: string, alerts: string, availability: string, availabilityThreshold: int, availabilityThresholdType: string, brand: string, buyingOptions: string, category: string, categoryId: string, color: string, condition: string, conditionId: string, defaultImageUrl: string, deliveryOptions: string, discountAmount: string, discountPercentage: string, ecoParticipationFeeCurrency: string, ecoParticipationFeeValue: string, energyEfficiencyClass: string, epid: string, estimatedAvailableQuantity: int, gender: string, gtin: string, hazmatAdditionalInformation: string, hazmatPictogramDescriptions: string, hazmatPictogramIds: string, hazmatPictogramImageUrls: string, hazmatSignalWord: string, hazmatSignalWordId: string, hazmatStatementDescriptions: string, hazmatStatementIds: string, imageAlteringProhibited: bool, imageUrl: string, inferredBrand: string, inferredEpid: string, inferredGtin: string, inferredLocalizedAspects: string, inferredMpn: string, itemAffiliateWebUrl: string, itemCreationDate: string, itemEndDate: string, itemId: string, itemLocationCountry: string, itemWebUrl: string, legacyItemId: string, lengthUnitOfMeasure: string, localizedAspects: string, lotSize: int, material: string, mpn: string, originalPriceCurrency: string, originalPriceValue: string, packageHeight: string, packageLength: string, packageWeight: string, packageWidth: string, pattern: string, priceCurrency: string, priceValue: string, primaryItemGroupId: string, primaryItemGroupType: string, priorityListingPayload: string, qualifiedPrograms: string, quantityUsedForEstimate: int, refundMethod: string, repairScore: string, returnMethod: string, returnPeriodUnit: string, returnPeriodValue: int, returnShippingCostPayer: string, returnsAccepted: bool, sellerAccountType: string, sellerFeedbackPercentage: string, sellerFeedbackScore: string, sellerItemRevision: string, sellerTrustLevel: string, sellerUsername: string, shipToExcludedRegions: string, shipToIncludedRegions: string, shippingCarrierCode: string, shippingCost: string, shippingCostType: string, shippingServiceCode: string, shippingType: string, size: string, takeBackPolicyDescription: string, takeBackPolicyLabel: string, title: string, totalUnits: string, tyreLabelImageUrl: string, unitPrice: string, unitPricingMeasure: string, weightUnitOfMeasure: string>>, string, nothing> {
@@ -175,9 +202,9 @@ export def "get-item-feed" [
   let qp = [(serialize-qp "feed_scope" $feed_scope "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/item" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -210,7 +237,7 @@ export def "get-item-group-feed" [
   --feed-scope: string # Specifies the type of file to return. Valid Values: NEWLY_LISTED - Returns the Item Group feed file containing the item group variation information for items in the daily Item (/api-docs/buy/feed/resources/item/methods/getItemFeed) feed file that were associated with an item group. The items in this type of Item feed file are items that were listed on the day specified by the date parameter in the category specified by the category_id parameter. /item_group?feed_scope=NEWLY_LISTED&category_id=15032&date=20170925 ALL_ACTIVE - Returns the weekly Item Group Bootstrap file containing the item group variation information for items in the weekly Item Bootstrap (/api-docs/buy/feed/resources/item/methods/getItemFeed) feed file that were associated with an item group. The items are Good 'Til Cancelled items in the category specified by the category_id parameter. Note: Bootstrap files are generated every Tuesday and the file is available on Wednesday. However, the exact time the file is available can vary so we recommend you download the Bootstrap file on Thursday. The item groups in the file are for the items that were in the specified category on Sunday./item_group?feed_scope=ALL_ACTIVE&category_id=15032 (required)
   --category-id: string # An eBay top-level category ID of the items to be returned in the feed file. The list of eBay category IDs changes over time and category IDs are not the same across all the eBay marketplaces. To get a list of the top-level categories for a marketplaces, you can use the Taxonomy API getCategoryTree (/api-docs/commerce/taxonomy/resources/category_tree/methods/getCategoryTree) method. This method retrieves the complete category tree for the marketplace. The top-level categories are identified by the categoryTreeNodeLevel field. For example: "categoryTreeNodeLevel": 1 For details see Get Categories for Buy APIs (/api-docs/buy/buy-categories.html). Restriction: Must be a top-level category other than Real Estate. Items listed under Real Estate L1 categories are excluded from all feeds in all marketplaces. (required)
   --date: string # The date of the daily Item Group feed file (feed_scope=NEWLY_LISTED) you want. The date is required only for the daily Item Group feed file. If you specify a date for the Item Group Bootstrap file (feed_scope=ALL_ACTIVE), the date is ignored and the latest file is returned. The date the Item Group Bootstrap feed file was generated is returned in the Last-Modified response header. The Item Group feed files are generated every day and there are 14 daily files available. There is a 48 hour latency when generating the files. This means on July 10, the latest feed file you can download is July 8. Note: The generated files are stored using MST (US Mountain Standard Time), which is -7 hours UTC time. Format: yyyyMMdd Requirements: Required only when feed_scope=NEWLY_LISTED Must be within 3-14 days in the past
-  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required)
+  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required) (spec name: Accept)
   --x-ebay-c-marketplace-id: string # The ID of the eBay marketplace where the item is hosted. Note: This value is case sensitive.For example: X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, API Restrictions (/api-docs/buy/feed/overview.html#API). (required)
   --range: string # This header specifies the range in bytes of the chunks of the gzip file being returned. Format: bytes=startpos-endpos For example, the following retrieves the first 10 MBs of the feed file. Range bytes=0-10485760 For more information about using this header, see Retrieving a gzip feed file (/api-docs/buy/static/api-feed_beta.html#retrv-gzip). Maximum: 100 MB (10MB in the Sandbox)
 ]: nothing -> oneof<record<itemGroups: table<additionalImageUrls: string, imageAlteringProhibited: bool, imageUrl: string, itemGroupId: string, itemGroupType: string, title: string, variesByLocalizedAspects: string>>, string, nothing> {
@@ -222,9 +249,9 @@ export def "get-item-group-feed" [
   let qp = [(serialize-qp "feed_scope" $feed_scope "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/item_group" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -256,7 +283,7 @@ export def "get-item-priority-feed" [
   --accept: string@accept-completer # Response content type
   --category-id: string # An eBay top-level category ID of the items to be returned in the feed file. The list of eBay category IDs changes over time and category IDs are not the same across all the eBay marketplaces. To get a list of the top-level categories for a marketplaces, you can use the Taxonomy API getCategoryTree (/api-docs/commerce/taxonomy/resources/category_tree/methods/getCategoryTree) method. This method retrieves the complete category tree for the marketplace. The top-level categories are identified by the categoryTreeNodeLevel field.For example: "categoryTreeNodeLevel": 1 For details see Get the eBay categories of a marketplace (/api-docs/buy/api-feed.html#Getcat).Restriction: Must be a top-level category other than Real Estate. Items listed under Real Estate L1 categories are excluded from all feeds in all marketplaces. (required)
   --date: string # The date of the feed you want returned. This can be up to 14 days in the past but cannot be set to a date in the future. Format: yyyyMMdd Note: The daily Item feed files are available each day after 9AM MST (US Mountain Standard Time), which is -7 hours UTC time. There is a 48 hour latency when generating the Item feed files. This means you can download the file for July 10th on July 12 after 9AM MST. Note: For categories with a large number of items, the latency can be up to 72 hours. (required)
-  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required)
+  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required) (spec name: Accept)
   --x-ebay-c-marketplace-id: string # The ID of the eBay marketplace where the item is hosted. Note: This value is case sensitive.For example: X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, Buy API Support by Marketplace (/api-docs/buy/static/ref-marketplace-supported.html). (required)
   --range: string # Header specifying content range to be retrieved. Only supported range is bytes. Example : bytes = 0-102400. (required)
 ]: nothing -> oneof<record<itemDelta: table<changeMetadata: string, itemId: string, priorityListingPayload: string>>, string, nothing> {
@@ -269,9 +296,9 @@ export def "get-item-priority-feed" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/item_priority" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -303,7 +330,7 @@ export def "get-item-snapshot-feed" [
   --accept: string@accept-completer # Response content type
   --category-id: string # An eBay top-level category ID of the items to be returned in the feed file. The list of eBay category IDs changes over time and category IDs are not the same across all the eBay marketplaces. To get a list of the top-level categories for a marketplace, you can use the Taxonomy API getCategoryTree (/api-docs/commerce/taxonomy/resources/category_tree/methods/getCategoryTree) method. This method retrieves the complete category tree for the marketplace. The top-level categories are identified by the categoryTreeNodeLevel field.For example: "categoryTreeNodeLevel": 1 For details see Get Categories for Buy APIs (/api-docs/buy/buy-categories.html). Restriction: Must be a top-level category other than Real Estate. Items listed under Real Estate L1 categories are excluded from all feeds in all marketplaces. (required)
   --snapshot-date: string # The date and hour of the snapshot feed file you want. Each file contains the items that changed within the hour in the specified category. So, the 9AM file contains the items that changed between 9AM and 9:59AM on the day specified. It takes 2 hours to generate a snapshot file, which means to get the file for 9AM the earliest you could submit the call is at 11AM.There are 7 days of Hourly Snapshot feed files available.Note: The Feed API uses GMT, so you must convert your local time to GMT. For example, if you lived in California and wanted the September 15th 7pm file, you would submit the following call: item_snapshot?category_id=625&snapshot_date=2017-09-16T02:00:00.000Z Format: UTC yyyy-MM-ddThh:00:00.000Z Files are generated on the hour, so minutes and seconds are always zeros. (required)
-  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required)
+  --hdr-accept: string # The formats that the client accepts for the response.A successful call will always return a TSV.GZIP file; however, unsuccessful calls generate error codes that are returned in JSON format.Default: application/json,text/tab-separated-values (required) (spec name: Accept)
   --x-ebay-c-marketplace-id: string # The ID of the eBay marketplace where the item is hosted. Note: This value is case sensitive.For example: X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, API Restrictions (/api-docs/buy/feed/overview.html#API). (required)
   --range: string # This header specifies the range in bytes of the chunks of the gzip file being returned. Format: bytes=startpos-endpos For example, the following retrieves the first 10 MBs of the feed file. Range bytes=0-10485760 For more information about using this header, see Retrieving a gzip feed file (/api-docs/buy/static/api-feed_beta.html#retrv-gzip). Maximum: 100 MB (10MB in the Sandbox) (required)
 ]: nothing -> oneof<record<items: table<acceptedPaymentMethods: string, additionalImageUrls: string, additionalShippingCostPerUnit: string, ageGroup: string, alerts: string, authenticityGuaranteeFeeCurrency: string, authenticityGuaranteeFeeValue: string, authenticityGuaranteeSelection: string, authenticityGuaranteeServiceId: string, availability: string, availabilityThreshold: int, availabilityThresholdType: string, brand: string, buyingOptions: string, category: string, categoryId: string, changeMetadata: string, color: string, condition: string, conditionId: string, couponDiscountCurrency: string, couponDiscountType: string, couponDiscountValue: string, couponExpirationDate: string, couponMessage: string, couponRedemptionCode: string, couponTermsWebUrl: string, defaultImageUrl: string, deliveryOptions: string, description: string, discountAmount: string, discountPercentage: string, ecoParticipationFeeCurrency: string, ecoParticipationFeeValue: string, energyEfficiencyClass: string, epid: string, estimatedAvailableQuantity: int, gender: string, gtin: string, hazmatAdditionalInformation: string, hazmatPictogramDescriptions: string, hazmatPictogramIds: string, hazmatPictogramImageUrls: string, hazmatSignalWord: string, hazmatSignalWordId: string, hazmatStatementDescriptions: string, hazmatStatementIds: string, imageAlteringProhibited: bool, imageUrl: string, inferredEpid: string, itemAffiliateWebUrl: string, itemCreationDate: string, itemEndDate: string, itemId: string, itemLocationCountry: string, itemSnapshotDate: string, itemWebUrl: string, legacyItemId: string, localizedAspects: string, lotSize: int, material: string, mpn: string, originalPriceCurrency: string, originalPriceValue: string, pattern: string, priceCurrency: string, priceValue: string, primaryItemGroupId: string, primaryItemGroupType: string, qualifiedPrograms: string, quantityUsedForEstimate: int, refundMethod: string, repairScore: string, returnMethod: string, returnPeriodUnit: string, returnPeriodValue: int, returnShippingCostPayer: string, returnsAccepted: bool, sellerAccountType: string, sellerFeedbackPercentage: string, sellerFeedbackScore: string, sellerItemRevision: string, sellerTrustLevel: string, sellerUsername: string, shipToExcludedRegions: string, shipToIncludedRegions: string, shippingCarrierCode: string, shippingCost: string, shippingCostType: string, shippingServiceCode: string, shippingType: string, size: string, takeBackPolicyDescription: string, takeBackPolicyLabel: string, title: string, totalUnits: string, tyreLabelImageUrl: string, unitPrice: string, unitPricingMeasure: string>>, string, nothing> {
@@ -316,9 +343,9 @@ export def "get-item-snapshot-feed" [
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "snapshot_date" $snapshot_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/item_snapshot" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id, "Range": $range} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

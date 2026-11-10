@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -166,7 +193,7 @@ export def "get-age-usd-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ageusd/info" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -201,7 +228,7 @@ export def "ergo-pay-create-babel-box-1" [
   if ($box_id | is-empty) { error make --unspanned { msg: "path parameter 'boxId' must be non-empty" } }
   let full_url = (build-url $base ({box_id: (encode-path-segment $box_id)} | format pattern "/cancelbabel/{box_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -243,7 +270,7 @@ export def "ergo-pay-create-babel-box" [
   let qp = [(serialize-qp "tokenId" $token_id "scalar") (serialize-qp "ergAmount" $erg_amount "scalar") (serialize-qp "tokenAmount" $token_amount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/createbabel/{address}") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -276,7 +303,7 @@ export def "get-babel-fee-overview" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -309,7 +336,7 @@ export def "get-babel-fee-new-offer" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -344,9 +371,9 @@ export def "do-create-babel-box" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer/doit" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -381,9 +408,9 @@ export def "replace-token-amount-input-fields" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer/new-input" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -416,7 +443,7 @@ export def "check-for-notifications" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/notificationcheck" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -449,7 +476,7 @@ export def "main-app-1" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/boxconsolidation/" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -484,7 +511,7 @@ export def "ep-consolidate" [
   if ($p2pkaddress | is-empty) { error make --unspanned { msg: "path parameter 'p2pkaddress' must be non-empty" } }
   let full_url = (build-url $base ({p2pkaddress: (encode-path-segment $p2pkaddress)} | format pattern "/mosaik/boxconsolidation/consolidate/{p2pkaddress}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -517,7 +544,7 @@ export def "main-app" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/tokenburn" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -552,7 +579,7 @@ export def "get-burning-transaction" [
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({uuid: (encode-path-segment $uuid)} | format pattern "/mosaik/tokenburn/get/{uuid}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -587,9 +614,9 @@ export def "prepare-transaction" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/tokenburn/prepare" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -630,9 +657,9 @@ export def "add-payment-request" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment/addrequest" $auth.query)
   let req_body = {"message": $message, "nanoErg": $nano_erg, "receiverAddress": $receiver_address, "senderAddress": $sender_address, "tokenId": $token_id, "tokenRawAmount": $token_raw_amount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -668,7 +695,7 @@ export def "get-payment-state" [
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/payment/state/{request_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -706,7 +733,7 @@ export def "get-peers-list" [
   let qp = [(serialize-qp "unreachable" $unreachable "scalar") (serialize-qp "closedApi" $closed_api "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/peers/list" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -747,7 +774,7 @@ export def "do-sigma-rsv-exchange" [
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigrsv/exchange/" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -783,7 +810,7 @@ export def "calc-sigma-rsv-exchange" [
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
   let full_url = (build-url $base ({amount: (encode-path-segment $amount)} | format pattern "/sigrsv/exchange/{amount}/info") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -817,7 +844,7 @@ export def "get-sigma-rsv-price" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sigrsv/price" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -858,7 +885,7 @@ export def "do-sigma-usd-exchange" [
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigusd/exchange/" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -894,7 +921,7 @@ export def "calc-sigma-usd-exchange" [
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
   let full_url = (build-url $base ({amount: (encode-path-segment $amount)} | format pattern "/sigusd/exchange/{amount}/info") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -928,7 +955,7 @@ export def "get-sigma-usd-price" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sigusd/price" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -966,7 +993,7 @@ export def "check-token" [
   if ($token_name | is-empty) { error make --unspanned { msg: "path parameter 'tokenName' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id), token_name: (encode-path-segment $token_name)} | format pattern "/tokens/check/{token_id}/{token_name}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1000,7 +1027,7 @@ export def "list-blocked" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/listBlocked" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1034,7 +1061,7 @@ export def "list-genuine" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/listGenuine" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1068,7 +1095,7 @@ export def "get-token-prices" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/prices/all" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1104,7 +1131,7 @@ export def "get-token-price" [
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/tokens/prices/{token_id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

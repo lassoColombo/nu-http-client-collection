@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -171,7 +198,7 @@ export def "server-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -204,7 +231,7 @@ export def "get-openapi-spec" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__api__" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -237,7 +264,7 @@ export def "heartbeat" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__heartbeat__" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -270,7 +297,7 @@ export def "lbheartbeat" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__lbheartbeat__" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -303,7 +330,7 @@ export def "get-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__version__" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -339,9 +366,9 @@ export def "batch" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch" $auth.query)
   let req_body = {"defaults": $defaults, "requests": $requests} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -371,7 +398,7 @@ export def "get-buckets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --sort: list<string>
-  --qp-token: string
+  --qp-token: string # (spec name: _token)
   --since: int
   --to: int
   --before: int
@@ -386,9 +413,9 @@ export def "get-buckets" [
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -418,7 +445,7 @@ export def "get-changess" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --sort: list<string>
-  --qp-token: string
+  --qp-token: string # (spec name: _token)
   --since: int
   --to: int
   --before: int
@@ -433,9 +460,9 @@ export def "get-changess" [
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets/monitor/collections/changes/records" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -479,7 +506,7 @@ export def "get-collection-changeset" [
   let qp = [(serialize-qp "_since" $since "scalar") (serialize-qp "_expected" $expected "scalar") (serialize-qp "_limit" $limit "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "collection" $collection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bid: (encode-path-segment $bid), cid: (encode-path-segment $cid)} | format pattern "/buckets/{bid}/collections/{cid}/changeset") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -510,7 +537,7 @@ export def "get-collections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --sort: list<string>
-  --qp-token: string
+  --qp-token: string # (spec name: _token)
   --since: int
   --to: int
   --before: int
@@ -526,9 +553,9 @@ export def "get-collections" [
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/collections") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -560,7 +587,7 @@ export def "get-records" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --sort: list<string>
-  --qp-token: string
+  --qp-token: string # (spec name: _token)
   --since: int
   --to: int
   --before: int
@@ -577,9 +604,9 @@ export def "get-records" [
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), collection_id: (encode-path-segment $collection_id)} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -622,9 +649,9 @@ export def "get-record" [
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), collection_id: (encode-path-segment $collection_id), id: (encode-path-segment $id)} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -663,7 +690,7 @@ export def "delete-attachment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), collection_id: (encode-path-segment $collection_id), id: (encode-path-segment $id)} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -702,7 +729,7 @@ export def "create-attachment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), collection_id: (encode-path-segment $collection_id), id: (encode-path-segment $id)} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -743,9 +770,9 @@ export def "get-collection" [
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), id: (encode-path-segment $id)} | format pattern "/buckets/{bucket_id}/collections/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -776,7 +803,7 @@ export def "get-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --sort: list<string>
-  --qp-token: string
+  --qp-token: string # (spec name: _token)
   --since: int
   --to: int
   --before: int
@@ -792,9 +819,9 @@ export def "get-groups" [
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id)} | format pattern "/buckets/{bucket_id}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -835,9 +862,9 @@ export def "get-group" [
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_id: (encode-path-segment $bucket_id), id: (encode-path-segment $id)} | format pattern "/buckets/{bucket_id}/groups/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -876,9 +903,9 @@ export def "get-bucket" [
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/buckets/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -911,7 +938,7 @@ export def "contribute" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contribute.json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

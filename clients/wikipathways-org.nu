@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -163,7 +190,7 @@ export def "post-create-pathway" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --gpml: string # The GPML code for the new pathway (required)
-  --qp-auth: string # The authentication info (required)
+  --qp-auth: string # The authentication info (required) (spec name: auth)
   --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -175,7 +202,7 @@ export def "post-create-pathway" [
   let qp = [(serialize-qp "gpml" $gpml "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/createPathway" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -212,7 +239,7 @@ export def "get-find-interactions" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findInteractions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -249,7 +276,7 @@ export def "get-find-pathways-by-literature" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByLiterature" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -287,7 +314,7 @@ export def "get-find-pathways-by-text" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "species" $species "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByText" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -325,7 +352,7 @@ export def "get-find-pathways-by-xref" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "codes" $codes "csv") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/findPathwaysByXref" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -370,7 +397,7 @@ export def "get-get-colored-pathway" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "graphId" $graph_id "csv") (serialize-qp "color" $color "csv") (serialize-qp "fileType" $file_type "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getColoredPathway" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -408,7 +435,7 @@ export def "get-get-curation-tag-history" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTagHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -445,7 +472,7 @@ export def "get-get-curation-tags" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTags" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -482,7 +509,7 @@ export def "get-get-curation-tags-by-name" [
   let qp = [(serialize-qp "tagName" $tag_name "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getCurationTagsByName" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -519,7 +546,7 @@ export def "get-get-ontology-terms-by-pathway" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getOntologyTermsByPathway" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -557,7 +584,7 @@ export def "get-get-pathway" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathway" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -597,7 +624,7 @@ export def "get-get-pathway-as" [
   let qp = [(serialize-qp "fileType" $file_type "scalar") (serialize-qp "pwId" $pw_id "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayAs" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -636,7 +663,7 @@ export def "get-get-pathway-history" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayHistory" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -673,7 +700,7 @@ export def "get-get-pathway-info" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwayInfo" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -710,7 +737,7 @@ export def "get-get-pathways-by-ontology-term" [
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwaysByOntologyTerm" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -747,7 +774,7 @@ export def "get-get-pathways-by-parent-ontology-term" [
   let qp = [(serialize-qp "term" $term "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getPathwaysByParentOntologyTerm" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -784,7 +811,7 @@ export def "get-get-recent-changes" [
   let qp = [(serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRecentChanges" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -821,7 +848,7 @@ export def "get-get-user-by-orcid" [
   let qp = [(serialize-qp "orcid" $orcid "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getUserByOrcid" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -860,7 +887,7 @@ export def "get-get-xref-list" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getXrefList" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -895,7 +922,7 @@ export def "get-list-organisms" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listOrganisms" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -931,7 +958,7 @@ export def "get-list-pathways" [
   let qp = [(serialize-qp "organism" $organism "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPathways" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -970,7 +997,7 @@ export def "get-login" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "pass" $pass "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/login" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1000,7 +1027,7 @@ export def "get-remove-curation-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pw-id: string # The pathway identifier (required)
   --tag-name: string # The name of the tag to apply (required)
-  --qp-auth: string # The authentication data (required)
+  --qp-auth: string # The authentication data (required) (spec name: auth)
   --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -1013,7 +1040,7 @@ export def "get-remove-curation-tag" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "tagName" $tag_name "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/removeCurationTag" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1043,7 +1070,7 @@ export def "get-remove-ontology-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pw-id: string # The pathway identifier (required)
   --term-id: string # The ontology term identifier in the ontology (required)
-  --qp-auth: string # The authentication key (required)
+  --qp-auth: string # The authentication key (required) (spec name: auth)
   --user: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -1056,7 +1083,7 @@ export def "get-remove-ontology-tag" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "termId" $term_id "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/removeOntologyTag" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1088,7 +1115,7 @@ export def "get-save-curation-tag" [
   --tag-name: string # The name of the tag to apply (required)
   --text: string # string (required)
   --revision: int # The revision this tag applies to (required)
-  --qp-auth: string # The authentication key (required)
+  --qp-auth: string # The authentication key (required) (spec name: auth)
   --username: string # The user name (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -1103,7 +1130,7 @@ export def "get-save-curation-tag" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "tagName" $tag_name "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveCurationTag" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1134,7 +1161,7 @@ export def "get-save-ontology-tag" [
   --pw-id: string # The pathway identifier (required)
   --term: string # The ontology term to apply (required)
   --term-id: string # The identifier of the term in the ontology (required)
-  --qp-auth: string # The authentication key (required)
+  --qp-auth: string # The authentication key (required) (spec name: auth)
   --user: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -1148,7 +1175,7 @@ export def "get-save-ontology-tag" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "term" $term "scalar") (serialize-qp "termId" $term_id "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/saveOntologyTag" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1180,7 +1207,7 @@ export def "get-update-pathway" [
   --description: string # A description of the modifications (required)
   --gpml: string # The updated GPML code (required)
   --revision: int # The revision the GPML code is based on (required)
-  --qp-auth: string # The authentication key (required)
+  --qp-auth: string # The authentication key (required) (spec name: auth)
   --username: string # The username (required)
   --format: string@format-completer # default: xml
 ]: nothing -> any {
@@ -1195,7 +1222,7 @@ export def "get-update-pathway" [
   let qp = [(serialize-qp "pwId" $pw_id "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "gpml" $gpml "scalar") (serialize-qp "revision" $revision "scalar") (serialize-qp "auth" $qp_auth "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/updatePathway" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -194,11 +221,11 @@ export def "create-corpus" [
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/create-corpus" $auth.query)
   let req_body = {"corpus": $corpus} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -229,19 +256,19 @@ export def "delete-corpus" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: int # The Corpus ID to be deleted. (format: int64)
-  --customer-id-body: int # The Customer ID that contains the corpus to be deleted. (format: int64) (body field)
+  --body-customer-id: int # The Customer ID that contains the corpus to be deleted. (format: int64) (spec name: customerId)
 ]: any -> oneof<record<status: record<code: string, statusDetail: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/delete-corpus" $auth.query)
-  let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"corpusId": $corpus_id, "customerId": $body_customer_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -272,7 +299,7 @@ export def "delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: string # The Corpus ID that contains the document. (format: int64)
-  --customer-id-body: string # The Customer ID to issue the request for. (format: int64) (body field)
+  --body-customer-id: string # The Customer ID to issue the request for. (format: int64) (spec name: customerId)
   --document-id: string # The Document ID to be deleted.
 ]: any -> oneof<record, string, nothing> {
   let input = $in
@@ -280,12 +307,12 @@ export def "delete" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/delete-doc" $auth.query)
-  let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body, "documentId": $document_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"corpusId": $corpus_id, "customerId": $body_customer_id, "documentId": $document_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -316,7 +343,7 @@ export def "index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: string # format: int64
-  --customer-id-body: string # format: int64 (body field)
+  --body-customer-id: string # format: int64 (spec name: customerId)
   --document: record # A document to index. — shape: {customDims?: list, description?: string, documentId?: string, metadataJson?: string, section?: list, title?: string}
 ]: any -> oneof<record<quotaConsumed: record<numChars: string, numMetadataChars: string>, status: record<code: string, statusDetail: string>>, string, nothing> {
   let input = $in
@@ -324,12 +351,12 @@ export def "index" [
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/index" $auth.query)
-  let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body, "document": $document} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"corpusId": $corpus_id, "customerId": $body_customer_id, "document": $document} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -369,11 +396,11 @@ export def "list-corpora" [
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/list-corpora" $auth.query)
   let req_body = {"filter": $filter, "numResults": $num_results, "pageKey": $page_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -411,11 +438,11 @@ export def "query" [
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/query" $auth.query)
   let req_body = {"query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -446,19 +473,19 @@ export def "reset-corpus" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --customer-id: int # The Customer ID to use for the request. (required)
   --corpus-id: int # The Corpus ID to be reset. (format: int64)
-  --customer-id-body: int # The Customer ID that contains the corpus to be reset. (format: int64) (body field)
+  --body-customer-id: int # The Customer ID that contains the corpus to be reset. (format: int64) (spec name: customerId)
 ]: any -> oneof<record<status: record<code: string, statusDetail: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/reset-corpus" $auth.query)
-  let req_body = {"corpusId": $corpus_id, "customerId": $customer_id_body} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"corpusId": $corpus_id, "customerId": $body_customer_id} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -496,11 +523,11 @@ export def "stream-query" [
   if ($customer_id == null) { error make --unspanned { msg: "required header parameter 'customer-id' missing: pass --customer-id" } }
   let full_url = (build-url $base "/v1/stream-query" $auth.query)
   let req_body = {"query": $query} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"customer-id": $customer_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -543,10 +570,10 @@ export def "file-upload" [
   let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "o" $o "scalar") (serialize-qp "d" $d "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/upload" $qp $auth.query)
   let req_body = {"doc_metadata": $doc_metadata, "file": $file} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"

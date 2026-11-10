@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -195,11 +222,11 @@ export def "post-build" [
   let qp = [(serialize-qp "t" $t "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "nocache" $nocache "scalar") (serialize-qp "pull" $pull "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/build" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -233,7 +260,7 @@ export def "post-containers-create" [
   --bluemix-app: string # The name of the Cloud Foundry app that you want to bind to your container. The Cloud Foundry app must be created in the same space where you want to create your container.
   --cmd: list<string> # The command and arguments in this list are passed to the container to be executed when the container is started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash. Sample long-running commands:["ping","localhost"]["tail","-f","/dev/null"]["sh","-c","while true; do date; sleep 20; done"]
   --cpuset: string # Pins the container processes to a specific CPU core on the compute host. For example: 0 means that processes are executed on the first core only.
-  --body-env: list<string> # A list of environment variables in the form of key=value pairs. All keys in this list have to be unique. List multiple keys separately and if you include quotation marks, include them around both the environment variable name and the value.
+  --body-env: list<string> # A list of environment variables in the form of key=value pairs. All keys in this list have to be unique. List multiple keys separately and if you include quotation marks, include them around both the environment variable name and the value. (spec name: Env)
   --exposed-ports: list<string> # All public ports that need to be exposed for the container, so the container can be accessed from the Internet.
   --host-config: record # shape: {Binds?: list<string>, ExtraHosts?: list<string>, Links?: list<string>, PortBindings?: list<string>}
   image: string # Full path to the image in your private Bluemix registry in the format `registry.ng.bluemix.net/namespace/image`.
@@ -249,11 +276,11 @@ export def "post-containers-create" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/create" $qp $auth.query)
   let req_body = {"BluemixApp": $bluemix_app, "Cmd": $cmd, "Cpuset": $cpuset, "Env": $body_env, "ExposedPorts": $exposed_ports, "HostConfig": $host_config, "Image": $image, "Memory": $memory, "NumberCpus": $number_cpus, "Volumes": $volumes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -292,9 +319,9 @@ export def "get-containers-floating-ips" [
   let qp = [(serialize-qp "all" $all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/floating-ips" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -331,9 +358,9 @@ export def "post-containers-floating-ips-request" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/floating-ips/request" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -372,9 +399,9 @@ export def "post-containers-floating-ips-ip-release" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({ip: (encode-path-segment $ip)} | format pattern "/containers/floating-ips/{ip}/release") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -411,9 +438,9 @@ export def "get-containers-groups" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/groups" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -446,7 +473,7 @@ export def "post-containers-groups" [
   --autorecovery: string # (Optional) Enable the Auto-recovery mode for your container group. If set to true, IBM Containers checks the health of each instance with an HTTP request to the port that is assigned. If the health check does not receive a TCP response from a container instance in two subsequent 90-second intervals, the instance is removed and replaced with a new instance. If set to false and container instances crash, they are not recovered by IBM Containers.
   --bluemix-app: string # (Optional) The name of the Cloud Foundry app that you created in your organization space.
   --cmd: list<string> # (Optional) Docker command that is passed to the container group to be run when the container instances are started. This command must be a long-running command. Do not use a short-lived command, for example, /bin/date, because it might cause the container to crash.
-  --body-env: list<string> # (Optional) List of environmental variables. Every environment variable that is listed here needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,).
+  --body-env: list<string> # (Optional) List of environmental variables. Every environment variable that is listed here needs to be a key=value pair. Every key that you use needs to be unique for this container group. Multiple environment variables are separated with comma (,). (spec name: Env)
   image: string # (Required) The full path to your private Bluemix repository. If you want to use an image in your private Bluemix repository, specify the image in the following format: registry.ng.bluemix.net/NAMESPACE/IMAGE. If you want to use an IBM Containers provided image, do not include your organization's namespace. Specify the image in the following format: registry.ng.bluemix.net/IMAGE
   --memory: int # (Optional) The size of each container instance in the container group. The size of each container instance in the group. Choose one of the following sizes and enter the size in MegaBytes: Pico 64 MB, Nano 128 MB, Micro 256 MB, Tiny 512 MB, Small 1 GB (1024 MB), Medium 2 GB (2048 MB), Large 4 GB (4096 MB) XLarge 8GB (8192 MB) and 2XLarge 16 GB (16384 MB). If you do not specify a size, all container instances in this group are created with 256 MB. (format: int32)
   name: string # (Required) Name of the container group that you want to create. The name needs to be unique in your organization space and must start with a letter. Then, you can include uppercase letters, lowercase letters, numbers, periods (.), underscores (_), or hyphens (-).
@@ -462,11 +489,11 @@ export def "post-containers-groups" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/groups" $auth.query)
   let req_body = {"Autorecovery": $autorecovery, "BluemixApp": $bluemix_app, "Cmd": $cmd, "Env": $body_env, "Image": $image, "Memory": $memory, "Name": $name, "NumberInstances": $number_instances, "Port": $port, "Route": $route, "Volumes": $volumes} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -507,9 +534,9 @@ export def "delete-containers-groups-name-or-id" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -548,9 +575,9 @@ export def "get-containers-groups-name-or-id" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -593,11 +620,11 @@ export def "patch-containers-groups-name-or-id" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}") $auth.query)
   let req_body = {"Autorecovery": $autorecovery, "Environment": $environment, "NumberInstances": $number_instances} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -639,11 +666,11 @@ export def "post-containers-groups-name-or-id-maproute" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/maproute") $auth.query)
   let req_body = {"domain": $domain, "host": $host} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -685,11 +712,11 @@ export def "post-containers-groups-name-or-id-unmaproute" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/groups/{name_or_id}/unmaproute") $auth.query)
   let req_body = {"domain": $domain, "host": $host} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -729,9 +756,9 @@ export def "get-containers-json" [
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/containers/json" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -768,9 +795,9 @@ export def "get-containers-messages" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/messages" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -807,9 +834,9 @@ export def "get-containers-quota" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/quota" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -849,11 +876,11 @@ export def "put-containers-quota" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/quota" $auth.query)
   let req_body = {"floating_ips": $floating_ips, "ram": $ram} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -890,9 +917,9 @@ export def "get-containers-usage" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/containers/usage" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -925,7 +952,7 @@ export def "get-containers-version" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/version" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -964,9 +991,9 @@ export def "get-containers-id-status" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1007,9 +1034,9 @@ export def "delete-containers-name-or-id" [
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1050,9 +1077,9 @@ export def "post-containers-name-or-id-floating-ips-ip-bind" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/bind") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1093,9 +1120,9 @@ export def "post-containers-name-or-id-floating-ips-ip-unbind" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id), ip: (encode-path-segment $ip)} | format pattern "/containers/{name_or_id}/floating-ips/{ip}/unbind") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1134,9 +1161,9 @@ export def "get-containers-name-or-id-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1175,9 +1202,9 @@ export def "post-containers-name-or-id-pause" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/pause") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1219,9 +1246,9 @@ export def "post-containers-name-or-id-rename" [
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/rename") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1262,9 +1289,9 @@ export def "post-containers-name-or-id-restart" [
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/restart") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1303,9 +1330,9 @@ export def "post-containers-name-or-id-start" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1346,9 +1373,9 @@ export def "post-containers-name-or-id-stop" [
   let qp = [(serialize-qp "t" $t "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/stop") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1387,9 +1414,9 @@ export def "post-containers-name-or-id-unpause" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/containers/{name_or_id}/unpause") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1426,9 +1453,9 @@ export def "get-images-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/images/json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1467,9 +1494,9 @@ export def "delete-images-id" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/images/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1508,9 +1535,9 @@ export def "get-images-name-or-id-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name_or_id: (encode-path-segment $name_or_id)} | format pattern "/images/{name_or_id}/json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1547,9 +1574,9 @@ export def "get-registry-namespaces" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/registry/namespaces" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1588,9 +1615,9 @@ export def "get-registry-namespaces-namespace" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1629,9 +1656,9 @@ export def "put-registry-namespaces-namespace" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/registry/namespaces/{namespace}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1668,9 +1695,9 @@ export def "get-tlskey" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/tlskey" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1707,9 +1734,9 @@ export def "put-tlskey-refresh" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/tlskey/refresh" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1750,9 +1777,9 @@ export def "post-volumes-create" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "fsName" $fs_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/volumes/create" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1793,11 +1820,11 @@ export def "post-volumes-fs-create" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/create" $auth.query)
   let req_body = {"fsIOPS": $fs_iops, "fsName": $fs_name, "fsSize": $fs_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1834,9 +1861,9 @@ export def "get-volumes-fs-flavors-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/flavors/json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1873,9 +1900,9 @@ export def "get-volumes-fs-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/fs/json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1914,9 +1941,9 @@ export def "delete-volumes-fs-name" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1955,9 +1982,9 @@ export def "get-volumes-fs-name-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/fs/{name}/json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1994,9 +2021,9 @@ export def "get-volumes-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base "/volumes/json" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2035,9 +2062,9 @@ export def "delete-volumes-name" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2079,11 +2106,11 @@ export def "post-volumes-name" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}") $auth.query)
   let req_body = {"addSpaces": $add_spaces, "removeSpaces": $remove_spaces} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2122,9 +2149,9 @@ export def "get-volumes-name-json" [
   if ($x_auth_project_id == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Project-Id' missing: pass --x-auth-project-id" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/volumes/{name}/json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Auth-Token": $x_auth_token, "X-Auth-Project-Id": $x_auth_project_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

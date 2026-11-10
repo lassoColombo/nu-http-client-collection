@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -215,7 +242,7 @@ export def "talk-to-chatbot" [
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "contextId" $context_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -254,7 +281,7 @@ export def "get-conversation-suggests" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/converse/suggest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -297,7 +324,7 @@ export def "search-custom-foods" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "hash" $hash "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/customFoods/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -335,13 +362,13 @@ export def "detect-food-in-text" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/detect" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -379,7 +406,7 @@ export def "image-analysis-by-url" [
   let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/analyze" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -417,7 +444,7 @@ export def "image-classification-by-url" [
   let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/images/classify" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -458,7 +485,7 @@ export def "autocomplete-ingredient-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/autocomplete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -497,9 +524,9 @@ export def "compute-glycemic-load" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/glycemicLoad" $qp $auth.query)
   let req_body = {"ingredients": $ingredients} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -537,9 +564,9 @@ export def "map-ingredients-to-grocery-products" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/ingredients/map" $auth.query)
   let req_body = {"ingredients": $ingredients, "servings": $servings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -590,7 +617,7 @@ export def "ingredient-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "addChildren" $add_children "scalar") (serialize-qp "minProteinPercent" $min_protein_percent "scalar") (serialize-qp "maxProteinPercent" $max_protein_percent "scalar") (serialize-qp "minFatPercent" $min_fat_percent "scalar") (serialize-qp "maxFatPercent" $max_fat_percent "scalar") (serialize-qp "minCarbsPercent" $min_carbs_percent "scalar") (serialize-qp "maxCarbsPercent" $max_carbs_percent "scalar") (serialize-qp "metaInformation" $meta_information "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -628,7 +655,7 @@ export def "get-ingredient-substitutes" [
   let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/ingredients/substitutes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -671,7 +698,7 @@ export def "compute-ingredient-amount" [
   let qp = [(serialize-qp "nutrient" $nutrient "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/amount") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -711,7 +738,7 @@ export def "get-ingredient-information" [
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "unit" $unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/information") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -748,7 +775,7 @@ export def "get-ingredient-substitutes-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/ingredients/{id}/substitutes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -783,7 +810,7 @@ export def "get-a-random-food-joke" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/jokes/random" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -831,7 +858,7 @@ export def "search-menu-items" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "addMenuItemInformation" $add_menu_item_information "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -870,7 +897,7 @@ export def "autocomplete-menu-item-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/menuItems/suggest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -907,7 +934,7 @@ export def "get-menu-item-information" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -949,7 +976,7 @@ export def "menu-item-nutrition-label-widget" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionLabel") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -990,7 +1017,7 @@ export def "menu-item-nutrition-label-image" [
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionLabel.png") $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1022,7 +1049,7 @@ export def "visualize-menu-item-nutrition-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,9 +1057,9 @@ export def "visualize-menu-item-nutrition-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1069,7 +1096,7 @@ export def "menu-item-nutrition-by-id-image" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/menuItems/{id}/nutritionWidget.png") $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1110,9 +1137,9 @@ export def "classify-grocery-product" [
   let qp = [(serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/classify" $qp $auth.query)
   let req_body = {"plu_code": $plu_code, "title": $title, "upc": $upc} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1151,9 +1178,9 @@ export def "classify-grocery-product-bulk" [
   let qp = [(serialize-qp "locale" $locale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/classifyBatch" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1201,7 +1228,7 @@ export def "search-grocery-products" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "addProductInformation" $add_product_information "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1240,7 +1267,7 @@ export def "autocomplete-product-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/products/suggest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "search-grocery-products-by-upc" [
   if ($upc | is-empty) { error make --unspanned { msg: "path parameter 'upc' must be non-empty" } }
   let full_url = (build-url $base ({upc: (encode-path-segment $upc)} | format pattern "/food/products/upc/{upc}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1314,7 +1341,7 @@ export def "get-comparable-products" [
   if ($upc | is-empty) { error make --unspanned { msg: "path parameter 'upc' must be non-empty" } }
   let full_url = (build-url $base ({upc: (encode-path-segment $upc)} | format pattern "/food/products/upc/{upc}/comparable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1351,7 +1378,7 @@ export def "get-product-information" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1393,7 +1420,7 @@ export def "product-nutrition-label-widget" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionLabel") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1434,7 +1461,7 @@ export def "product-nutrition-label-image" [
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionLabel.png") $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1466,7 +1493,7 @@ export def "visualize-product-nutrition-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1474,9 +1501,9 @@ export def "visualize-product-nutrition-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1513,7 +1540,7 @@ export def "product-nutrition-by-id-image" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/food/products/{id}/nutritionWidget.png") $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1559,7 +1586,7 @@ export def "search-restaurants" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "distance" $distance "scalar") (serialize-qp "budget" $budget "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "min-rating" $min_rating "scalar") (serialize-qp "is-open" $is_open "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/restaurants/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1599,7 +1626,7 @@ export def "search-all-food" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1637,7 +1664,7 @@ export def "search-site-content" [
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/site/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1672,7 +1699,7 @@ export def "get-random-food-trivia" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/food/trivia/random" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1718,7 +1745,7 @@ export def "search-food-videos" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/videos/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1756,7 +1783,7 @@ export def "get-wine-description" [
   let qp = [(serialize-qp "wine" $wine "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/description" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1794,7 +1821,7 @@ export def "get-dish-pairing-for-wine" [
   let qp = [(serialize-qp "wine" $wine "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/dishes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1833,7 +1860,7 @@ export def "get-wine-pairing" [
   let qp = [(serialize-qp "food" $food "scalar") (serialize-qp "maxPrice" $max_price "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/pairing" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1874,7 +1901,7 @@ export def "get-wine-recommendation" [
   let qp = [(serialize-qp "wine" $wine "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "minRating" $min_rating "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/food/wine/recommendation" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1914,7 +1941,7 @@ export def "generate-meal-plan" [
   let qp = [(serialize-qp "timeFrame" $time_frame "scalar") (serialize-qp "targetCalories" $target_calories "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mealplanner/generate" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1947,9 +1974,9 @@ export def "clear-meal-plan-day" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required)
-  --body-date: string # The date in the format yyyy-mm-dd. (e.g. 2020-06-01)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-username: string # The username. (e.g. dsky)
+  --body-date: string # The date in the format yyyy-mm-dd. (e.g. 2020-06-01) (spec name: date)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1959,13 +1986,13 @@ export def "clear-meal-plan-day" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), date: (encode-path-segment $date)} | format pattern "/mealplanner/{username}/day/{date}") $qp $auth.query)
-  let req_body = {"date": $body_date, "hash": $hash_body, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"date": $body_date, "hash": $body_hash, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "date") == null) { error make --unspanned { msg: "required body field 'date' missing: pass --body-date or pipe a record" } }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2011,9 +2038,9 @@ export def "add-to-meal-plan" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/items") $qp $auth.query)
   let req_body = {"date": $date, "position": $position, "slot": $slot, "type": $type, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2046,9 +2073,9 @@ export def "delete-from-meal-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-id: float # The shopping list item id. (e.g. 15678)
-  --body-username: string # The username. (e.g. dsky)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-id: float # The shopping list item id. (e.g. 15678) (spec name: id)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2058,13 +2085,13 @@ export def "delete-from-meal-plan" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/items/{id}") $qp $auth.query)
-  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  let req_body = {"hash": $body_hash, "id": $body_id, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2104,7 +2131,7 @@ export def "get-shopping-list" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2148,10 +2175,10 @@ export def "add-to-shopping-list" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/shopping-list/items") $qp $auth.query)
   let req_body = {"aisle": $aisle, "item": $item, "parse": $parse} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "parse") == null) { error make --unspanned { msg: "required body field 'parse' missing: pass --parse or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2184,9 +2211,9 @@ export def "delete-from-shopping-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-id: float # The shopping list item id. (e.g. 15678)
-  --body-username: string # The username. (e.g. dsky)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-id: float # The shopping list item id. (e.g. 15678) (spec name: id)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2196,13 +2223,13 @@ export def "delete-from-shopping-list" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/shopping-list/items/{id}") $qp $auth.query)
-  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  let req_body = {"hash": $body_hash, "id": $body_id, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2236,10 +2263,10 @@ export def "generate-shopping-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required)
-  --body-end-date: string # The end date in the format yyyy-mm-dd. (e.g. 2020-06-07)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-start-date: string # The start date in the format yyyy-mm-dd. (e.g. 2020-06-01)
-  --body-username: string # The username. (e.g. dsky)
+  --body-end-date: string # The end date in the format yyyy-mm-dd. (e.g. 2020-06-07) (spec name: end-date)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-start-date: string # The start date in the format yyyy-mm-dd. (e.g. 2020-06-01) (spec name: start-date)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record<aisles: table<aisle: string, items: list>, cost: float, endDate: float, startDate: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2250,14 +2277,14 @@ export def "generate-shopping-list" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/mealplanner/{username}/shopping-list/{start_date}/{end_date}") $qp $auth.query)
-  let req_body = {"end-date": $body_end_date, "hash": $hash_body, "start-date": $body_start_date, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"end-date": $body_end_date, "hash": $body_hash, "start-date": $body_start_date, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "end-date") == null) { error make --unspanned { msg: "required body field 'end-date' missing: pass --body-end-date or pipe a record" } }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "start-date") == null) { error make --unspanned { msg: "required body field 'start-date' missing: pass --body-start-date or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2297,7 +2324,7 @@ export def "get-meal-plan-templates" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2329,8 +2356,8 @@ export def "add-meal-plan-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required, e.g. 4b5v4398573406)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-username: string # The username. (e.g. dsky)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record<items: table<day: int, position: int, slot: int, type: string, value: record>, name: string, publishAsPublic: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2339,12 +2366,12 @@ export def "add-meal-plan-template" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/mealplanner/{username}/templates") $qp $auth.query)
-  let req_body = {"hash": $hash_body, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  let req_body = {"hash": $body_hash, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2377,9 +2404,9 @@ export def "delete-meal-plan-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hash: string # The private hash for the username. (required, e.g. 4b5v4398573406)
-  --hash-body: string # The private hash for the username. (e.g. 4b5v4398573406) (body field)
-  --body-id: float # The shopping list item id. (e.g. 15678)
-  --body-username: string # The username. (e.g. dsky)
+  --body-hash: string # The private hash for the username. (e.g. 4b5v4398573406) (spec name: hash)
+  --body-id: float # The shopping list item id. (e.g. 15678) (spec name: id)
+  --body-username: string # The username. (e.g. dsky) (spec name: username)
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2389,13 +2416,13 @@ export def "delete-meal-plan-template" [
   if ($hash == null) { error make --unspanned { msg: "required query parameter 'hash' missing: pass --hash" } }
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp $auth.query)
-  let req_body = {"hash": $hash_body, "id": $body_id, "username": $body_username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --hash-body or pipe a record" } }
+  let req_body = {"hash": $body_hash, "id": $body_id, "username": $body_username} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "hash") == null) { error make --unspanned { msg: "required body field 'hash' missing: pass --body-hash or pipe a record" } }
   if (($req_body | get -o "id") == null) { error make --unspanned { msg: "required body field 'id' missing: pass --body-id or pipe a record" } }
   if (($req_body | get -o "username") == null) { error make --unspanned { msg: "required body field 'username' missing: pass --body-username or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2437,7 +2464,7 @@ export def "get-meal-plan-template" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), id: (encode-path-segment $id)} | format pattern "/mealplanner/{username}/templates/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2479,7 +2506,7 @@ export def "get-meal-plan-week" [
   let qp = [(serialize-qp "hash" $hash "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), start_date: (encode-path-segment $start_date)} | format pattern "/mealplanner/{username}/week/{start_date}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2523,9 +2550,9 @@ export def "analyze-recipe" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/analyze" $qp $auth.query)
   let req_body = {"ingredients": $ingredients, "instructions": $instructions, "servings": $servings, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2563,13 +2590,13 @@ export def "analyze-recipe-instructions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/analyzeInstructions" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2607,7 +2634,7 @@ export def "autocomplete-recipe-search" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/autocomplete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2739,7 +2766,7 @@ export def "search-recipes" [
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "cuisine" $cuisine "scalar") (serialize-qp "excludeCuisine" $exclude_cuisine "scalar") (serialize-qp "diet" $diet "scalar") (serialize-qp "intolerances" $intolerances "scalar") (serialize-qp "equipment" $equipment "scalar") (serialize-qp "includeIngredients" $include_ingredients "scalar") (serialize-qp "excludeIngredients" $exclude_ingredients "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "instructionsRequired" $instructions_required "scalar") (serialize-qp "fillIngredients" $fill_ingredients "scalar") (serialize-qp "addRecipeInformation" $add_recipe_information "scalar") (serialize-qp "addRecipeNutrition" $add_recipe_nutrition "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "recipeBoxId" $recipe_box_id "scalar") (serialize-qp "titleMatch" $title_match "scalar") (serialize-qp "maxReadyTime" $max_ready_time "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "sortDirection" $sort_direction "scalar") (serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/complexSearch" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2783,7 +2810,7 @@ export def "convert-amounts" [
   let qp = [(serialize-qp "ingredientName" $ingredient_name "scalar") (serialize-qp "sourceAmount" $source_amount "scalar") (serialize-qp "sourceUnit" $source_unit "scalar") (serialize-qp "targetUnit" $target_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/convert" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2821,13 +2848,13 @@ export def "classify-cuisine" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/cuisine" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -2869,7 +2896,7 @@ export def "extract-recipe-from-website" [
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "forceExtraction" $force_extraction "scalar") (serialize-qp "analyze" $analyze "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar") (serialize-qp "includeTaste" $include_taste "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/extract" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2910,7 +2937,7 @@ export def "search-recipes-by-ingredients" [
   let qp = [(serialize-qp "ingredients" $ingredients "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar") (serialize-qp "ranking" $ranking "scalar") (serialize-qp "ignorePantry" $ignore_pantry "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/findByIngredients" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3022,7 +3049,7 @@ export def "search-recipes-by-nutrients" [
   let qp = [(serialize-qp "minCarbs" $min_carbs "scalar") (serialize-qp "maxCarbs" $max_carbs "scalar") (serialize-qp "minProtein" $min_protein "scalar") (serialize-qp "maxProtein" $max_protein "scalar") (serialize-qp "minCalories" $min_calories "scalar") (serialize-qp "maxCalories" $max_calories "scalar") (serialize-qp "minFat" $min_fat "scalar") (serialize-qp "maxFat" $max_fat "scalar") (serialize-qp "minAlcohol" $min_alcohol "scalar") (serialize-qp "maxAlcohol" $max_alcohol "scalar") (serialize-qp "minCaffeine" $min_caffeine "scalar") (serialize-qp "maxCaffeine" $max_caffeine "scalar") (serialize-qp "minCopper" $min_copper "scalar") (serialize-qp "maxCopper" $max_copper "scalar") (serialize-qp "minCalcium" $min_calcium "scalar") (serialize-qp "maxCalcium" $max_calcium "scalar") (serialize-qp "minCholine" $min_choline "scalar") (serialize-qp "maxCholine" $max_choline "scalar") (serialize-qp "minCholesterol" $min_cholesterol "scalar") (serialize-qp "maxCholesterol" $max_cholesterol "scalar") (serialize-qp "minFluoride" $min_fluoride "scalar") (serialize-qp "maxFluoride" $max_fluoride "scalar") (serialize-qp "minSaturatedFat" $min_saturated_fat "scalar") (serialize-qp "maxSaturatedFat" $max_saturated_fat "scalar") (serialize-qp "minVitaminA" $min_vitamin_a "scalar") (serialize-qp "maxVitaminA" $max_vitamin_a "scalar") (serialize-qp "minVitaminC" $min_vitamin_c "scalar") (serialize-qp "maxVitaminC" $max_vitamin_c "scalar") (serialize-qp "minVitaminD" $min_vitamin_d "scalar") (serialize-qp "maxVitaminD" $max_vitamin_d "scalar") (serialize-qp "minVitaminE" $min_vitamin_e "scalar") (serialize-qp "maxVitaminE" $max_vitamin_e "scalar") (serialize-qp "minVitaminK" $min_vitamin_k "scalar") (serialize-qp "maxVitaminK" $max_vitamin_k "scalar") (serialize-qp "minVitaminB1" $min_vitamin_b1 "scalar") (serialize-qp "maxVitaminB1" $max_vitamin_b1 "scalar") (serialize-qp "minVitaminB2" $min_vitamin_b2 "scalar") (serialize-qp "maxVitaminB2" $max_vitamin_b2 "scalar") (serialize-qp "minVitaminB5" $min_vitamin_b5 "scalar") (serialize-qp "maxVitaminB5" $max_vitamin_b5 "scalar") (serialize-qp "minVitaminB3" $min_vitamin_b3 "scalar") (serialize-qp "maxVitaminB3" $max_vitamin_b3 "scalar") (serialize-qp "minVitaminB6" $min_vitamin_b6 "scalar") (serialize-qp "maxVitaminB6" $max_vitamin_b6 "scalar") (serialize-qp "minVitaminB12" $min_vitamin_b12 "scalar") (serialize-qp "maxVitaminB12" $max_vitamin_b12 "scalar") (serialize-qp "minFiber" $min_fiber "scalar") (serialize-qp "maxFiber" $max_fiber "scalar") (serialize-qp "minFolate" $min_folate "scalar") (serialize-qp "maxFolate" $max_folate "scalar") (serialize-qp "minFolicAcid" $min_folic_acid "scalar") (serialize-qp "maxFolicAcid" $max_folic_acid "scalar") (serialize-qp "minIodine" $min_iodine "scalar") (serialize-qp "maxIodine" $max_iodine "scalar") (serialize-qp "minIron" $min_iron "scalar") (serialize-qp "maxIron" $max_iron "scalar") (serialize-qp "minMagnesium" $min_magnesium "scalar") (serialize-qp "maxMagnesium" $max_magnesium "scalar") (serialize-qp "minManganese" $min_manganese "scalar") (serialize-qp "maxManganese" $max_manganese "scalar") (serialize-qp "minPhosphorus" $min_phosphorus "scalar") (serialize-qp "maxPhosphorus" $max_phosphorus "scalar") (serialize-qp "minPotassium" $min_potassium "scalar") (serialize-qp "maxPotassium" $max_potassium "scalar") (serialize-qp "minSelenium" $min_selenium "scalar") (serialize-qp "maxSelenium" $max_selenium "scalar") (serialize-qp "minSodium" $min_sodium "scalar") (serialize-qp "maxSodium" $max_sodium "scalar") (serialize-qp "minSugar" $min_sugar "scalar") (serialize-qp "maxSugar" $max_sugar "scalar") (serialize-qp "minZinc" $min_zinc "scalar") (serialize-qp "maxZinc" $max_zinc "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "random" $random "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/findByNutrients" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3060,7 +3087,7 @@ export def "guess-nutrition-by-dish-name" [
   let qp = [(serialize-qp "title" $title "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/guessNutrition" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3099,7 +3126,7 @@ export def "get-recipe-information-bulk" [
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/informationBulk" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3139,13 +3166,13 @@ export def "parse-ingredients" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/parseIngredients" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3183,7 +3210,7 @@ export def "analyze-a-recipe-search-query" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/queries/analyze" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3221,7 +3248,7 @@ export def "quick-answer" [
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/quickAnswer" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3260,7 +3287,7 @@ export def "get-random-recipes" [
   let qp = [(serialize-qp "limitLicense" $limit_license "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "number" $number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/random" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3291,7 +3318,7 @@ export def "visualize-equipment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -3299,13 +3326,13 @@ export def "visualize-equipment" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeEquipment" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3337,7 +3364,7 @@ export def "visualize-ingredients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -3346,13 +3373,13 @@ export def "visualize-ingredients" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeIngredients" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3384,7 +3411,7 @@ export def "visualize-recipe-nutrition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -3393,13 +3420,13 @@ export def "visualize-recipe-nutrition" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeNutrition" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3431,7 +3458,7 @@ export def "visualize-price-breakdown" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # The language of the input. Either 'en' or 'de'. (e.g. en)
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -3440,13 +3467,13 @@ export def "visualize-price-breakdown" [
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizePriceEstimator" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3484,15 +3511,15 @@ export def "create-recipe-card" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recipes/visualizeRecipe" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body [] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let effective_ct = ($content_type | default "multipart/form-data")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3526,7 +3553,7 @@ export def "visualize-recipe-taste" [
   --normalize: oneof<nothing, bool> # Whether to normalize to the strongest taste.
   --rgb: string # Red, green, blue values for the chart color. (e.g. 75,192,192)
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
   --body: string
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -3535,13 +3562,13 @@ export def "visualize-recipe-taste" [
   let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipes/visualizeTaste" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/x-www-form-urlencoded")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3580,7 +3607,7 @@ export def "get-analyzed-recipe-instructions" [
   let qp = [(serialize-qp "stepBreakdown" $step_breakdown "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/analyzedInstructions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3622,7 +3649,7 @@ export def "create-recipe-card-get" [
   let qp = [(serialize-qp "mask" $mask "scalar") (serialize-qp "backgroundImage" $background_image "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "fontColor" $font_color "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/card") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3661,7 +3688,7 @@ export def "visualize-recipe-equipment-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3698,7 +3725,7 @@ export def "get-recipe-equipment-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3735,7 +3762,7 @@ export def "equipment-by-id-image" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/equipmentWidget.png") $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3774,7 +3801,7 @@ export def "get-recipe-information" [
   let qp = [(serialize-qp "includeNutrition" $include_nutrition "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/information") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3814,7 +3841,7 @@ export def "visualize-recipe-ingredients-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3851,7 +3878,7 @@ export def "get-recipe-ingredients-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3890,7 +3917,7 @@ export def "ingredients-by-id-image" [
   let qp = [(serialize-qp "measure" $measure "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/ingredientWidget.png") $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3932,7 +3959,7 @@ export def "recipe-nutrition-label-widget" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar") (serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionLabel") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3973,7 +4000,7 @@ export def "recipe-nutrition-label-image" [
   let qp = [(serialize-qp "showOptionalNutrients" $show_optional_nutrients "scalar") (serialize-qp "showZeroValues" $show_zero_values "scalar") (serialize-qp "showIngredients" $show_ingredients "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionLabel.png") $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4005,7 +4032,7 @@ export def "visualize-recipe-nutrition-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
+  --hdr-accept: string@accept-completer # Accept header. (e.g. application/json) (spec name: Accept)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4013,9 +4040,9 @@ export def "visualize-recipe-nutrition-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4052,7 +4079,7 @@ export def "get-recipe-nutrition-widget-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4089,7 +4116,7 @@ export def "recipe-nutrition-by-id-image" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/nutritionWidget.png") $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4128,7 +4155,7 @@ export def "visualize-recipe-price-breakdown-by-id" [
   let qp = [(serialize-qp "defaultCss" $default_css "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4165,7 +4192,7 @@ export def "get-recipe-price-breakdown-by-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4202,7 +4229,7 @@ export def "price-breakdown-by-id-image" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/priceBreakdownWidget.png") $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4242,7 +4269,7 @@ export def "get-similar-recipes" [
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "limitLicense" $limit_license "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/similar") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4279,7 +4306,7 @@ export def "summarize-recipe" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/summary") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4319,7 +4346,7 @@ export def "visualize-recipe-taste-by-id" [
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget") $qp $auth.query)
   let accept_val = "text/html"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4358,7 +4385,7 @@ export def "get-recipe-taste-by-id" [
   let qp = [(serialize-qp "normalize" $normalize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4398,7 +4425,7 @@ export def "recipe-taste-by-id-image" [
   let qp = [(serialize-qp "normalize" $normalize "scalar") (serialize-qp "rgb" $rgb "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recipes/{id}/tasteWidget.png") $qp $auth.query)
   let accept_val = "image/png"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4438,9 +4465,9 @@ export def "connect-user" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/connect" $auth.query)
   let req_body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

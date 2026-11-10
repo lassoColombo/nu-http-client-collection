@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -197,9 +224,9 @@ export def "get-v3-affiliates-search-images" [
   let qp = [(serialize-qp "phrase" $phrase "scalar") (serialize-qp "style" $style "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/affiliates/search/images" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -233,9 +260,9 @@ export def "get-v3-affiliates-search-videos" [
   let qp = [(serialize-qp "phrase" $phrase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/affiliates/search/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -274,9 +301,9 @@ export def "get-v3-artists-images" [
   let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/images" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -315,9 +342,9 @@ export def "get-v3-artists-videos" [
   let qp = [(serialize-qp "artist_name" $artist_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/artists/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -353,7 +380,7 @@ export def "put-v3-asset-changes-change-sets" [
   let qp = [(serialize-qp "channel_id" $channel_id "scalar") (serialize-qp "batch_size" $batch_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/asset-changes/change-sets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -388,7 +415,7 @@ export def "delete-v3-asset-changes-change-sets-change-set-id" [
   if ($change_set_id | is-empty) { error make --unspanned { msg: "path parameter 'change-set-id' must be non-empty" } }
   let full_url = (build-url $base ({change_set_id: (encode-path-segment $change_set_id)} | format pattern "/v3/asset-changes/change-sets/{change_set_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -421,7 +448,7 @@ export def "get-v3-asset-changes-channels" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/asset-changes/channels" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -460,11 +487,11 @@ export def "post-v3-asset-licensing-asset-id" [
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
   let full_url = (build-url $base ({asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/asset-licensing/{asset_id}") $auth.query)
   let req_body = {"extended_licenses": $extended_licenses, "use_team_credits": $use_team_credits} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -500,9 +527,9 @@ export def "get-v3-asset-management-assets-send-events" [
   let qp = [(serialize-qp "last_offset" $last_offset "scalar") (serialize-qp "event_count" $event_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/asset-management/assets/send-events" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -541,9 +568,9 @@ export def "get-v3-boards" [
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "board_relationship" $board_relationship "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/boards" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -580,11 +607,11 @@ export def "post-v3-boards" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/boards" $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -620,9 +647,9 @@ export def "delete-v3-boards-board-id" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -658,9 +685,9 @@ export def "get-v3-boards-board-id" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -699,11 +726,11 @@ export def "put-v3-boards-board-id" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}") $auth.query)
   let req_body = {"description": $description, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -741,9 +768,9 @@ export def "delete-v3-boards-board-id-assets" [
   let qp = [(serialize-qp "asset_ids" $asset_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/assets") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -781,11 +808,11 @@ export def "put-v3-boards-board-id-assets" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/assets") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -823,9 +850,9 @@ export def "delete-v3-boards-board-id-assets-asset-id" [
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/boards/{board_id}/assets/{asset_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -863,9 +890,9 @@ export def "put-v3-boards-board-id-assets-asset-id" [
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), asset_id: (encode-path-segment $asset_id)} | format pattern "/v3/boards/{board_id}/assets/{asset_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -901,9 +928,9 @@ export def "get-v3-boards-board-id-comments" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/comments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -941,11 +968,11 @@ export def "post-v3-boards-board-id-comments" [
   if ($board_id | is-empty) { error make --unspanned { msg: "path parameter 'board_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id)} | format pattern "/v3/boards/{board_id}/comments") $auth.query)
   let req_body = {"text": $text} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -983,9 +1010,9 @@ export def "delete-v3-boards-board-id-comments-comment-id" [
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({board_id: (encode-path-segment $board_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/v3/boards/{board_id}/comments/{comment_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1019,9 +1046,9 @@ export def "get-v3-collections" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/collections" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1055,9 +1082,9 @@ export def "get-v3-countries" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/countries" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1091,9 +1118,9 @@ export def "get-v3-customers-current" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/customers/current" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1135,9 +1162,9 @@ export def "get-v3-downloads" [
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "use_time" $use_time "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/downloads" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1183,11 +1210,11 @@ export def "post-v3-downloads-images-id" [
   let qp = [(serialize-qp "auto_download" $auto_download "scalar") (serialize-qp "file_type" $file_type "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "use_team_credits" $use_team_credits "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/downloads/images/{id}") $qp $auth.query)
   let req_body = {"download_notes": $download_notes, "project_code": $project_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1232,11 +1259,11 @@ export def "post-v3-downloads-videos-id" [
   let qp = [(serialize-qp "auto_download" $auto_download "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_type" $product_type "scalar") (serialize-qp "use_team_credits" $use_team_credits "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/downloads/videos/{id}") $qp $auth.query)
   let req_body = {"download_notes": $download_notes, "project_code": $project_code} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1273,9 +1300,9 @@ export def "get-v3-events" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1313,9 +1340,9 @@ export def "get-v3-events-id" [
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/events/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1352,9 +1379,9 @@ export def "get-v3-images" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/images" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1392,9 +1419,9 @@ export def "get-v3-images-id" [
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1432,9 +1459,9 @@ export def "get-v3-images-id-downloadhistory" [
   let qp = [(serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/downloadhistory") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1474,9 +1501,9 @@ export def "get-v3-images-id-same-series" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/same-series") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1516,9 +1543,9 @@ export def "get-v3-images-id-similar" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/images/{id}/similar") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1554,9 +1581,9 @@ export def "get-v3-orders-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/orders/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1592,9 +1619,9 @@ export def "get-v3-products" [
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/products" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1634,9 +1661,9 @@ export def "get-v3-purchased-assets" [
   let qp = [(serialize-qp "date_to" $date_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "company_purchases" $company_purchases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/purchased-assets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1673,9 +1700,9 @@ export def "put-v3-search-by-image-uploads-file-name" [
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'file-name' must be non-empty" } }
   let full_url = (build-url $base ({file_name: (encode-path-segment $file_name)} | format pattern "/v3/search/by-image/uploads/{file_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1719,9 +1746,9 @@ export def "get-v3-search-events" [
   let qp = [(serialize-qp "editorial_segment" $editorial_segment "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1782,9 +1809,9 @@ export def "get-v3-search-images" [
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1849,9 +1876,9 @@ export def "get-v3-search-images-creative" [
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1897,9 +1924,9 @@ export def "get-v3-search-images-creative-by-image" [
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/creative/by-image" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1966,9 +1993,9 @@ export def "get-v3-search-images-editorial" [
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_segments" $editorial_segments "csv") (serialize-qp "embed_content_only" $embed_content_only "scalar") (serialize-qp "ethnicity" $ethnicity "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "file_types" $file_types "csv") (serialize-qp "graphical_styles" $graphical_styles "csv") (serialize-qp "graphical_styles_filter_type" $graphical_styles_filter_type "scalar") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "minimum_size" $minimum_size "scalar") (serialize-qp "number_of_people" $number_of_people "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "minimum_quality_rank" $minimum_quality_rank "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/images/editorial" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2034,9 +2061,9 @@ export def "get-v3-search-videos-creative" [
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "exclude_nudity" $exclude_nudity "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "exclude_keyword_ids" $exclude_keyword_ids "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "license_models" $license_models "csv") (serialize-qp "orientations" $orientations "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "safe_search" $safe_search "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2082,9 +2109,9 @@ export def "get-v3-search-videos-creative-by-image" [
   let qp = [(serialize-qp "asset_id" $asset_id "scalar") (serialize-qp "exclude_editorial_use_only" $exclude_editorial_use_only "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "image_url" $image_url "scalar") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "product_types" $product_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/creative/by-image" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2147,9 +2174,9 @@ export def "get-v3-search-videos-editorial" [
   let qp = [(serialize-qp "age_of_people" $age_of_people "csv") (serialize-qp "artists" $artists "scalar") (serialize-qp "aspect_ratios" $aspect_ratios "csv") (serialize-qp "collection_codes" $collection_codes "csv") (serialize-qp "collections_filter_type" $collections_filter_type "scalar") (serialize-qp "compositions" $compositions "csv") (serialize-qp "download_product" $download_product "scalar") (serialize-qp "editorial_video_types" $editorial_video_types "csv") (serialize-qp "fields" $fields "csv") (serialize-qp "format_available" $format_available "scalar") (serialize-qp "frame_rates" $frame_rates "csv") (serialize-qp "image_techniques" $image_techniques "csv") (serialize-qp "include_related_searches" $include_related_searches "scalar") (serialize-qp "keyword_ids" $keyword_ids "csv") (serialize-qp "min_clip_length" $min_clip_length "scalar") (serialize-qp "max_clip_length" $max_clip_length "scalar") (serialize-qp "orientations" $orientations "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "phrase" $phrase "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "specific_people" $specific_people "csv") (serialize-qp "release_status" $release_status "scalar") (serialize-qp "facet_fields" $facet_fields "csv") (serialize-qp "include_facets" $include_facets "scalar") (serialize-qp "facet_max_count" $facet_max_count "scalar") (serialize-qp "viewpoints" $viewpoints "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/search/videos/editorial" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language, "GI-Country-Code": $gi_country_code} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2186,9 +2213,9 @@ export def "put-v3-usage-batches-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/usage-batches/{id}") $auth.query)
   let req_body = {"asset_usages": $asset_usages} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2225,9 +2252,9 @@ export def "get-v3-videos" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/videos" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2265,9 +2292,9 @@ export def "get-v3-videos-id" [
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2305,9 +2332,9 @@ export def "get-v3-videos-id-downloadhistory" [
   let qp = [(serialize-qp "company_downloads" $company_downloads "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/downloadhistory") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2347,9 +2374,9 @@ export def "get-v3-videos-id-same-series" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/same-series") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2389,9 +2416,9 @@ export def "get-v3-videos-id-similar" [
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/videos/{id}/similar") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Language": $accept_language} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

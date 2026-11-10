@@ -85,9 +85,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -108,6 +110,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -327,7 +354,7 @@ export def "get-car-dealer-inventory-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/car/dealer/inventory/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -366,7 +393,7 @@ export def "get-recall-history" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/car/recall/{vin}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -404,7 +431,7 @@ export def "get-client-configure-get" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/client/configure/get" $qp $auth.query)
   let accept_val = "text/csv"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -444,10 +471,10 @@ export def "set" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/client/configure/set" $qp $auth.query)
   let req_body = {"csvfile": $csvfile} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let req_body = ($req_body | default {})
   let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["csvfile"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
@@ -488,7 +515,7 @@ export def "crm-check" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sale_date" $sale_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/crm_check/car/{vin}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -526,7 +553,7 @@ export def "get-dealer-car-uk-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/uk/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -565,7 +592,7 @@ export def "get-dealer" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -603,7 +630,7 @@ export def "get-dealer-heavy-equipment-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/heavy-equipment/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -641,7 +668,7 @@ export def "get-dealer-motorcycle-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/motorcycle/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -679,7 +706,7 @@ export def "get-dealer-rv-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/rv/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -732,7 +759,7 @@ export def "dealer-search" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers/car" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -784,7 +811,7 @@ export def "get-dealers-car-uk" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers/car/uk" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -836,7 +863,7 @@ export def "get-dealers-heavy-equipment" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers/heavy-equipment" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -888,7 +915,7 @@ export def "get-dealers-motorcycle" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers/motorcycle" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -940,7 +967,7 @@ export def "get-dealers-rv" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "listing_count_range" $listing_count_range "scalar") (serialize-qp "inventory_url" $inventory_url "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "provider" $provider "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dealers/rv" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -978,7 +1005,7 @@ export def "decode-via-epi" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/epi/{vin}/specs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1018,7 +1045,7 @@ export def "decode-via-neo-vin" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "include_generic" $include_generic "scalar") (serialize-qp "force_decode" $force_decode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/neovin/{vin}/specs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1056,7 +1083,7 @@ export def "get-decode-car-vin-specs" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/{vin}/specs") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1096,7 +1123,7 @@ export def "get-history-car-uk-vrm" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vrm: (encode-path-segment $vrm)} | format pattern "/history/car/uk/{vrm}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1138,7 +1165,7 @@ export def "get-car-history" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/history/car/{vin}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1178,7 +1205,7 @@ export def "get-cached-image" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), image_id: (encode-path-segment $image_id)} | format pattern "/image/cache/car/{listing_id}/{image_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1217,7 +1244,7 @@ export def "get-listing-car-auction-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1254,7 +1281,7 @@ export def "get-listing-car-auction-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1292,7 +1319,7 @@ export def "get-listing-car-auction-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1331,7 +1358,7 @@ export def "get-listing-car-fsbo-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1368,7 +1395,7 @@ export def "get-listing-car-fsbo-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1406,7 +1433,7 @@ export def "get-listing-car-fsbo-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1444,7 +1471,7 @@ export def "get-listing-car-uk-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1481,7 +1508,7 @@ export def "get-listing-car-uk-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1519,7 +1546,7 @@ export def "get-listing-car-uk-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1559,7 +1586,7 @@ export def "get-listing" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1596,7 +1623,7 @@ export def "get-listing-car-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1634,7 +1661,7 @@ export def "get-listing-car-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1671,7 +1698,7 @@ export def "get-listing-heavy-equipment-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1708,7 +1735,7 @@ export def "get-listing-heavy-equipment-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1745,7 +1772,7 @@ export def "get-listing-heavy-equipment-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1782,7 +1809,7 @@ export def "get-listing-motorcycle-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1819,7 +1846,7 @@ export def "get-listing-motorcycle-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1856,7 +1883,7 @@ export def "get-listing-motorcycle-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1893,7 +1920,7 @@ export def "get-listing-rv-uk-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1930,7 +1957,7 @@ export def "get-listing-rv-uk-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1967,7 +1994,7 @@ export def "get-listing-rv-uk-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2004,7 +2031,7 @@ export def "get-listing-rv-id" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2041,7 +2068,7 @@ export def "get-listing-rv-id-extra" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/extra") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2078,7 +2105,7 @@ export def "get-listing-rv-id-media" [
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/media") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2171,7 +2198,7 @@ export def "get-mds" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "exact" $exact "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "include_sold" $include_sold "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/mds/car" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2212,7 +2239,7 @@ export def "get-popular-cars" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/popular/cars" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2273,7 +2300,7 @@ export def "predict-car-price" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "is_certified" $is_certified "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "highway_mpg" $highway_mpg "scalar") (serialize-qp "city_mpg" $city_mpg "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/predict/car/price" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2317,7 +2344,7 @@ export def "fare-value" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/predict/car/uk/fmv" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2372,7 +2399,7 @@ export def "predict-uk-car-price" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "highway_mpg" $highway_mpg "scalar") (serialize-qp "city_mpg" $city_mpg "scalar") (serialize-qp "combined_mpg" $combined_mpg "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "miles" $miles "scalar") (serialize-qp "zip" $zip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/predict/car/uk/price" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2418,7 +2445,7 @@ export def "get-sales-count" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sales/car" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2555,7 +2582,7 @@ export def "get-search-car-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "price_change" $price_change "scalar") (serialize-qp "price_change_range" $price_change_range "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "high_value_features" $high_value_features "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2679,9 +2706,9 @@ export def "search-and-rank-car" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/active/rank" $qp $auth.query)
   let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2721,9 +2748,9 @@ export def "rank-car" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/active/rank/listings" $qp $auth.query)
   let req_body = {"listing_ids": $listing_ids, "ranking_criteria": $ranking_criteria} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2856,7 +2883,7 @@ export def "get-search-car-auction-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "title_type" $title_type "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/auction/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2887,7 +2914,7 @@ export def "auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string)
+  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -2929,7 +2956,7 @@ export def "auto-complete" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/auto-complete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3062,7 +3089,7 @@ export def "get-search-car-fsbo-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "mm" $mm "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "exclude_dealer_listings" $exclude_dealer_listings "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/fsbo/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3140,7 +3167,7 @@ export def "oem-search" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "offer_type" $offer_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "msrp" $msrp "scalar") (serialize-qp "apr" $apr "scalar") (serialize-qp "monthly" $monthly "scalar") (serialize-qp "monthly_per_thousand" $monthly_per_thousand "scalar") (serialize-qp "down_payment" $down_payment "scalar") (serialize-qp "due_at_signing" $due_at_signing "scalar") (serialize-qp "security_deposit" $security_deposit "scalar") (serialize-qp "disposition_fee" $disposition_fee "scalar") (serialize-qp "acquisition_fee" $acquisition_fee "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "dealer_contribution" $dealer_contribution "scalar") (serialize-qp "mileage_charge" $mileage_charge "scalar") (serialize-qp "mileage_charge_limit" $mileage_charge_limit "scalar") (serialize-qp "cashback_amount" $cashback_amount "scalar") (serialize-qp "cashback_target_group" $cashback_target_group "scalar") (serialize-qp "lease_end_purchase_option" $lease_end_purchase_option "scalar") (serialize-qp "net_capitalised_cost" $net_capitalised_cost "scalar") (serialize-qp "gross_capitalised_cost" $gross_capitalised_cost "scalar") (serialize-qp "total_monthly_payment" $total_monthly_payment "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/incentive/oem" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3273,7 +3300,7 @@ export def "get-search-car-recents" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "sold" $sold "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "price_change_range" $price_change_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/recents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3406,7 +3433,7 @@ export def "search" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "co2_emissions" $co2_emissions "scalar") (serialize-qp "insurance_group" $insurance_group "scalar") (serialize-qp "vehicle_registration_mark" $vehicle_registration_mark "scalar") (serialize-qp "vehicle_registration_date_range" $vehicle_registration_date_range "scalar") (serialize-qp "num_owners" $num_owners "scalar") (serialize-qp "inventory_count_range" $inventory_count_range "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "write_off_category" $write_off_category "scalar") (serialize-qp "exclude_write_off_category" $exclude_write_off_category "scalar") (serialize-qp "fca_status" $fca_status "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "powertrain_type" $powertrain_type "scalar") (serialize-qp "client_filters" $client_filters "scalar") (serialize-qp "boost" $boost "scalar") (serialize-qp "car_location_seller_name" $car_location_seller_name "scalar") (serialize-qp "car_location_street" $car_location_street "scalar") (serialize-qp "car_location_city" $car_location_city "scalar") (serialize-qp "car_location_county" $car_location_county "scalar") (serialize-qp "car_location_zip" $car_location_zip "scalar") (serialize-qp "car_location_latitude" $car_location_latitude "scalar") (serialize-qp "car_location_longitude" $car_location_longitude "scalar") (serialize-qp "price_change" $price_change "scalar") (serialize-qp "price_change_range" $price_change_range "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "uvc_id" $uvc_id "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "combined_mpg_range" $combined_mpg_range "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "min_photo_links" $min_photo_links "scalar") (serialize-qp "min_photo_links_cached" $min_photo_links_cached "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/uk/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3547,7 +3574,7 @@ export def "get-search-car-uk-recents" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "include_lease" $include_lease "scalar") (serialize-qp "include_finance" $include_finance "scalar") (serialize-qp "lease_term" $lease_term "scalar") (serialize-qp "lease_down_payment" $lease_down_payment "scalar") (serialize-qp "lease_emp" $lease_emp "scalar") (serialize-qp "finance_loan_term" $finance_loan_term "scalar") (serialize-qp "finance_loan_apr" $finance_loan_apr "scalar") (serialize-qp "finance_emp" $finance_emp "scalar") (serialize-qp "finance_down_payment" $finance_down_payment "scalar") (serialize-qp "finance_down_payment_per" $finance_down_payment_per "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "carfax_1_owner" $carfax_1_owner "scalar") (serialize-qp "carfax_clean_title" $carfax_clean_title "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "vins" $vins "scalar") (serialize-qp "taxonomy_vins" $taxonomy_vins "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "match" $match "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_aspiration" $engine_aspiration "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "highway_mpg_range" $highway_mpg_range "scalar") (serialize-qp "city_mpg_range" $city_mpg_range "scalar") (serialize-qp "combined_mpg_range" $combined_mpg_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "dom_range" $dom_range "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "first_seen_at_source_range" $first_seen_at_source_range "scalar") (serialize-qp "first_seen_at_mc_range" $first_seen_at_mc_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "first_seen_at_source_days" $first_seen_at_source_days "scalar") (serialize-qp "first_seen_at_mc_days" $first_seen_at_mc_days "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "include_non_vin_listings" $include_non_vin_listings "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "nodedup" $nodedup "scalar") (serialize-qp "dedup" $dedup "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealership_group_name" $dealership_group_name "scalar") (serialize-qp "trim_o" $trim_o "scalar") (serialize-qp "trim_r" $trim_r "scalar") (serialize-qp "dom_active_range" $dom_active_range "scalar") (serialize-qp "dom_180_range" $dom_180_range "scalar") (serialize-qp "exclude_certified" $exclude_certified "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "dealer_type" $dealer_type "scalar") (serialize-qp "photo_links" $photo_links "scalar") (serialize-qp "photo_links_cached" $photo_links_cached "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "sold" $sold "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "exclude_dealer_ids" $exclude_dealer_ids "scalar") (serialize-qp "exclude_sources" $exclude_sources "scalar") (serialize-qp "in_transit" $in_transit "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "insurance_group" $insurance_group "scalar") (serialize-qp "vrm" $vrm "scalar") (serialize-qp "num_owners" $num_owners "scalar") (serialize-qp "variant" $variant "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "write_off_category" $write_off_category "scalar") (serialize-qp "fca_status" $fca_status "scalar") (serialize-qp "active_inventory_date_range" $active_inventory_date_range "scalar") (serialize-qp "engine_size_range" $engine_size_range "scalar") (serialize-qp "price_change_range" $price_change_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/car/uk/recents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3625,7 +3652,7 @@ export def "get-search-heavy-equipment-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "sub_category" $sub_category "scalar") (serialize-qp "hours_used_range" $hours_used_range "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/heavy-equipment/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3655,7 +3682,7 @@ export def "get-search-heavy-equipment-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-1 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string)
+  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3685,7 +3712,7 @@ export def "get-search-heavy-equipment-auto-complete" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/heavy-equipment/auto-complete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3761,7 +3788,7 @@ export def "get-search-motorcycle-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/motorcycle/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3791,7 +3818,7 @@ export def "get-search-motorcycle-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-2 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string)
+  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3821,7 +3848,7 @@ export def "get-search-motorcycle-auto-complete" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/motorcycle/auto-complete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3908,7 +3935,7 @@ export def "get-search-rv-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "model_o" $model_o "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "stock_no" $stock_no "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "class" $class "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "msa_code" $msa_code "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "slideouts" $slideouts "scalar") (serialize-qp "length_range" $length_range "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "fresh_water_capacity" $fresh_water_capacity "scalar") (serialize-qp "sleeps" $sleeps "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "number_of_awnings" $number_of_awnings "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "gvwr" $gvwr "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/rv/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3938,7 +3965,7 @@ export def "get-search-rv-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-3 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string)
+  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -3968,7 +3995,7 @@ export def "get-search-rv-auto-complete" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "term_counts" $term_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "seller_type" $seller_type "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/rv/auto-complete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4057,7 +4084,7 @@ export def "get-search-rv-uk-active" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "price_range" $price_range "scalar") (serialize-qp "miles_range" $miles_range "scalar") (serialize-qp "msrp_range" $msrp_range "scalar") (serialize-qp "year_range" $year_range "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "source" $source "scalar") (serialize-qp "dealer_name" $dealer_name "scalar") (serialize-qp "dealer_id" $dealer_id "scalar") (serialize-qp "exterior_color" $exterior_color "scalar") (serialize-qp "interior_color" $interior_color "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "postal_code" $postal_code "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "rows" $rows "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "facets" $facets "scalar") (serialize-qp "range_facets" $range_facets "scalar") (serialize-qp "facet_sort" $facet_sort "scalar") (serialize-qp "stats" $stats "scalar") (serialize-qp "last_seen_range" $last_seen_range "scalar") (serialize-qp "first_seen_range" $first_seen_range "scalar") (serialize-qp "last_seen_days" $last_seen_days "scalar") (serialize-qp "first_seen_days" $first_seen_days "scalar") (serialize-qp "base_exterior_color" $base_exterior_color "scalar") (serialize-qp "base_interior_color" $base_interior_color "scalar") (serialize-qp "seating_capacity" $seating_capacity "scalar") (serialize-qp "cylinders" $cylinders "scalar") (serialize-qp "doors" $doors "scalar") (serialize-qp "mtplm" $mtplm "scalar") (serialize-qp "sub_category" $sub_category "scalar") (serialize-qp "availability_status" $availability_status "scalar") (serialize-qp "berths" $berths "scalar") (serialize-qp "inventory_type" $inventory_type "scalar") (serialize-qp "width_range" $width_range "scalar") (serialize-qp "exterior_length_range" $exterior_length_range "scalar") (serialize-qp "interior_length_range" $interior_length_range "scalar") (serialize-qp "drive_type" $drive_type "scalar") (serialize-qp "steering" $steering "scalar") (serialize-qp "chassis" $chassis "scalar") (serialize-qp "transmission" $transmission "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/rv/uk/active" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4087,7 +4114,7 @@ export def "get-specs-car-auto-complete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
   --field: string@field-completer-4 # Field name for which you want auto-completion (required, format: string)
-  --qp-input: string # Input entered so far (required, format: string)
+  --qp-input: string # Input entered so far (required, format: string) (spec name: input)
   --year: string # To filter listing on their year
   --make: string # To filter listings on their make
   --model: string # To filter listings on their model
@@ -4111,7 +4138,7 @@ export def "get-specs-car-auto-complete" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "input" $qp_input "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar") (serialize-qp "ignore_case" $ignore_case "scalar") (serialize-qp "facet_min_count" $facet_min_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/specs/car/auto-complete" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4162,7 +4189,7 @@ export def "get-taxonomy-terms" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "field" $field "scalar") (serialize-qp "year" $year "scalar") (serialize-qp "make" $make "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "trim" $trim "scalar") (serialize-qp "body_type" $body_type "scalar") (serialize-qp "body_subtype" $body_subtype "scalar") (serialize-qp "vehicle_type" $vehicle_type "scalar") (serialize-qp "transmission" $transmission "scalar") (serialize-qp "drivetrain" $drivetrain "scalar") (serialize-qp "fuel_type" $fuel_type "scalar") (serialize-qp "engine" $engine "scalar") (serialize-qp "engine_size" $engine_size "scalar") (serialize-qp "engine_block" $engine_block "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/specs/car/terms" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4206,7 +4233,7 @@ export def "get-daily-stats" [
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "car_type" $car_type "scalar") (serialize-qp "ymm" $ymm "scalar") (serialize-qp "ymmt" $ymmt "scalar") (serialize-qp "taxonomy_vin" $taxonomy_vin "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "city_state" $city_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/stats/car" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

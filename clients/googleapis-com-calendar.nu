@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -207,9 +234,9 @@ export def "calendar-calendars-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/calendars" $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -253,7 +280,7 @@ export def "calendar-calendars-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -297,7 +324,7 @@ export def "calendar-calendars-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -350,9 +377,9 @@ export def "calendar-calendars-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -405,9 +432,9 @@ export def "calendar-calendars-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}") $qp $auth.query)
   let req_body = {"conferenceProperties": $conference_properties, "description": $description, "etag": $etag, "id": $id, "kind": $kind, "location": $location, "summary": $summary, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -455,7 +482,7 @@ export def "calendar-acl-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -506,9 +533,9 @@ export def "calendar-acl-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -557,7 +584,7 @@ export def "calendar-acl-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -567,9 +594,9 @@ export def "calendar-acl-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/acl/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -615,7 +642,7 @@ export def "calendar-acl-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -661,7 +688,7 @@ export def "calendar-acl-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -714,9 +741,9 @@ export def "calendar-acl-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -769,9 +796,9 @@ export def "calendar-acl-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/calendars/{calendar_id}/acl/{rule_id}") $qp $auth.query)
   let req_body = {"etag": $etag, "id": $id, "kind": $kind, "role": $role, "scope": $scope} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -815,7 +842,7 @@ export def "calendar-calendars-clear" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/clear") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -877,7 +904,7 @@ export def "calendar-events-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -967,9 +994,9 @@ export def "calendar-events-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1056,9 +1083,9 @@ export def "calendar-events-import" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/import") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1106,7 +1133,7 @@ export def "calendar-events-quick-add" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/quickAdd") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1169,7 +1196,7 @@ export def "calendar-events-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -1179,9 +1206,9 @@ export def "calendar-events-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "eventTypes" $event_types "multi") (serialize-qp "iCalUID" $i_cal_uid "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "privateExtendedProperty" $private_extended_property "multi") (serialize-qp "q" $q "scalar") (serialize-qp "sharedExtendedProperty" $shared_extended_property "multi") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHiddenInvitations" $show_hidden_invitations "scalar") (serialize-qp "singleEvents" $single_events "scalar") (serialize-qp "syncToken" $sync_token "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "updatedMin" $updated_min "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/calendars/{calendar_id}/events/watch") $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1229,7 +1256,7 @@ export def "calendar-events-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1278,7 +1305,7 @@ export def "calendar-events-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1371,9 +1398,9 @@ export def "calendar-events-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1466,9 +1493,9 @@ export def "calendar-events-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "conferenceDataVersion" $conference_data_version "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar") (serialize-qp "supportsAttachments" $supports_attachments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}") $qp $auth.query)
   let req_body = {"anyoneCanAddSelf": $anyone_can_add_self, "attachments": $attachments, "attendees": $attendees, "attendeesOmitted": $attendees_omitted, "colorId": $color_id, "conferenceData": $conference_data, "created": $created, "creator": $creator, "description": $description, "end": $end, "endTimeUnspecified": $end_time_unspecified, "etag": $etag, "eventType": $event_type, "extendedProperties": $extended_properties, "gadget": $gadget, "guestsCanInviteOthers": $guests_can_invite_others, "guestsCanModify": $guests_can_modify, "guestsCanSeeOtherGuests": $guests_can_see_other_guests, "hangoutLink": $hangout_link, "htmlLink": $html_link, "iCalUID": $i_cal_uid, "id": $id, "kind": $kind, "location": $location, "locked": $locked, "organizer": $organizer, "originalStartTime": $original_start_time, "privateCopy": $private_copy, "recurrence": $recurrence, "recurringEventId": $recurring_event_id, "reminders": $reminders, "sequence": $sequence, "source": $source, "start": $start, "status": $status, "summary": $summary, "transparency": $transparency, "updated": $updated, "visibility": $visibility, "workingLocationProperties": $working_location_properties} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1523,7 +1550,7 @@ export def "calendar-events-instances" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "alwaysIncludeEmail" $always_include_email "scalar") (serialize-qp "maxAttendees" $max_attendees "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "originalStart" $original_start "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "timeMax" $time_max "scalar") (serialize-qp "timeMin" $time_min "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/instances") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1573,7 +1600,7 @@ export def "calendar-events-move" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "sendNotifications" $send_notifications "scalar") (serialize-qp "sendUpdates" $send_updates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id), event_id: (encode-path-segment $event_id)} | format pattern "/calendars/{calendar_id}/events/{event_id}/move") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1617,7 +1644,7 @@ export def "calendar-channels-stop" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> any {
   let input = $in
@@ -1626,9 +1653,9 @@ export def "calendar-channels-stop" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels/stop" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1670,7 +1697,7 @@ export def "calendar-colors-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/colors" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1719,9 +1746,9 @@ export def "calendar-freebusy-query" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/freeBusy" $qp $auth.query)
   let req_body = {"calendarExpansionMax": $calendar_expansion_max, "groupExpansionMax": $group_expansion_max, "items": $items, "timeMax": $time_max, "timeMin": $time_min, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1769,7 +1796,7 @@ export def "calendar-calendar-list-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minAccessRole" $min_access_role "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1832,9 +1859,9 @@ export def "calendar-calendar-list-insert" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList" $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1884,7 +1911,7 @@ export def "calendar-calendar-list-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -1893,9 +1920,9 @@ export def "calendar-calendar-list-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minAccessRole" $min_access_role "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showDeleted" $show_deleted "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/calendarList/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1939,7 +1966,7 @@ export def "calendar-calendar-list-delete" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1983,7 +2010,7 @@ export def "calendar-calendar-list-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2048,9 +2075,9 @@ export def "calendar-calendar-list-patch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2115,9 +2142,9 @@ export def "calendar-calendar-list-update" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "colorRgbFormat" $color_rgb_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({calendar_id: (encode-path-segment $calendar_id)} | format pattern "/users/me/calendarList/{calendar_id}") $qp $auth.query)
   let req_body = {"accessRole": $access_role, "backgroundColor": $background_color, "colorId": $color_id, "conferenceProperties": $conference_properties, "defaultReminders": $default_reminders, "deleted": $deleted, "description": $description, "etag": $etag, "foregroundColor": $foreground_color, "hidden": $hidden, "id": $id, "kind": $kind, "location": $location, "notificationSettings": $notification_settings, "primary": $primary, "selected": $selected, "summary": $summary, "summaryOverride": $summary_override, "timeZone": $time_zone} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2162,7 +2189,7 @@ export def "calendar-settings-list" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/settings" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2209,7 +2236,7 @@ export def "calendar-settings-watch" [
   --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resource-id: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resource-uri: string # A version-specific identifier for the watched resource.
-  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
+  --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional. (spec name: token)
   --type: string # The type of delivery mechanism used for this channel. Valid values are "web_hook" (or "webhook"). Both values refer to a channel where Http requests are used to deliver messages.
 ]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
@@ -2218,9 +2245,9 @@ export def "calendar-settings-watch" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "syncToken" $sync_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users/me/settings/watch" $qp $auth.query)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2264,7 +2291,7 @@ export def "calendar-settings-get" [
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({setting: (encode-path-segment $setting)} | format pattern "/users/me/settings/{setting}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

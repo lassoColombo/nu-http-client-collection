@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -179,9 +206,9 @@ export def "get-tyk-apis" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/apis/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -210,7 +237,7 @@ export def "post-tyk-apis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-id: string
-  --body-auth: record # shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
+  --body-auth: record # shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool} (spec name: auth)
   --definition: record # shape: {key?: string, location?: string}
   --enable-jwt: oneof<nothing, bool>
   --enable-signature-checking: oneof<nothing, bool>
@@ -236,9 +263,9 @@ export def "post-tyk-apis" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tyk/apis/" $auth.query)
   let req_body = {"api_id": $api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -275,9 +302,9 @@ export def "delete-tyk-apis-api-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -314,9 +341,9 @@ export def "get-tyk-apis-api-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -346,8 +373,8 @@ export def "put-tyk-apis-api-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-tyk-authorization: string # tyk gateway shared secret (required, format: string)
-  --body-api-id: string
-  --body-auth: record # shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool}
+  --body-api-id: string # (spec name: api_id)
+  --body-auth: record # shape: {auth_header_name?: string, use_cookie?: bool, use_param?: bool} (spec name: auth)
   --definition: record # shape: {key?: string, location?: string}
   --enable-jwt: oneof<nothing, bool>
   --enable-signature-checking: oneof<nothing, bool>
@@ -375,11 +402,11 @@ export def "put-tyk-apis-api-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/apis/{api_id}") $auth.query)
   let req_body = {"api_id": $body_api_id, "auth": $body_auth, "definition": $definition, "enable_jwt": $enable_jwt, "enable_signature_checking": $enable_signature_checking, "hmac_allowed_clock_skew": $hmac_allowed_clock_skew, "id": $id, "jwt_identity_base_field": $jwt_identity_base_field, "jwt_policy_field_name": $jwt_policy_field_name, "jwt_signing_method": $jwt_signing_method, "jwt_source": $jwt_source, "name": $name, "notifications": $notifications, "oauth_meta": $oauth_meta, "org_id": $org_id, "slug": $slug, "uptime_tests": $uptime_tests, "use_basic_auth": $use_basic_auth, "use_keyless": $use_keyless, "use_oauth2": $use_oauth2, "version_data": $version_data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -417,9 +444,9 @@ export def "get-tyk-health" [
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/health/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -457,9 +484,9 @@ export def "get-tyk-keys" [
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -517,11 +544,11 @@ export def "post-tyk-keys-create" [
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tyk/keys/create" $qp $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -561,9 +588,9 @@ export def "delete-tyk-keys-key-id" [
   let qp = [(serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -621,11 +648,11 @@ export def "post-tyk-keys-key-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -687,11 +714,11 @@ export def "put-tyk-keys-key-id" [
   let qp = [(serialize-qp "suppress_reset" $suppress_reset "scalar") (serialize-qp "api_id" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/keys/{key_id}") $qp $auth.query)
   let req_body = {"access_rights": $access_rights, "allowance": $allowance, "apply_policy_id": $apply_policy_id, "basic_auth_data": $basic_auth_data, "expires": $expires, "hmac_enabled": $hmac_enabled, "hmac_string": $hmac_string, "is_inactive": $is_inactive, "jwt_data": $jwt_data, "meta_data": $meta_data, "monitor": $monitor, "oauth_client_id": $oauth_client_id, "org_id": $org_id, "per": $per, "quota_max": $quota_max, "quota_remaining": $quota_remaining, "quota_renewal_rate": $quota_renewal_rate, "quota_renews": $quota_renews, "rate": $rate, "tags": $tags} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -731,11 +758,11 @@ export def "post-tyk-oauth-authorize-client" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/oauth/authorize-client/" $auth.query)
   let req_body = {"response_type": $response_type, "client_id": $client_id, "redirect_uri": $redirect_uri, "key_rules": $key_rules} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -774,11 +801,11 @@ export def "post-tyk-oauth-clients-create" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/oauth/clients/create" $auth.query)
   let req_body = {"api_id": $api_id, "redirect_uri": $redirect_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -815,9 +842,9 @@ export def "get-tyk-oauth-clients-api-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/tyk/oauth/clients/{api_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -856,9 +883,9 @@ export def "delete-tyk-oauth-clients-api-id-client-id" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), client_id: (encode-path-segment $client_id)} | format pattern "/tyk/oauth/clients/{api_id}/{client_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -898,9 +925,9 @@ export def "delete-tyk-oauth-refresh-key-id" [
   let qp = [(serialize-qp "apiID" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/tyk/oauth/refresh/{key_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -935,9 +962,9 @@ export def "get-tyk-reload" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/reload/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -972,9 +999,9 @@ export def "get-tyk-reload-group" [
   if ($x_tyk_authorization == null) { error make --unspanned { msg: "required header parameter 'x-tyk-authorization' missing: pass --x-tyk-authorization" } }
   let full_url = (build-url $base "/tyk/reload/group" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-tyk-authorization": $x_tyk_authorization} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

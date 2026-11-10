@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -198,7 +225,7 @@ export def "get-sdw-rest-services-get-download" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.get_download" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -236,9 +263,9 @@ export def "post-sdw-rest-services-get-download" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sdw_rest_services.get_download" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -282,7 +309,7 @@ export def "get-sdw-rest-services-get-qid" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "qid" $qid "scalar") (serialize-qp "pageno" $pageno "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "newsort" $newsort "scalar") (serialize-qp "descending" $descending "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.get_qid" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -324,9 +351,9 @@ export def "post-sdw-rest-services-get-qid" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sdw_rest_services.get_qid" $auth.query)
   let req_body = {"output": $output, "qid": $qid, "pageno": $pageno, "callback": $callback, "newsort": $newsort, "descending": $descending, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -419,7 +446,7 @@ export def "get-sdw-rest-services-get-systems" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_fn" $p_fn "scalar") (serialize-qp "p_ct" $p_ct "scalar") (serialize-qp "p_co" $p_co "scalar") (serialize-qp "p_fips" $p_fips "scalar") (serialize-qp "p_st" $p_st "scalar") (serialize-qp "p_zip" $p_zip "scalar") (serialize-qp "p_reg" $p_reg "scalar") (serialize-qp "p_trb" $p_trb "scalar") (serialize-qp "p_act" $p_act "scalar") (serialize-qp "p_qiv" $p_qiv "scalar") (serialize-qp "p_ico" $p_ico "scalar") (serialize-qp "p_pid" $p_pid "scalar") (serialize-qp "p_owop" $p_owop "scalar") (serialize-qp "p_systyp" $p_systyp "scalar") (serialize-qp "p_swtyp" $p_swtyp "scalar") (serialize-qp "p_popsv" $p_popsv "scalar") (serialize-qp "p_cntysv" $p_cntysv "scalar") (serialize-qp "p_cs" $p_cs "scalar") (serialize-qp "p_mr" $p_mr "scalar") (serialize-qp "p_health" $p_health "scalar") (serialize-qp "p_other" $p_other "scalar") (serialize-qp "p_pn" $p_pn "scalar") (serialize-qp "p_sv" $p_sv "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_sfs" $p_sfs "scalar") (serialize-qp "p_pswpol" $p_pswpol "scalar") (serialize-qp "p_pswvio" $p_pswvio "scalar") (serialize-qp "p_pbale" $p_pbale "scalar") (serialize-qp "p_cuale" $p_cuale "scalar") (serialize-qp "p_rc350v" $p_rc350v "scalar") (serialize-qp "p_pbv" $p_pbv "scalar") (serialize-qp "p_cuv" $p_cuv "scalar") (serialize-qp "p_lcrv" $p_lcrv "scalar") (serialize-qp "p_fea" $p_fea "scalar") (serialize-qp "p_feay" $p_feay "scalar") (serialize-qp "p_feaa" $p_feaa "scalar") (serialize-qp "p_iea" $p_iea "scalar") (serialize-qp "p_ieay" $p_ieay "scalar") (serialize-qp "p_ieaa" $p_ieaa "scalar") (serialize-qp "p_qis" $p_qis "scalar") (serialize-qp "p_pfead1" $p_pfead1 "scalar") (serialize-qp "p_pfead2" $p_pfead2 "scalar") (serialize-qp "p_pfeat" $p_pfeat "scalar") (serialize-qp "p_ss5yr" $p_ss5yr "scalar") (serialize-qp "p_sdc" $p_sdc "scalar") (serialize-qp "p_sdc_ils" $p_sdc_ils "scalar") (serialize-qp "p_ysl" $p_ysl "scalar") (serialize-qp "p_ysly" $p_ysly "scalar") (serialize-qp "p_ysla" $p_ysla "scalar") (serialize-qp "p_idt1" $p_idt1 "scalar") (serialize-qp "p_idt2" $p_idt2 "scalar") (serialize-qp "p_cms_flag" $p_cms_flag "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.get_systems" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -511,9 +538,9 @@ export def "post-sdw-rest-services-get-systems" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sdw_rest_services.get_systems" $auth.query)
   let req_body = {"output": $output, "p_fn": $p_fn, "p_ct": $p_ct, "p_co": $p_co, "p_fips": $p_fips, "p_st": $p_st, "p_zip": $p_zip, "p_reg": $p_reg, "p_trb": $p_trb, "p_act": $p_act, "p_qiv": $p_qiv, "p_ico": $p_ico, "p_pid": $p_pid, "p_owop": $p_owop, "p_systyp": $p_systyp, "p_swtyp": $p_swtyp, "p_popsv": $p_popsv, "p_cntysv": $p_cntysv, "p_cs": $p_cs, "p_mr": $p_mr, "p_health": $p_health, "p_other": $p_other, "p_pn": $p_pn, "p_sv": $p_sv, "p_qs": $p_qs, "p_sfs": $p_sfs, "p_pswpol": $p_pswpol, "p_pswvio": $p_pswvio, "p_pbale": $p_pbale, "p_cuale": $p_cuale, "p_rc350v": $p_rc350v, "p_pbv": $p_pbv, "p_cuv": $p_cuv, "p_lcrv": $p_lcrv, "p_fea": $p_fea, "p_feay": $p_feay, "p_feaa": $p_feaa, "p_iea": $p_iea, "p_ieay": $p_ieay, "p_ieaa": $p_ieaa, "p_qis": $p_qis, "p_pfead1": $p_pfead1, "p_pfead2": $p_pfead2, "p_pfeat": $p_pfeat, "p_ss5yr": $p_ss5yr, "p_sdc": $p_sdc, "p_sdc_ils": $p_sdc_ils, "p_ysl": $p_ysl, "p_ysly": $p_ysly, "p_ysla": $p_ysla, "p_idt1": $p_idt1, "p_idt2": $p_idt2, "p_cms_flag": $p_cms_flag, "queryset": $queryset, "responseset": $responseset, "callback": $callback, "qcolumns": $qcolumns} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -551,7 +578,7 @@ export def "get-sdw-rest-services-metadata" [
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sdw_rest_services.metadata" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -588,9 +615,9 @@ export def "post-sdw-rest-services-metadata" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sdw_rest_services.metadata" $auth.query)
   let req_body = {"output": $output, "callback": $callback} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"

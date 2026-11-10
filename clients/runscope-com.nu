@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -178,7 +205,7 @@ export def "get-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -211,7 +238,7 @@ export def "get-buckets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -247,9 +274,9 @@ export def "post-buckets" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/buckets" $auth.query)
   let req_body = {"name": $name, "team_id": $team_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -284,7 +311,7 @@ export def "delete-buckets-bucket-key" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -319,7 +346,7 @@ export def "get-buckets-bucket-key" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -354,7 +381,7 @@ export def "get-buckets-bucket-key-environments" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/environments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -383,7 +410,7 @@ export def "post-buckets-bucket-key-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-auth: string
+  --body-auth: string # (spec name: auth)
   --client-certificate: string
   --emails: record
   --exported-at: int
@@ -412,9 +439,9 @@ export def "post-buckets-bucket-key-environments" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/environments") $auth.query)
   let req_body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -444,7 +471,7 @@ export def "put-buckets-bucket-key-environments-environment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-auth: string
+  --body-auth: string # (spec name: auth)
   --client-certificate: string
   --emails: record
   --exported-at: int
@@ -474,9 +501,9 @@ export def "put-buckets-bucket-key-environments-environment-id" [
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), environment_id: (encode-path-segment $environment_id)} | format pattern "/buckets/{bucket_key}/environments/{environment_id}") $auth.query)
   let req_body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -515,7 +542,7 @@ export def "get-buckets-bucket-key-errors" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/errors") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -550,7 +577,7 @@ export def "delete-buckets-bucket-key-messages" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/messages") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -589,7 +616,7 @@ export def "get-buckets-bucket-key-messages" [
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/messages") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -627,9 +654,9 @@ export def "post-buckets-bucket-key-messages" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/messages") $auth.query)
   let req_body = {"request": $request, "response": $response} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -666,7 +693,7 @@ export def "get-buckets-bucket-key-messages-message-id" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), message_id: (encode-path-segment $message_id)} | format pattern "/buckets/{bucket_key}/messages/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -701,7 +728,7 @@ export def "get-buckets-bucket-key-tests" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/tests") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -745,9 +772,9 @@ export def "post-buckets-bucket-key-tests" [
   if ($bucket_key | is-empty) { error make --unspanned { msg: "path parameter 'bucketKey' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key)} | format pattern "/buckets/{bucket_key}/tests") $auth.query)
   let req_body = {"created_at": $created_at, "created_by": $created_by, "default_environment_id": $default_environment_id, "description": $description, "id": $id, "last_run": $last_run, "name": $name, "trigger_url": $trigger_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -784,7 +811,7 @@ export def "delete-buckets-bucket-key-tests-test-id" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -821,7 +848,7 @@ export def "get-buckets-bucket-key-tests-test-id" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -858,7 +885,7 @@ export def "put-buckets-bucket-key-tests-test-id" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -895,7 +922,7 @@ export def "get-buckets-bucket-key-tests-test-id-environments" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -925,7 +952,7 @@ export def "post-buckets-bucket-key-tests-test-id-environments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-auth: string
+  --body-auth: string # (spec name: auth)
   --client-certificate: string
   --emails: record
   --exported-at: int
@@ -943,7 +970,7 @@ export def "post-buckets-bucket-key-tests-test-id-environments" [
   --script: string
   --script-library: list<string> # The list of ids for scripts, part of the script libraries, being used for this environment.
   --stop-on-failure: oneof<nothing, bool> # Stop executing the test after the first failed step.
-  --body-test-id: string # The unique identifier for this test.
+  --body-test-id: string # The unique identifier for this test. (spec name: test_id)
   --verify-ssl: oneof<nothing, bool> # Validate all SSL certificates on any HTTPS connections.
   --version: string
   --webhooks: string
@@ -955,9 +982,9 @@ export def "post-buckets-bucket-key-tests-test-id-environments" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments") $auth.query)
   let req_body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $body_test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -988,7 +1015,7 @@ export def "put-buckets-bucket-key-tests-test-id-environments-environment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-auth: string
+  --body-auth: string # (spec name: auth)
   --client-certificate: string
   --emails: record
   --exported-at: int
@@ -1006,7 +1033,7 @@ export def "put-buckets-bucket-key-tests-test-id-environments-environment-id" [
   --script: string
   --script-library: list<string> # The list of ids for scripts, part of the script libraries, being used for this environment.
   --stop-on-failure: oneof<nothing, bool> # Stop executing the test after the first failed step.
-  --body-test-id: string # The unique identifier for this test.
+  --body-test-id: string # The unique identifier for this test. (spec name: test_id)
   --verify-ssl: oneof<nothing, bool> # Validate all SSL certificates on any HTTPS connections.
   --version: string
   --webhooks: string
@@ -1019,9 +1046,9 @@ export def "put-buckets-bucket-key-tests-test-id-environments-environment-id" [
   if ($environment_id | is-empty) { error make --unspanned { msg: "path parameter 'environmentId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id), environment_id: (encode-path-segment $environment_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/environments/{environment_id}") $auth.query)
   let req_body = {"auth": $body_auth, "client_certificate": $client_certificate, "emails": $emails, "exported_at": $exported_at, "headers": $headers, "id": $id, "initial_script_hash": $initial_script_hash, "initial_variables": $initial_variables, "integrations": $integrations, "name": $name, "parent_environment_id": $parent_environment_id, "preserve_cookies": $preserve_cookies, "regions": $regions, "remote_agents": $remote_agents, "retry_on_failure": $retry_on_failure, "script": $script, "script_library": $script_library, "stop_on_failure": $stop_on_failure, "test_id": $body_test_id, "verify_ssl": $verify_ssl, "version": $version, "webhooks": $webhooks} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1058,7 +1085,7 @@ export def "get-buckets-bucket-key-tests-test-id-metrics" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/metrics") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1095,7 +1122,7 @@ export def "get-buckets-bucket-key-tests-test-id-steps" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1134,9 +1161,9 @@ export def "post-buckets-bucket-key-tests-test-id-steps" [
   if ($test_id | is-empty) { error make --unspanned { msg: "path parameter 'testId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps") $auth.query)
   let req_body = {"step_type": $step_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1175,7 +1202,7 @@ export def "delete-buckets-bucket-key-tests-test-id-steps-step-id" [
   if ($step_id | is-empty) { error make --unspanned { msg: "path parameter 'stepId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id), step_id: (encode-path-segment $step_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps/{step_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1216,9 +1243,9 @@ export def "put-buckets-bucket-key-tests-test-id-steps-step-id" [
   if ($step_id | is-empty) { error make --unspanned { msg: "path parameter 'stepId' must be non-empty" } }
   let full_url = (build-url $base ({bucket_key: (encode-path-segment $bucket_key), test_id: (encode-path-segment $test_id), step_id: (encode-path-segment $step_id)} | format pattern "/buckets/{bucket_key}/tests/{test_id}/steps/{step_id}") $auth.query)
   let req_body = {"step_type": $step_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1253,7 +1280,7 @@ export def "get-teams-team-id-agents" [
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/agents") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1288,7 +1315,7 @@ export def "get-teams-team-id-integrations" [
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/integrations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1323,7 +1350,7 @@ export def "get-teams-team-id-people" [
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/people") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

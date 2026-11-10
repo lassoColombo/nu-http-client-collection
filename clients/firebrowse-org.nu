@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -184,7 +211,7 @@ export def "get-analyses-copy-number-genes-all" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/All" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -227,7 +254,7 @@ export def "amplified" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Amplified" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -270,7 +297,7 @@ export def "deleted" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Deleted" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -313,7 +340,7 @@ export def "focal" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Focal" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -356,7 +383,7 @@ export def "thresholded" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/CopyNumber/Genes/Thresholded" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -398,7 +425,7 @@ export def "feature-table" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "date" $date "csv") (serialize-qp "column" $column "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/FeatureTable" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -443,7 +470,7 @@ export def "maf" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "gene" $gene "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "column" $column "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/Mutation/MAF" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -488,7 +515,7 @@ export def "smg" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "rank" $rank "scalar") (serialize-qp "gene" $gene "csv") (serialize-qp "q" $q "scalar") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/Mutation/SMG" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -532,7 +559,7 @@ export def "reports" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "name" $name "csv") (serialize-qp "type" $type "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/Reports" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -575,7 +602,7 @@ export def "m-rna-seq-quartiles" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "Exclude" $exclude "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Analyses/mRNASeq/Quartiles" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -623,7 +650,7 @@ export def "standard-data" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "data_type" $data_type "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "platform" $platform "csv") (serialize-qp "center" $center "csv") (serialize-qp "level" $level "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Archives/StandardData" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -661,7 +688,7 @@ export def "centers" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "center" $center "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Centers" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -698,7 +725,7 @@ export def "clinical-names" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/ClinicalNames" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -735,7 +762,7 @@ export def "clinical-names-fh" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/ClinicalNames_FH" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -773,7 +800,7 @@ export def "cohorts" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Cohorts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -816,7 +843,7 @@ export def "counts" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date" $date "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "data_type" $data_type "csv") (serialize-qp "totals" $totals "scalar") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Counts" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -853,7 +880,7 @@ export def "dates" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Dates" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -890,7 +917,7 @@ export def "heart-beat" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/HeartBeat" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -927,7 +954,7 @@ export def "maf-col-names" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/MAFColNames" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -968,7 +995,7 @@ export def "patients" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Patients" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1006,7 +1033,7 @@ export def "platforms" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "platform" $platform "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/Platforms" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1045,7 +1072,7 @@ export def "barcode" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tcga_barcode: (encode-path-segment $tcga_barcode)} | format pattern "/Metadata/SampleType/Barcode/{tcga_barcode}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1084,7 +1111,7 @@ export def "code" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({code: (encode-path-array $code)} | format pattern "/Metadata/SampleType/Code/{code}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1123,7 +1150,7 @@ export def "short-letter-code" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({short_letter_code: (encode-path-array $short_letter_code)} | format pattern "/Metadata/SampleType/ShortLetterCode/{short_letter_code}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1160,7 +1187,7 @@ export def "sample-types" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/SampleTypes" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1198,7 +1225,7 @@ export def "ts-sites" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "tss_code" $tss_code "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/Metadata/TSSites" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1241,7 +1268,7 @@ export def "clinical" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "cde_name" $cde_name "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Samples/Clinical" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1284,7 +1311,7 @@ export def "clinical-fh" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "fh_cde_name" $fh_cde_name "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Samples/Clinical_FH" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1329,7 +1356,7 @@ export def "m-rna-seq" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "gene" $gene "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "protocol" $protocol "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Samples/mRNASeq" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1374,7 +1401,7 @@ export def "mi-r-seq" [
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "mir" $mir "csv") (serialize-qp "cohort" $cohort "csv") (serialize-qp "tcga_participant_barcode" $tcga_participant_barcode "csv") (serialize-qp "tool" $tool "csv") (serialize-qp "sample_type" $sample_type "csv") (serialize-qp "page" $page "csv") (serialize-qp "page_size" $page_size "csv") (serialize-qp "sort_by" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Samples/miRSeq" $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

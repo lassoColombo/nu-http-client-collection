@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -190,7 +217,7 @@ export def "adds-services-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -252,9 +279,9 @@ export def "adds-services-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices" $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -295,7 +322,7 @@ export def "adds-services-list-premium-services" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/addsservices/premiumCheck" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -335,7 +362,7 @@ export def "adds-services-delete" [
   let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -374,7 +401,7 @@ export def "adds-services-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -424,7 +451,7 @@ export def "adds-services-update" [
   --original-disabled-state: oneof<nothing, bool> # Gets the original disable state.
   --resolved-alerts: int # The total count of alerts that has been resolved for the service.
   --service-id: string # The id of the service.
-  --body-service-name: string # The name of the service.
+  --body-service-name: string # The name of the service. (spec name: serviceName)
   --signature: string # The signature of the service.
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
@@ -438,9 +465,9 @@ export def "adds-services-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}") $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $body_service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -488,7 +515,7 @@ export def "ad-domain-service-members-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $is_groupby_site "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $next_partition_key "scalar") (serialize-qp "nextRowKey" $next_row_key "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/addomainservicemembers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -528,7 +555,7 @@ export def "adds-service-members-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/addsservicemembers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -571,7 +598,7 @@ export def "alerts-list-adds-alerts" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/alerts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -609,7 +636,7 @@ export def "configuration-list-adds-configurations" [
   let qp = [(serialize-qp "grouping" $grouping "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/configuration") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -650,7 +677,7 @@ export def "dimensions-list-adds-dimensions" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), dimension: (encode-path-segment $dimension)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/dimensions/{dimension}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -691,7 +718,7 @@ export def "adds-services-user-preference-delete" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -732,7 +759,7 @@ export def "adds-services-user-preference-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -775,9 +802,9 @@ export def "adds-services-user-preference-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/features/{feature_name}/userpreference") $qp $auth.query)
   let req_body = {"metricNames": $metric_names} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -816,7 +843,7 @@ export def "adds-services-get-forest-summary" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/forestsummary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -857,7 +884,7 @@ export def "adds-services-list-metric-metadata" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "perfCounter" $perf_counter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -898,7 +925,7 @@ export def "adds-services-get-metric-metadata" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata/{metric_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -944,7 +971,7 @@ export def "adds-services-get-metric-metadata-for-group" [
   let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metricmetadata/{metric_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -990,7 +1017,7 @@ export def "adds-service-get-metrics" [
   let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1033,7 +1060,7 @@ export def "adds-services-list-metrics-average" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}/average") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1076,7 +1103,7 @@ export def "adds-services-list-metrics-sum" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/metrics/{metric_name}/groups/{group_name}/sum") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1117,7 +1144,7 @@ export def "adds-services-list-replication-details" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "withDetails" $with_details "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationdetails") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1156,7 +1183,7 @@ export def "adds-services-replication-status-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationstatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "adds-services-list-replication-summary" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "isGroupbySite" $is_groupby_site "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "nextPartitionKey" $next_partition_key "scalar") (serialize-qp "nextRowKey" $next_row_key "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/replicationsummary") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1247,7 +1274,7 @@ export def "adds-services-service-members-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "dimensionType" $dimension_type "scalar") (serialize-qp "dimensionSignature" $dimension_signature "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1313,9 +1340,9 @@ export def "adds-services-service-members-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers") $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "dimensions": $dimensions, "disabled": $disabled, "disabledReason": $disabled_reason, "installedQfes": $installed_qfes, "lastDisabled": $last_disabled, "lastReboot": $last_reboot, "lastServerReportedMonitoringLevelChange": $last_server_reported_monitoring_level_change, "lastUpdated": $last_updated, "machineId": $machine_id, "machineName": $machine_name, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "osName": $os_name, "osVersion": $os_version, "properties": $properties, "recommendedQfes": $recommended_qfes, "resolvedAlerts": $resolved_alerts, "role": $role, "serverReportedMonitoringLevel": $server_reported_monitoring_level, "serviceId": $service_id, "serviceMemberId": $service_member_id, "status": $status, "tenantId": $tenant_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1357,7 +1384,7 @@ export def "adds-service-members-delete" [
   let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1398,7 +1425,7 @@ export def "adds-service-members-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1443,7 +1470,7 @@ export def "adds-services-list-server-alerts" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}/alerts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1485,7 +1512,7 @@ export def "adds-service-members-list-credentials" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/addsservices/{service_name}/servicemembers/{service_member_id}/credentials") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1522,7 +1549,7 @@ export def "configuration-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1581,9 +1608,9 @@ export def "configuration-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
   let req_body = {"aadLicense": $aad_license, "aadPremium": $aad_premium, "agentAutoUpdate": $agent_auto_update, "alertSuppressionTimeInMins": $alert_suppression_time_in_mins, "consentedToMicrosoftDevOps": $consented_to_microsoft_dev_ops, "countryLetterCode": $country_letter_code, "createdDate": $created_date, "devOpsTtl": $dev_ops_ttl, "disabled": $disabled, "disabledReason": $disabled_reason, "globalAdminsEmail": $global_admins_email, "initialDomain": $initial_domain, "lastDisabled": $last_disabled, "lastVerified": $last_verified, "onboarded": $onboarded, "onboardingAllowed": $onboarding_allowed, "pksCertificate": $pks_certificate, "privatePreviewTenant": $private_preview_tenant, "tenantId": $tenant_id, "tenantInQuarantine": $tenant_in_quarantine, "tenantName": $tenant_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1620,7 +1647,7 @@ export def "configuration-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/configuration" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1657,7 +1684,7 @@ export def "operations-list" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/operations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1694,7 +1721,7 @@ export def "reports-get-dev-ops" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/reports/DevOps/IsDevOps" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1735,7 +1762,7 @@ export def "service-members-list-connectors" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/service/{service_name}/servicemembers/{service_member_id}/connectors") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1776,7 +1803,7 @@ export def "services-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1838,9 +1865,9 @@ export def "services-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services" $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1881,7 +1908,7 @@ export def "services-list-premium" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "serviceType" $service_type "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "takeCount" $take_count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.ADHybridHealthService/services/premiumCheck" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1921,7 +1948,7 @@ export def "services-delete" [
   let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1960,7 +1987,7 @@ export def "services-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2010,7 +2037,7 @@ export def "services-update" [
   --original-disabled-state: oneof<nothing, bool> # Gets the original disable state.
   --resolved-alerts: int # The total count of alerts that has been resolved for the service.
   --service-id: string # The id of the service.
-  --body-service-name: string # The name of the service.
+  --body-service-name: string # The name of the service. (spec name: serviceName)
   --signature: string # The signature of the service.
   --simple-properties: record # List of service specific configuration properties.
   --tenant-id: string # The id of the tenant to which the service is registered to.
@@ -2024,9 +2051,9 @@ export def "services-update" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}") $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "customNotificationEmails": $custom_notification_emails, "disabled": $disabled, "displayName": $display_name, "health": $health, "id": $id, "lastDisabled": $last_disabled, "lastUpdated": $last_updated, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "notificationEmailEnabled": $notification_email_enabled, "notificationEmailEnabledForGlobalAdmins": $notification_email_enabled_for_global_admins, "notificationEmails": $notification_emails, "notificationEmailsEnabledForGlobalAdmins": $notification_emails_enabled_for_global_admins, "originalDisabledState": $original_disabled_state, "resolvedAlerts": $resolved_alerts, "serviceId": $service_id, "serviceName": $body_service_name, "signature": $signature, "simpleProperties": $simple_properties, "tenantId": $tenant_id, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2067,7 +2094,7 @@ export def "services-get-tenant-whitelisting" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/TenantWhitelisting/{feature_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2110,7 +2137,7 @@ export def "services-list-alerts" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/alerts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2151,7 +2178,7 @@ export def "services-get-feature-availibility" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), feature_name: (encode-path-segment $feature_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/checkServiceFeatureAvailibility/{feature_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2190,7 +2217,7 @@ export def "services-list-export-errors" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exporterrors/counts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2231,7 +2258,7 @@ export def "services-list-export-errors-v2" [
   let qp = [(serialize-qp "errorBucket" $error_bucket "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exporterrors/listV2") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2270,7 +2297,7 @@ export def "services-list-export-status" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/exportstatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2318,9 +2345,9 @@ export def "services-add-alert-feedback" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/feedbacktype/alerts/feedback") $qp $auth.query)
   let req_body = {"comment": $comment, "consentedToShare": $consented_to_share, "createdDate": $created_date, "feedback": $feedback, "level": $level, "serviceMemberId": $service_member_id, "shortName": $short_name, "state": $state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2361,7 +2388,7 @@ export def "services-list-alert-feedback" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), short_name: (encode-path-segment $short_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/feedbacktype/alerts/{short_name}/alertfeedback") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2402,7 +2429,7 @@ export def "services-list-metric-metadata" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "perfCounter" $perf_counter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2443,7 +2470,7 @@ export def "services-get-metric-metadata" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata/{metric_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2489,7 +2516,7 @@ export def "services-get-metric-metadata-for-group" [
   let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metricmetadata/{metric_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2535,7 +2562,7 @@ export def "service-get-metrics" [
   let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2578,7 +2605,7 @@ export def "services-list-metrics-average" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}/average") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2621,7 +2648,7 @@ export def "services-list-metrics-sum" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/metrics/{metric_name}/groups/{group_name}/sum") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2663,9 +2690,9 @@ export def "services-update-monitoring-configuration" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/monitoringconfiguration") $qp $auth.query)
   let req_body = {"key": $key, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2704,7 +2731,7 @@ export def "services-list-monitoring-configurations" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/monitoringconfigurations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2744,7 +2771,7 @@ export def "services-list-user-bad-password-report" [
   let qp = [(serialize-qp "dataSource" $data_source "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/badpassword/details/user") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2783,7 +2810,7 @@ export def "services-list-all-risky-ip-download-report" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/riskyIp/blobUris") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2822,7 +2849,7 @@ export def "services-list-current-risky-ip-download-report" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/reports/riskyIp/generateBlobUri") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2864,7 +2891,7 @@ export def "service-members-list" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "dimensionType" $dimension_type "scalar") (serialize-qp "dimensionSignature" $dimension_signature "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2930,9 +2957,9 @@ export def "service-members-add" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers") $qp $auth.query)
   let req_body = {"activeAlerts": $active_alerts, "additionalInformation": $additional_information, "createdDate": $created_date, "dimensions": $dimensions, "disabled": $disabled, "disabledReason": $disabled_reason, "installedQfes": $installed_qfes, "lastDisabled": $last_disabled, "lastReboot": $last_reboot, "lastServerReportedMonitoringLevelChange": $last_server_reported_monitoring_level_change, "lastUpdated": $last_updated, "machineId": $machine_id, "machineName": $machine_name, "monitoringConfigurationsComputed": $monitoring_configurations_computed, "monitoringConfigurationsCustomized": $monitoring_configurations_customized, "osName": $os_name, "osVersion": $os_version, "properties": $properties, "recommendedQfes": $recommended_qfes, "resolvedAlerts": $resolved_alerts, "role": $role, "serverReportedMonitoringLevel": $server_reported_monitoring_level, "serviceId": $service_id, "serviceMemberId": $service_member_id, "status": $status, "tenantId": $tenant_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2974,7 +3001,7 @@ export def "service-members-delete" [
   let qp = [(serialize-qp "confirm" $confirm "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3015,7 +3042,7 @@ export def "service-members-get" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3060,7 +3087,7 @@ export def "service-members-list-alerts" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/alerts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3102,7 +3129,7 @@ export def "service-members-list-credentials" [
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/credentials") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3143,7 +3170,7 @@ export def "service-members-delete-data" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/data") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3184,7 +3211,7 @@ export def "service-members-list-data-freshness" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/datafreshness") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3225,7 +3252,7 @@ export def "service-members-list-export-status" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/exportstatus") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3266,7 +3293,7 @@ export def "service-members-list-global-configuration" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/globalconfiguration") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3309,7 +3336,7 @@ export def "service-members-get-connector-metadata" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id), metric_name: (encode-path-segment $metric_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/metrics/{metric_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3357,7 +3384,7 @@ export def "service-members-get-metrics" [
   let qp = [(serialize-qp "groupKey" $group_key "scalar") (serialize-qp "fromDate" $from_date "scalar") (serialize-qp "toDate" $to_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id), metric_name: (encode-path-segment $metric_name), group_name: (encode-path-segment $group_name)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/metrics/{metric_name}/groups/{group_name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3398,7 +3425,7 @@ export def "service-members-get-service-configuration" [
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({service_name: (encode-path-segment $service_name), service_member_id: (encode-path-segment $service_member_id)} | format pattern "/providers/Microsoft.ADHybridHealthService/services/{service_name}/servicemembers/{service_member_id}/serviceconfiguration") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

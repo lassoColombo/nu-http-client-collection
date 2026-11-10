@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -180,7 +207,7 @@ export def "get-op" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -329,9 +356,9 @@ export def "post" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
   let req_body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -366,7 +393,7 @@ export def "get-id-name" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/{id}/name") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -401,7 +428,7 @@ export def "delete-realm" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -436,7 +463,7 @@ export def "get-realm" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -535,7 +562,7 @@ export def "put-realm" [
   --permanent-lockout: oneof<nothing, bool>
   --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
   --quick-login-check-milli-seconds: int # format: int64
-  --body-realm: string
+  --body-realm: string # (spec name: realm)
   --refresh-token-max-reuse: int # format: int32
   --registration-allowed: oneof<nothing, bool>
   --registration-email-as-username: oneof<nothing, bool>
@@ -587,9 +614,9 @@ export def "put-realm" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}") $auth.query)
   let req_body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $body_realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -624,7 +651,7 @@ export def "delete-realm-admin-events" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -671,7 +698,7 @@ export def "get-realm-admin-events" [
   let qp = [(serialize-qp "authClient" $auth_client "scalar") (serialize-qp "authIpAddress" $auth_ip_address "scalar") (serialize-qp "authRealm" $auth_realm "scalar") (serialize-qp "authUser" $auth_user "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "operationTypes" $operation_types "multi") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "resourceTypes" $resource_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/admin-events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -706,7 +733,7 @@ export def "delete-realm-attack-detection-brute-force-users" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/attack-detection/brute-force/users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -743,7 +770,7 @@ export def "delete-realm-attack-detection-brute-force-users-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -780,7 +807,7 @@ export def "get-realm-attack-detection-brute-force-users-user-id" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), user_id: (encode-path-segment $user_id)} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -815,7 +842,7 @@ export def "get-realm-authentication-authenticator-providers" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/authenticator-providers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -850,7 +877,7 @@ export def "get-realm-authentication-client-authenticator-providers" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/client-authenticator-providers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -887,7 +914,7 @@ export def "get-realm-authentication-config-description-provider-id" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/authentication/config-description/{provider_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -924,7 +951,7 @@ export def "delete-realm-authentication-config-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -961,7 +988,7 @@ export def "get-realm-authentication-config-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -993,7 +1020,7 @@ export def "put-realm-authentication-config-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string
   --config: record
-  --body-id: string
+  --body-id: string # (spec name: id)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1002,9 +1029,9 @@ export def "put-realm-authentication-config-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/config/{id}") $auth.query)
   let req_body = {"alias": $alias, "config": $config, "id": $body_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1049,9 +1076,9 @@ export def "post-realm-authentication-executions" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/executions") $auth.query)
   let req_body = {"authenticator": $authenticator, "authenticatorConfig": $authenticator_config, "authenticatorFlow": $authenticator_flow, "autheticatorFlow": $autheticator_flow, "flowId": $flow_id, "id": $id, "parentFlow": $parent_flow, "priority": $priority, "requirement": $requirement} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1088,7 +1115,7 @@ export def "delete-realm-authentication-executions-execution-id" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1125,7 +1152,7 @@ export def "get-realm-authentication-executions-execution-id" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1166,9 +1193,9 @@ export def "post-realm-authentication-executions-execution-id-config" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/config") $auth.query)
   let req_body = {"alias": $alias, "config": $config, "id": $id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1205,7 +1232,7 @@ export def "post-realm-authentication-executions-execution-id-lower-priority" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/lower-priority") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1242,7 +1269,7 @@ export def "post-realm-authentication-executions-execution-id-raise-priority" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), execution_id: (encode-path-segment $execution_id)} | format pattern "/{realm}/authentication/executions/{execution_id}/raise-priority") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1277,7 +1304,7 @@ export def "get-realm-authentication-flows" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1320,9 +1347,9 @@ export def "post-realm-authentication-flows" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/flows") $auth.query)
   let req_body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $id, "providerId": $provider_id, "topLevel": $top_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1361,9 +1388,9 @@ export def "post-realm-authentication-flows-flow-alias-copy" [
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/copy") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1400,7 +1427,7 @@ export def "get-realm-authentication-flows-flow-alias-executions" [
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1450,9 +1477,9 @@ export def "put-realm-authentication-flows-flow-alias-executions" [
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions") $auth.query)
   let req_body = {"alias": $alias, "authenticationConfig": $authentication_config, "authenticationFlow": $authentication_flow, "configurable": $configurable, "displayName": $display_name, "flowId": $flow_id, "id": $id, "index": $index, "level": $level, "providerId": $provider_id, "requirement": $requirement, "requirementChoices": $requirement_choices} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1491,9 +1518,9 @@ export def "post-realm-authentication-flows-flow-alias-executions-execution" [
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/execution") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1532,9 +1559,9 @@ export def "post-realm-authentication-flows-flow-alias-executions-flow" [
   if ($flow_alias | is-empty) { error make --unspanned { msg: "path parameter 'flowAlias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), flow_alias: (encode-path-segment $flow_alias)} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/flow") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1571,7 +1598,7 @@ export def "delete-realm-authentication-flows-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1608,7 +1635,7 @@ export def "get-realm-authentication-flows-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1642,7 +1669,7 @@ export def "put-realm-authentication-flows-id" [
   --authentication-executions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
   --built-in: oneof<nothing, bool>
   --description: string
-  --body-id: string
+  --body-id: string # (spec name: id)
   --provider-id: string
   --top-level: oneof<nothing, bool>
 ]: any -> any {
@@ -1653,9 +1680,9 @@ export def "put-realm-authentication-flows-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/authentication/flows/{id}") $auth.query)
   let req_body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $body_id, "providerId": $provider_id, "topLevel": $top_level} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1690,7 +1717,7 @@ export def "get-realm-authentication-form-action-providers" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-action-providers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1725,7 +1752,7 @@ export def "get-realm-authentication-form-providers" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/form-providers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1760,7 +1787,7 @@ export def "get-realm-authentication-per-client-config-description" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/per-client-config-description") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1797,9 +1824,9 @@ export def "post-realm-authentication-register-required-action" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/register-required-action") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1834,7 +1861,7 @@ export def "get-realm-authentication-required-actions" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/required-actions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1871,7 +1898,7 @@ export def "delete-realm-authentication-required-actions-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1908,7 +1935,7 @@ export def "get-realm-authentication-required-actions-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1938,7 +1965,7 @@ export def "put-realm-authentication-required-actions-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-alias: string
+  --body-alias: string # (spec name: alias)
   --config: record
   --default-action: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
@@ -1953,9 +1980,9 @@ export def "put-realm-authentication-required-actions-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}") $auth.query)
   let req_body = {"alias": $body_alias, "config": $config, "defaultAction": $default_action, "enabled": $enabled, "name": $name, "priority": $priority, "providerId": $provider_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1992,7 +2019,7 @@ export def "post-realm-authentication-required-actions-alias-lower-priority" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/lower-priority") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2029,7 +2056,7 @@ export def "post-realm-authentication-required-actions-alias-raise-priority" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/authentication/required-actions/{alias}/raise-priority") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2064,7 +2091,7 @@ export def "get-realm-authentication-unregistered-required-actions" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/authentication/unregistered-required-actions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2099,7 +2126,7 @@ export def "post-realm-clear-keys-cache" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-keys-cache") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2134,7 +2161,7 @@ export def "post-realm-clear-realm-cache" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-realm-cache") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2169,7 +2196,7 @@ export def "post-realm-clear-user-cache" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clear-user-cache") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2206,9 +2233,9 @@ export def "post-realm-client-description-converter" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-description-converter") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2243,7 +2270,7 @@ export def "get-realm-client-registration-policy-providers" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-registration-policy/providers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2278,7 +2305,7 @@ export def "get-realm-client-scopes" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2320,9 +2347,9 @@ export def "post-realm-client-scopes" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-scopes") $auth.query)
   let req_body = {"attributes": $attributes, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2361,7 +2388,7 @@ export def "delete-realm-client-scopes-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2400,7 +2427,7 @@ export def "get-realm-client-scopes-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2445,9 +2472,9 @@ export def "put-realm-client-scopes-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2484,7 +2511,7 @@ export def "delete-realm-client-scopes-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2521,7 +2548,7 @@ export def "get-realm-client-scopes-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2553,7 +2580,7 @@ export def "put-realm-client-scopes-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
   --description: string
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --protocol: string
   --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
@@ -2565,9 +2592,9 @@ export def "put-realm-client-scopes-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}") $auth.query)
   let req_body = {"attributes": $attributes, "description": $description, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2606,9 +2633,9 @@ export def "post-realm-client-scopes-id-protocol-mappers-add-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/add-models") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2645,7 +2672,7 @@ export def "get-realm-client-scopes-id-protocol-mappers-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2676,7 +2703,7 @@ export def "post-realm-client-scopes-id-protocol-mappers-models" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --protocol: string
   --protocol-mapper: string
@@ -2688,9 +2715,9 @@ export def "post-realm-client-scopes-id-protocol-mappers-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2729,7 +2756,7 @@ export def "get-realm-client-scopes-id-protocol-mappers-protocol-protocol" [
   if ($protocol | is-empty) { error make --unspanned { msg: "path parameter 'protocol' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/protocol/{protocol}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2766,7 +2793,7 @@ export def "get-realm-client-scopes-id-scope-mappings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2807,9 +2834,9 @@ export def "delete-realm-client-scopes-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2848,7 +2875,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2889,9 +2916,9 @@ export def "post-realm-client-scopes-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2930,7 +2957,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client-available" 
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2969,7 +2996,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client-composite" 
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3008,9 +3035,9 @@ export def "delete-realm-client-scopes-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3047,7 +3074,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3086,9 +3113,9 @@ export def "post-realm-client-scopes-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3125,7 +3152,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm-available" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3162,7 +3189,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm-composite" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3197,7 +3224,7 @@ export def "get-realm-client-session-stats" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/client-session-stats") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3238,7 +3265,7 @@ export def "get-realm-clients" [
   let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "viewableOnly" $viewable_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3274,7 +3301,7 @@ export def "post-realm-clients" [
   --authentication-flow-binding-overrides: record
   --authorization-services-enabled: oneof<nothing, bool>
   --authorization-settings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-  --body-base-url: string
+  --body-base-url: string # (spec name: baseUrl)
   --bearer-only: oneof<nothing, bool>
   --client-authenticator-type: string
   --client-id: string
@@ -3312,9 +3339,9 @@ export def "post-realm-clients" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients") $auth.query)
   let req_body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3347,7 +3374,7 @@ export def "get-realm-clients-initial-access" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3385,9 +3412,9 @@ export def "post-realm-clients-initial-access" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/clients-initial-access") $auth.query)
   let req_body = {"count": $count, "expiration": $expiration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3422,7 +3449,7 @@ export def "delete-realm-clients-initial-access-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients-initial-access/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3461,7 +3488,7 @@ export def "delete-realm-clients-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3500,7 +3527,7 @@ export def "get-realm-clients-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3545,9 +3572,9 @@ export def "put-realm-clients-id1-protocol-mappers-models-id2" [
   if ($id2 | is-empty) { error make --unspanned { msg: "path parameter 'id2' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id1: (encode-path-segment $id1), id2: (encode-path-segment $id2)} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3584,7 +3611,7 @@ export def "delete-realm-clients-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3621,7 +3648,7 @@ export def "get-realm-clients-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3658,7 +3685,7 @@ export def "put-realm-clients-id" [
   --authentication-flow-binding-overrides: record
   --authorization-services-enabled: oneof<nothing, bool>
   --authorization-settings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-  --body-base-url: string
+  --body-base-url: string # (spec name: baseUrl)
   --bearer-only: oneof<nothing, bool>
   --client-authenticator-type: string
   --client-id: string
@@ -3670,7 +3697,7 @@ export def "put-realm-clients-id" [
   --enabled: oneof<nothing, bool>
   --frontchannel-logout: oneof<nothing, bool>
   --full-scope-allowed: oneof<nothing, bool>
-  --body-id: string
+  --body-id: string # (spec name: id)
   --implicit-flow-enabled: oneof<nothing, bool>
   --name: string
   --node-re-registration-timeout: int # format: int32
@@ -3697,9 +3724,9 @@ export def "put-realm-clients-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}") $auth.query)
   let req_body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $body_id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3738,7 +3765,7 @@ export def "get-realm-clients-id-certificates-attr" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3784,9 +3811,9 @@ export def "post-realm-clients-id-certificates-attr-download" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/download") $auth.query)
   let req_body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3825,7 +3852,7 @@ export def "post-realm-clients-id-certificates-attr-generate" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3871,9 +3898,9 @@ export def "post-realm-clients-id-certificates-attr-generate-and-download" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate-and-download") $auth.query)
   let req_body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/octet-stream"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3912,7 +3939,7 @@ export def "post-realm-clients-id-certificates-attr-upload" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3951,7 +3978,7 @@ export def "post-realm-clients-id-certificates-attr-upload-certificate" [
   if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), attr: (encode-path-segment $attr)} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload-certificate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3988,7 +4015,7 @@ export def "get-realm-clients-id-client-secret" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4025,7 +4052,7 @@ export def "post-realm-clients-id-client-secret" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/client-secret") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4062,7 +4089,7 @@ export def "get-realm-clients-id-default-client-scopes" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/default-client-scopes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4099,7 +4126,7 @@ export def "delete-realm-clients-id-default-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4136,7 +4163,7 @@ export def "put-realm-clients-id-default-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4176,7 +4203,7 @@ export def "get-realm-clients-id-evaluate-scopes-generate-example-access-token" 
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/generate-example-access-token") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4215,7 +4242,7 @@ export def "get-realm-clients-id-evaluate-scopes-protocol-mappers" [
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/protocol-mappers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4256,7 +4283,7 @@ export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-i
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/granted") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4297,7 +4324,7 @@ export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-i
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_container_id: (encode-path-segment $role_container_id)} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/not-granted") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4334,7 +4361,7 @@ export def "get-realm-clients-id-installation-providers-provider-id" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/clients/{id}/installation/providers/{provider_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4371,7 +4398,7 @@ export def "get-realm-clients-id-management-permissions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4412,9 +4439,9 @@ export def "put-realm-clients-id-management-permissions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4453,9 +4480,9 @@ export def "post-realm-clients-id-nodes" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/nodes") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4494,7 +4521,7 @@ export def "delete-realm-clients-id-nodes-node" [
   if ($node | is-empty) { error make --unspanned { msg: "path parameter 'node' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), node: (encode-path-segment $node)} | format pattern "/{realm}/clients/{id}/nodes/{node}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4531,7 +4558,7 @@ export def "get-realm-clients-id-offline-session-count" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-session-count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4571,7 +4598,7 @@ export def "get-realm-clients-id-offline-sessions" [
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/offline-sessions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4608,7 +4635,7 @@ export def "get-realm-clients-id-optional-client-scopes" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4645,7 +4672,7 @@ export def "delete-realm-clients-id-optional-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4682,7 +4709,7 @@ export def "put-realm-clients-id-optional-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4721,9 +4748,9 @@ export def "post-realm-clients-id-protocol-mappers-add-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/add-models") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4760,7 +4787,7 @@ export def "get-realm-clients-id-protocol-mappers-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4791,7 +4818,7 @@ export def "post-realm-clients-id-protocol-mappers-models" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --protocol: string
   --protocol-mapper: string
@@ -4803,9 +4830,9 @@ export def "post-realm-clients-id-protocol-mappers-models" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/protocol-mappers/models") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4844,7 +4871,7 @@ export def "get-realm-clients-id-protocol-mappers-protocol-protocol" [
   if ($protocol | is-empty) { error make --unspanned { msg: "path parameter 'protocol' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), protocol: (encode-path-segment $protocol)} | format pattern "/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4881,7 +4908,7 @@ export def "post-realm-clients-id-push-revocation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/push-revocation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4918,7 +4945,7 @@ export def "post-realm-clients-id-registration-access-token" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/registration-access-token") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4960,7 +4987,7 @@ export def "get-realm-clients-id-roles" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4996,7 +5023,7 @@ export def "post-realm-clients-id-roles" [
   --composites: record # shape: {client?: record, realm?: list<string>}
   --container-id: string
   --description: string
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
 ]: any -> any {
   let input = $in
@@ -5006,9 +5033,9 @@ export def "post-realm-clients-id-roles" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/roles") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5047,7 +5074,7 @@ export def "delete-realm-clients-id-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5086,7 +5113,7 @@ export def "get-realm-clients-id-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5123,7 +5150,7 @@ export def "put-realm-clients-id-roles-role-name" [
   --composites: record # shape: {client?: record, realm?: list<string>}
   --container-id: string
   --description: string
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
 ]: any -> any {
   let input = $in
@@ -5134,9 +5161,9 @@ export def "put-realm-clients-id-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5177,9 +5204,9 @@ export def "delete-realm-clients-id-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5218,7 +5245,7 @@ export def "get-realm-clients-id-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5259,9 +5286,9 @@ export def "post-realm-clients-id-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5302,7 +5329,7 @@ export def "get-realm-clients-id-roles-role-name-composites-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5341,7 +5368,7 @@ export def "get-realm-clients-id-roles-role-name-composites-realm" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5384,7 +5411,7 @@ export def "get-realm-clients-id-roles-role-name-groups" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5423,7 +5450,7 @@ export def "get-realm-clients-id-roles-role-name-management-permissions" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5466,9 +5493,9 @@ export def "put-realm-clients-id-roles-role-name-management-permissions" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5510,7 +5537,7 @@ export def "get-realm-clients-id-roles-role-name-users" [
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/clients/{id}/roles/{role_name}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5547,7 +5574,7 @@ export def "get-realm-clients-id-scope-mappings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5588,9 +5615,9 @@ export def "delete-realm-clients-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5629,7 +5656,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5670,9 +5697,9 @@ export def "post-realm-clients-id-scope-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5711,7 +5738,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client-available" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5750,7 +5777,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client-composite" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5789,9 +5816,9 @@ export def "delete-realm-clients-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5828,7 +5855,7 @@ export def "get-realm-clients-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5867,9 +5894,9 @@ export def "post-realm-clients-id-scope-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5906,7 +5933,7 @@ export def "get-realm-clients-id-scope-mappings-realm-available" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5943,7 +5970,7 @@ export def "get-realm-clients-id-scope-mappings-realm-composite" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5980,7 +6007,7 @@ export def "get-realm-clients-id-service-account-user" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/service-account-user") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6017,7 +6044,7 @@ export def "get-realm-clients-id-session-count" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/session-count") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6054,7 +6081,7 @@ export def "get-realm-clients-id-test-nodes-available" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/test-nodes-available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6094,7 +6121,7 @@ export def "get-realm-clients-id-user-sessions" [
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/clients/{id}/user-sessions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6131,7 +6158,7 @@ export def "get-realm-components" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6172,9 +6199,9 @@ export def "post-realm-components" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/components") $auth.query)
   let req_body = {"config": $config, "id": $id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6209,7 +6236,7 @@ export def "delete-realm-components-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6244,7 +6271,7 @@ export def "get-realm-components-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6273,7 +6300,7 @@ export def "put-realm-components-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record # shape: {empty?: bool, loadFactor?: float, threshold?: int}
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --parent-id: string
   --provider-id: string
@@ -6287,9 +6314,9 @@ export def "put-realm-components-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6328,7 +6355,7 @@ export def "get-realm-components-id-sub-component-types" [
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/components/{id}/sub-component-types") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6361,7 +6388,7 @@ export def "get-realm-credential-registrators" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/credential-registrators") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6396,7 +6423,7 @@ export def "get-realm-default-default-client-scopes" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-default-client-scopes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6431,7 +6458,7 @@ export def "delete-realm-default-default-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6466,7 +6493,7 @@ export def "put-realm-default-default-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6501,7 +6528,7 @@ export def "get-realm-default-groups" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-groups") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6536,7 +6563,7 @@ export def "delete-realm-default-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6571,7 +6598,7 @@ export def "put-realm-default-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/default-groups/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6606,7 +6633,7 @@ export def "get-realm-default-optional-client-scopes" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/default-optional-client-scopes") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6641,7 +6668,7 @@ export def "delete-realm-default-optional-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6676,7 +6703,7 @@ export def "put-realm-default-optional-client-scopes-client-scope-id" [
   if ($client_scope_id | is-empty) { error make --unspanned { msg: "path parameter 'clientScopeId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), client_scope_id: (encode-path-segment $client_scope_id)} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6711,7 +6738,7 @@ export def "delete-realm-events" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6755,7 +6782,7 @@ export def "get-realm-events" [
   let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "type" $type "multi") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6790,7 +6817,7 @@ export def "get-realm-events-config" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6832,9 +6859,9 @@ export def "put-realm-events-config" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/events/config") $auth.query)
   let req_body = {"adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6869,7 +6896,7 @@ export def "get-realm-group-by-path-path" [
   if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), path: (encode-path-segment $path)} | format pattern "/{realm}/group-by-path/{path}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6909,7 +6936,7 @@ export def "get-realm-groups" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -6953,9 +6980,9 @@ export def "post-realm-groups" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6993,7 +7020,7 @@ export def "get-realm-groups-count" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/groups/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7028,7 +7055,7 @@ export def "delete-realm-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7063,7 +7090,7 @@ export def "get-realm-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7096,7 +7123,7 @@ export def "put-realm-groups-id" [
   --access: record
   --attributes: record
   --client-roles: record
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --path: string
   --realm-roles: list<string>
@@ -7109,9 +7136,9 @@ export def "put-realm-groups-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7144,7 +7171,7 @@ export def "post-realm-groups-id-children" [
   --access: record
   --attributes: record
   --client-roles: record
-  --body-id: string
+  --body-id: string # (spec name: id)
   --name: string
   --path: string
   --realm-roles: list<string>
@@ -7157,9 +7184,9 @@ export def "post-realm-groups-id-children" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/children") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7196,7 +7223,7 @@ export def "get-realm-groups-id-management-permissions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7237,9 +7264,9 @@ export def "put-realm-groups-id-management-permissions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7280,7 +7307,7 @@ export def "get-realm-groups-id-members" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/members") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7317,7 +7344,7 @@ export def "get-realm-groups-id-role-mappings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7358,9 +7385,9 @@ export def "delete-realm-groups-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7399,7 +7426,7 @@ export def "get-realm-groups-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7440,9 +7467,9 @@ export def "post-realm-groups-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7481,7 +7508,7 @@ export def "get-realm-groups-id-role-mappings-clients-client-available" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7520,7 +7547,7 @@ export def "get-realm-groups-id-role-mappings-clients-client-composite" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7559,9 +7586,9 @@ export def "delete-realm-groups-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7598,7 +7625,7 @@ export def "get-realm-groups-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7637,9 +7664,9 @@ export def "post-realm-groups-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7676,7 +7703,7 @@ export def "get-realm-groups-id-role-mappings-realm-available" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7713,7 +7740,7 @@ export def "get-realm-groups-id-role-mappings-realm-composite" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/groups/{id}/role-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7748,7 +7775,7 @@ export def "post-realm-identity-provider-import-config" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/import-config") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7783,7 +7810,7 @@ export def "get-realm-identity-provider-instances" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7831,9 +7858,9 @@ export def "post-realm-identity-provider-instances" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/identity-provider/instances") $auth.query)
   let req_body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7870,7 +7897,7 @@ export def "delete-realm-identity-provider-instances-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7907,7 +7934,7 @@ export def "get-realm-identity-provider-instances-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7938,7 +7965,7 @@ export def "put-realm-identity-provider-instances-alias" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --add-read-token-role-on-create: oneof<nothing, bool>
-  --body-alias: string
+  --body-alias: string # (spec name: alias)
   --config: record
   --display-name: string
   --enabled: oneof<nothing, bool>
@@ -7957,9 +7984,9 @@ export def "put-realm-identity-provider-instances-alias" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}") $auth.query)
   let req_body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $body_alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -7998,7 +8025,7 @@ export def "get-realm-identity-provider-instances-alias-export" [
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/export") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8035,7 +8062,7 @@ export def "get-realm-identity-provider-instances-alias-management-permissions" 
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8076,9 +8103,9 @@ export def "put-realm-identity-provider-instances-alias-management-permissions" 
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8115,7 +8142,7 @@ export def "get-realm-identity-provider-instances-alias-mapper-types" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mapper-types") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8152,7 +8179,7 @@ export def "get-realm-identity-provider-instances-alias-mappers" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8195,9 +8222,9 @@ export def "post-realm-identity-provider-instances-alias-mappers" [
   if ($alias | is-empty) { error make --unspanned { msg: "path parameter 'alias' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers") $auth.query)
   let req_body = {"config": $config, "id": $id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8236,7 +8263,7 @@ export def "delete-realm-identity-provider-instances-alias-mappers-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8275,7 +8302,7 @@ export def "get-realm-identity-provider-instances-alias-mappers-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8307,7 +8334,7 @@ export def "put-realm-identity-provider-instances-alias-mappers-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record
-  --body-id: string
+  --body-id: string # (spec name: id)
   --identity-provider-alias: string
   --identity-provider-mapper: string
   --name: string
@@ -8320,9 +8347,9 @@ export def "put-realm-identity-provider-instances-alias-mappers-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), alias: (encode-path-segment $alias), id: (encode-path-segment $id)} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}") $auth.query)
   let req_body = {"config": $config, "id": $body_id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8359,7 +8386,7 @@ export def "get-realm-identity-provider-providers-provider-id" [
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'provider_id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), provider_id: (encode-path-segment $provider_id)} | format pattern "/{realm}/identity-provider/providers/{provider_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8392,7 +8419,7 @@ export def "get-realm-keys" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/keys") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8427,7 +8454,7 @@ export def "post-realm-logout-all" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/logout-all") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8465,7 +8492,7 @@ export def "post-realm-partial-export" [
   let qp = [(serialize-qp "exportClients" $export_clients "scalar") (serialize-qp "exportGroupsAndRoles" $export_groups_and_roles "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partial-export") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8508,9 +8535,9 @@ export def "post-realm-partial-import" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/partialImport") $auth.query)
   let req_body = {"clients": $clients, "groups": $groups, "identityProviders": $identity_providers, "ifResourceExists": $if_resource_exists, "policy": $policy, "roles": $roles, "users": $users} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8545,7 +8572,7 @@ export def "post-realm-push-revocation" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/push-revocation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8585,7 +8612,7 @@ export def "get-realm-roles" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8629,9 +8656,9 @@ export def "post-realm-roles" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/roles") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8668,7 +8695,7 @@ export def "delete-realm-roles-by-id-role-id" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8705,7 +8732,7 @@ export def "get-realm-roles-by-id-role-id" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8751,9 +8778,9 @@ export def "put-realm-roles-by-id-role-id" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8792,9 +8819,9 @@ export def "delete-realm-roles-by-id-role-id-composites" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8831,7 +8858,7 @@ export def "get-realm-roles-by-id-role-id-composites" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8870,9 +8897,9 @@ export def "post-realm-roles-by-id-role-id-composites" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8911,7 +8938,7 @@ export def "get-realm-roles-by-id-role-id-composites-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id), client: (encode-path-segment $client)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8948,7 +8975,7 @@ export def "get-realm-roles-by-id-role-id-composites-realm" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/composites/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8985,7 +9012,7 @@ export def "get-realm-roles-by-id-role-id-management-permissions" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9026,9 +9053,9 @@ export def "put-realm-roles-by-id-role-id-management-permissions" [
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role-id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_id: (encode-path-segment $role_id)} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9065,7 +9092,7 @@ export def "delete-realm-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9102,7 +9129,7 @@ export def "get-realm-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9148,9 +9175,9 @@ export def "put-realm-roles-role-name" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}") $auth.query)
   let req_body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9189,9 +9216,9 @@ export def "delete-realm-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9228,7 +9255,7 @@ export def "get-realm-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9267,9 +9294,9 @@ export def "post-realm-roles-role-name-composites" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9308,7 +9335,7 @@ export def "get-realm-roles-role-name-composites-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name), client: (encode-path-segment $client)} | format pattern "/{realm}/roles/{role_name}/composites/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9345,7 +9372,7 @@ export def "get-realm-roles-role-name-composites-realm" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/composites/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9386,7 +9413,7 @@ export def "get-realm-roles-role-name-groups" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9423,7 +9450,7 @@ export def "get-realm-roles-role-name-management-permissions" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9464,9 +9491,9 @@ export def "put-realm-roles-role-name-management-permissions" [
   if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role-name' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/management/permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -9506,7 +9533,7 @@ export def "get-realm-roles-role-name-users" [
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), role_name: (encode-path-segment $role_name)} | format pattern "/{realm}/roles/{role_name}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9543,7 +9570,7 @@ export def "delete-realm-sessions-session" [
   if ($session | is-empty) { error make --unspanned { msg: "path parameter 'session' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), session: (encode-path-segment $session)} | format pattern "/{realm}/sessions/{session}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -9587,9 +9614,9 @@ export def "post-realm-test-ldap-connection" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testLDAPConnection") $auth.query)
   let req_body = {"action": $action, "bindCredential": $bind_credential, "bindDn": $bind_dn, "componentId": $component_id, "connectionTimeout": $connection_timeout, "connectionUrl": $connection_url, "startTls": $start_tls, "useTruststoreSpi": $use_truststore_spi} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9624,9 +9651,9 @@ export def "post-realm-test-smtp-connection" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/testSMTPConnection") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9663,7 +9690,7 @@ export def "get-realm-user-storage-id-name" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/name") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9700,7 +9727,7 @@ export def "post-realm-user-storage-id-remove-imported-users" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/remove-imported-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9739,7 +9766,7 @@ export def "post-realm-user-storage-id-sync" [
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/sync") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9776,7 +9803,7 @@ export def "post-realm-user-storage-id-unlink-users" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{id}/unlink-users") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9817,7 +9844,7 @@ export def "post-realm-user-storage-parent-id-mappers-id-sync" [
   let qp = [(serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), parent_id: (encode-path-segment $parent_id), id: (encode-path-segment $id)} | format pattern "/{realm}/user-storage/{parent_id}/mappers/{id}/sync") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9861,7 +9888,7 @@ export def "get-realm-users" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9920,9 +9947,9 @@ export def "post-realm-users" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9955,7 +9982,7 @@ export def "get-realm-users-management-permissions" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -9992,9 +10019,9 @@ export def "put-realm-users-management-permissions" [
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users-management-permissions") $auth.query)
   let req_body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10035,7 +10062,7 @@ export def "get-realm-users-count" [
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm)} | format pattern "/{realm}/users/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10072,7 +10099,7 @@ export def "delete-realm-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10109,7 +10136,7 @@ export def "get-realm-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10153,7 +10180,7 @@ export def "put-realm-users-id" [
   --federation-link: string
   --first-name: string
   --groups: list<string>
-  --body-id: string
+  --body-id: string # (spec name: id)
   --last-name: string
   --not-before: int # format: int32
   --origin: string
@@ -10170,9 +10197,9 @@ export def "put-realm-users-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}") $auth.query)
   let req_body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $body_id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10209,7 +10236,7 @@ export def "get-realm-users-id-configured-user-storage-credential-types" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/configured-user-storage-credential-types") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10246,7 +10273,7 @@ export def "get-realm-users-id-consents" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/consents") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10285,7 +10312,7 @@ export def "delete-realm-users-id-consents-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/consents/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10320,7 +10347,7 @@ export def "get-realm-users-id-credentials" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/credentials") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10359,7 +10386,7 @@ export def "delete-realm-users-id-credentials-credential-id" [
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10400,7 +10427,7 @@ export def "post-realm-users-id-credentials-credential-id-move-after-new-previou
   if ($new_previous_credential_id | is-empty) { error make --unspanned { msg: "path parameter 'newPreviousCredentialId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id), new_previous_credential_id: (encode-path-segment $new_previous_credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveAfter/{new_previous_credential_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10439,7 +10466,7 @@ export def "post-realm-users-id-credentials-credential-id-move-to-first" [
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveToFirst") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10480,9 +10507,9 @@ export def "put-realm-users-id-credentials-credential-id-user-label" [
   if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), credential_id: (encode-path-segment $credential_id)} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/userLabel") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10521,9 +10548,9 @@ export def "put-realm-users-id-disable-credential-types" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/disable-credential-types") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10566,9 +10593,9 @@ export def "put-realm-users-id-execute-actions-email" [
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "lifespan" $lifespan "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/execute-actions-email") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10605,7 +10632,7 @@ export def "get-realm-users-id-federated-identity" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/federated-identity") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10644,7 +10671,7 @@ export def "delete-realm-users-id-federated-identity-provider" [
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10687,9 +10714,9 @@ export def "post-realm-users-id-federated-identity-provider" [
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), provider: (encode-path-segment $provider)} | format pattern "/{realm}/users/{id}/federated-identity/{provider}") $auth.query)
   let req_body = {"identityProvider": $identity_provider, "userId": $user_id, "userName": $user_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10729,7 +10756,7 @@ export def "get-realm-users-id-groups" [
   let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10766,7 +10793,7 @@ export def "get-realm-users-id-groups-count" [
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/groups/count") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10803,7 +10830,7 @@ export def "delete-realm-users-id-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -10840,7 +10867,7 @@ export def "put-realm-users-id-groups-group-id" [
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), group_id: (encode-path-segment $group_id)} | format pattern "/{realm}/users/{id}/groups/{group_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -10877,7 +10904,7 @@ export def "post-realm-users-id-impersonation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/impersonation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10914,7 +10941,7 @@ export def "post-realm-users-id-logout" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/logout") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -10953,7 +10980,7 @@ export def "get-realm-users-id-offline-sessions-client-id" [
   if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client_id: (encode-path-segment $client_id)} | format pattern "/{realm}/users/{id}/offline-sessions/{client_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -10985,7 +11012,7 @@ export def "put-realm-users-id-reset-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-date: int # format: int64
   --credential-data: string
-  --body-id: string
+  --body-id: string # (spec name: id)
   --priority: int # format: int32
   --secret-data: string
   --temporary: oneof<nothing, bool>
@@ -11000,9 +11027,9 @@ export def "put-realm-users-id-reset-password" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/reset-password") $auth.query)
   let req_body = {"createdDate": $created_date, "credentialData": $credential_data, "id": $body_id, "priority": $priority, "secretData": $secret_data, "temporary": $temporary, "type": $type, "userLabel": $user_label, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11039,7 +11066,7 @@ export def "get-realm-users-id-role-mappings" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11080,9 +11107,9 @@ export def "delete-realm-users-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11121,7 +11148,7 @@ export def "get-realm-users-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11162,9 +11189,9 @@ export def "post-realm-users-id-role-mappings-clients-client" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11203,7 +11230,7 @@ export def "get-realm-users-id-role-mappings-clients-client-available" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11242,7 +11269,7 @@ export def "get-realm-users-id-role-mappings-clients-client-composite" [
   if ($client | is-empty) { error make --unspanned { msg: "path parameter 'client' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id), client: (encode-path-segment $client)} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11281,9 +11308,9 @@ export def "delete-realm-users-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -11320,7 +11347,7 @@ export def "get-realm-users-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11359,9 +11386,9 @@ export def "post-realm-users-id-role-mappings-realm" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -11398,7 +11425,7 @@ export def "get-realm-users-id-role-mappings-realm-available" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/available") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11435,7 +11462,7 @@ export def "get-realm-users-id-role-mappings-realm-composite" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/role-mappings/realm/composite") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -11475,7 +11502,7 @@ export def "put-realm-users-id-send-verify-email" [
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/send-verify-email") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -11512,7 +11539,7 @@ export def "get-realm-users-id-sessions" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({realm: (encode-path-segment $realm), id: (encode-path-segment $id)} | format pattern "/{realm}/users/{id}/sessions") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

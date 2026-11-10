@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -177,7 +204,7 @@ export def "get-all-orders" [
   --to-expected-ship-date: string # Limit orders to those that have order lines with an expected ship date before this date.
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32, default: 10)
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -198,9 +225,9 @@ export def "get-all-orders" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "customerOrderId" $customer_order_id "scalar") (serialize-qp "purchaseOrderId" $purchase_order_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "createdEndDate" $created_end_date "scalar") (serialize-qp "fromExpectedShipDate" $from_expected_ship_date "scalar") (serialize-qp "toExpectedShipDate" $to_expected_ship_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -234,7 +261,7 @@ export def "get-released-orders" [
   --created-start-date: string # Limit orders to those created after this date or a timestamp. (required)
   --limit: int # The number of orders to be returned. Do not set this parameter to over 200 orders. (format: int32)
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -256,9 +283,9 @@ export def "get-released-orders" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar") (serialize-qp "createdStartDate" $created_start_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/orders/released" $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -290,7 +317,7 @@ export def "get-next-cursor-released-orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -311,9 +338,9 @@ export def "get-next-cursor-released-orders" [
   let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let full_url = (build-url $base ({next_cursor: (encode-path-segment $next_cursor)} | format pattern "/v3/orders/released{next_cursor}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -346,7 +373,7 @@ export def "get-order-by-purchase-order-id" [
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -368,9 +395,9 @@ export def "get-order-by-purchase-order-id" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -403,7 +430,7 @@ export def "acknowledge-orders" [
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -425,9 +452,9 @@ export def "acknowledge-orders" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/acknowledge") $qp $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -460,7 +487,7 @@ export def "cancel-order" [
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -484,13 +511,13 @@ export def "cancel-order" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/cancel") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -523,7 +550,7 @@ export def "refund-order" [
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -547,13 +574,13 @@ export def "refund-order" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/refund") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -586,7 +613,7 @@ export def "shipping-order" [
   --accept: string@accept-completer # Response content type
   --ship-node: string # Ship Node
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -610,13 +637,13 @@ export def "shipping-order" [
   let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/v3/orders/{purchase_order_id}/shipping") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -648,7 +675,7 @@ export def "get-all-orders-next" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content-type: string@content-type-completer # application/xml, application/json (required, default: application/xml)
-  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml)
+  --hdr-accept: string@accept-completer # application/xml, application/json (required, default: application/xml) (spec name: Accept)
   --wm-consumer-channel-type: string@wm-consumer-channel-type-completer # Channel Type (required, default: SWAGGER_CHANNEL_TYPE)
   --wm-consumer-id: string # Your Consumer ID (required)
   --wm-sec-timestamp: string # Epoch timestamp (required, default: Auto populated)
@@ -669,9 +696,9 @@ export def "get-all-orders-next" [
   let wm_qos_correlation_id = ($wm_qos_correlation_id | default "123456abcdef")
   let full_url = (build-url $base ({next_cursor: (encode-path-segment $next_cursor)} | format pattern "/v3/orders{next_cursor}") $auth.query)
   let accept_val = ($accept | default "application/xml")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_CONSUMER.ID": $wm_consumer_id, "WM_SEC.TIMESTAMP": $wm_sec_timestamp, "WM_SEC.AUTH_SIGNATURE": $wm_sec_auth_signature, "WM_SVC.NAME": $wm_svc_name, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -211,7 +238,7 @@ export def "sql-flags-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "databaseVersion" $database_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sql/v1beta4/flags" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -262,7 +289,7 @@ export def "sql-instances-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/sql/v1beta4/projects/{project}/instances") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -322,7 +349,7 @@ export def "sql-instances-insert" [
   --name: string # Name of the Cloud SQL instance. This does not include the project ID.
   --on-premises-configuration: record # On-premises instance configuration. — shape: {caCertificate?: string, clientCertificate?: string, clientKey?: string, dumpFilePath?: string, hostPort?: string, kind?: string, password?: string, sourceInstance?: record, username?: string}
   --out-of-disk-report: record # This message wraps up the information written by out-of-disk detection job. — shape: {sqlMinRecommendedIncreaseSizeGb?: int, sqlOutOfDiskState?: "SQL_OUT_OF_DISK_STATE_UNSPECIFIED"|"NORMAL"|"SOFT_SHUTDOWN"}
-  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable. (spec name: project)
   --region: string # The geographical region. Can be: * `us-central` (`FIRST_GEN` instances only) * `us-central1` (`SECOND_GEN` instances only) * `asia-east1` or `europe-west1`. Defaults to `us-central` or `us-central1` depending on the instance type. The region cannot be changed after instance creation.
   --replica-configuration: record # Read-replica configuration for connecting to the primary instance. — shape: {failoverTarget?: bool, kind?: string, mysqlReplicaConfiguration?: record}
   --replica-names: list<string> # The replicas of the instance.
@@ -344,9 +371,9 @@ export def "sql-instances-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/sql/v1beta4/projects/{project}/instances") $qp $auth.query)
   let req_body = {"backendType": $backend_type, "connectionName": $connection_name, "currentDiskSize": $current_disk_size, "databaseVersion": $database_version, "diskEncryptionConfiguration": $disk_encryption_configuration, "diskEncryptionStatus": $disk_encryption_status, "etag": $etag, "failoverReplica": $failover_replica, "gceZone": $gce_zone, "instanceType": $instance_type, "ipAddresses": $ip_addresses, "ipv6Address": $ipv6_address, "kind": $kind, "maintenanceVersion": $maintenance_version, "masterInstanceName": $master_instance_name, "maxDiskSize": $max_disk_size, "name": $name, "onPremisesConfiguration": $on_premises_configuration, "outOfDiskReport": $out_of_disk_report, "project": $body_project, "region": $region, "replicaConfiguration": $replica_configuration, "replicaNames": $replica_names, "rootPassword": $root_password, "satisfiesPzs": $satisfies_pzs, "scheduledMaintenance": $scheduled_maintenance, "secondaryGceZone": $secondary_gce_zone, "selfLink": $self_link, "serverCaCert": $server_ca_cert, "serviceAccountEmailAddress": $service_account_email_address, "settings": $settings, "state": $state, "suspensionReason": $suspension_reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -396,7 +423,7 @@ export def "sql-instances-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -446,7 +473,7 @@ export def "sql-instances-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -507,7 +534,7 @@ export def "sql-instances-patch" [
   --name: string # Name of the Cloud SQL instance. This does not include the project ID.
   --on-premises-configuration: record # On-premises instance configuration. — shape: {caCertificate?: string, clientCertificate?: string, clientKey?: string, dumpFilePath?: string, hostPort?: string, kind?: string, password?: string, sourceInstance?: record, username?: string}
   --out-of-disk-report: record # This message wraps up the information written by out-of-disk detection job. — shape: {sqlMinRecommendedIncreaseSizeGb?: int, sqlOutOfDiskState?: "SQL_OUT_OF_DISK_STATE_UNSPECIFIED"|"NORMAL"|"SOFT_SHUTDOWN"}
-  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable. (spec name: project)
   --region: string # The geographical region. Can be: * `us-central` (`FIRST_GEN` instances only) * `us-central1` (`SECOND_GEN` instances only) * `asia-east1` or `europe-west1`. Defaults to `us-central` or `us-central1` depending on the instance type. The region cannot be changed after instance creation.
   --replica-configuration: record # Read-replica configuration for connecting to the primary instance. — shape: {failoverTarget?: bool, kind?: string, mysqlReplicaConfiguration?: record}
   --replica-names: list<string> # The replicas of the instance.
@@ -530,9 +557,9 @@ export def "sql-instances-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}") $qp $auth.query)
   let req_body = {"backendType": $backend_type, "connectionName": $connection_name, "currentDiskSize": $current_disk_size, "databaseVersion": $database_version, "diskEncryptionConfiguration": $disk_encryption_configuration, "diskEncryptionStatus": $disk_encryption_status, "etag": $etag, "failoverReplica": $failover_replica, "gceZone": $gce_zone, "instanceType": $instance_type, "ipAddresses": $ip_addresses, "ipv6Address": $ipv6_address, "kind": $kind, "maintenanceVersion": $maintenance_version, "masterInstanceName": $master_instance_name, "maxDiskSize": $max_disk_size, "name": $name, "onPremisesConfiguration": $on_premises_configuration, "outOfDiskReport": $out_of_disk_report, "project": $body_project, "region": $region, "replicaConfiguration": $replica_configuration, "replicaNames": $replica_names, "rootPassword": $root_password, "satisfiesPzs": $satisfies_pzs, "scheduledMaintenance": $scheduled_maintenance, "secondaryGceZone": $secondary_gce_zone, "selfLink": $self_link, "serverCaCert": $server_ca_cert, "serviceAccountEmailAddress": $service_account_email_address, "settings": $settings, "state": $state, "suspensionReason": $suspension_reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -593,7 +620,7 @@ export def "sql-instances-update" [
   --name: string # Name of the Cloud SQL instance. This does not include the project ID.
   --on-premises-configuration: record # On-premises instance configuration. — shape: {caCertificate?: string, clientCertificate?: string, clientKey?: string, dumpFilePath?: string, hostPort?: string, kind?: string, password?: string, sourceInstance?: record, username?: string}
   --out-of-disk-report: record # This message wraps up the information written by out-of-disk detection job. — shape: {sqlMinRecommendedIncreaseSizeGb?: int, sqlOutOfDiskState?: "SQL_OUT_OF_DISK_STATE_UNSPECIFIED"|"NORMAL"|"SOFT_SHUTDOWN"}
-  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL instance. The Google apps domain is prefixed if applicable. (spec name: project)
   --region: string # The geographical region. Can be: * `us-central` (`FIRST_GEN` instances only) * `us-central1` (`SECOND_GEN` instances only) * `asia-east1` or `europe-west1`. Defaults to `us-central` or `us-central1` depending on the instance type. The region cannot be changed after instance creation.
   --replica-configuration: record # Read-replica configuration for connecting to the primary instance. — shape: {failoverTarget?: bool, kind?: string, mysqlReplicaConfiguration?: record}
   --replica-names: list<string> # The replicas of the instance.
@@ -616,9 +643,9 @@ export def "sql-instances-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}") $qp $auth.query)
   let req_body = {"backendType": $backend_type, "connectionName": $connection_name, "currentDiskSize": $current_disk_size, "databaseVersion": $database_version, "diskEncryptionConfiguration": $disk_encryption_configuration, "diskEncryptionStatus": $disk_encryption_status, "etag": $etag, "failoverReplica": $failover_replica, "gceZone": $gce_zone, "instanceType": $instance_type, "ipAddresses": $ip_addresses, "ipv6Address": $ipv6_address, "kind": $kind, "maintenanceVersion": $maintenance_version, "masterInstanceName": $master_instance_name, "maxDiskSize": $max_disk_size, "name": $name, "onPremisesConfiguration": $on_premises_configuration, "outOfDiskReport": $out_of_disk_report, "project": $body_project, "region": $region, "replicaConfiguration": $replica_configuration, "replicaNames": $replica_names, "rootPassword": $root_password, "satisfiesPzs": $satisfies_pzs, "scheduledMaintenance": $scheduled_maintenance, "secondaryGceZone": $secondary_gce_zone, "selfLink": $self_link, "serverCaCert": $server_ca_cert, "serviceAccountEmailAddress": $service_account_email_address, "settings": $settings, "state": $state, "suspensionReason": $suspension_reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -668,7 +695,7 @@ export def "sql-instances-add-server-ca" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/addServerCa") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -720,7 +747,7 @@ export def "sql-backup-runs-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -770,7 +797,7 @@ export def "sql-backup-runs-insert" [
   --enqueued-time: string # The time the run was enqueued in UTC timezone in [RFC 3339](https://tools.ietf.org/html/rfc3339) format, for example `2012-11-15T16:19:00.094Z`. (format: google-datetime)
   --error: record # Database instance operation error. — shape: {code?: string, kind?: string, message?: string}
   --id: string # The identifier for this backup run. Unique only for a specific Cloud SQL instance. (format: int64)
-  --body-instance: string # Name of the database instance.
+  --body-instance: string # Name of the database instance. (spec name: instance)
   --kind: string # This is always `sql#backupRun`.
   --location: string # Location of the backups.
   --self-link: string # The URI of this resource.
@@ -788,9 +815,9 @@ export def "sql-backup-runs-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns") $qp $auth.query)
   let req_body = {"backupKind": $backup_kind, "description": $description, "diskEncryptionConfiguration": $disk_encryption_configuration, "diskEncryptionStatus": $disk_encryption_status, "endTime": $end_time, "enqueuedTime": $enqueued_time, "error": $error, "id": $id, "instance": $body_instance, "kind": $kind, "location": $location, "selfLink": $self_link, "startTime": $start_time, "status": $status, "timeZone": $time_zone, "type": $type, "windowStartTime": $window_start_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -842,7 +869,7 @@ export def "sql-backup-runs-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), id: (encode-path-segment $id)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -894,7 +921,7 @@ export def "sql-backup-runs-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), id: (encode-path-segment $id)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -946,9 +973,9 @@ export def "sql-instances-clone" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/clone") $qp $auth.query)
   let req_body = {"cloneContext": $clone_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -999,7 +1026,7 @@ export def "sql-connect-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readTime" $read_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/connectSettings") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1041,7 +1068,7 @@ export def "sql-ssl-certs-create-ephemeral" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --access-token-body: string # Access token to include in the signed certificate. (body field)
+  --body-access-token: string # Access token to include in the signed certificate. (spec name: access_token)
   --public-key: string # PEM encoded public key to include in the signed certificate.
 ]: any -> oneof<record<cert: string, certSerialNumber: string, commonName: string, createTime: string, expirationTime: string, instance: string, kind: string, selfLink: string, sha1Fingerprint: string>, string, nothing> {
   let input = $in
@@ -1051,10 +1078,10 @@ export def "sql-ssl-certs-create-ephemeral" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/createEphemeral") $qp $auth.query)
-  let req_body = {"access_token": $access_token_body, "public_key": $public_key} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"access_token": $body_access_token, "public_key": $public_key} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1104,7 +1131,7 @@ export def "sql-databases-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1149,10 +1176,10 @@ export def "sql-databases-insert" [
   --charset: string # The Cloud SQL charset value.
   --collation: string # The Cloud SQL collation value.
   --etag: string # This field is deprecated and will be removed from a future version of the API.
-  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID.
+  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. (spec name: instance)
   --kind: string # This is always `sql#database`.
   --name: string # The name of the database in the Cloud SQL instance. This does not include the project ID or instance name.
-  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. (spec name: project)
   --self-link: string # The URI of this resource.
   --sqlserver-database-details: record # Represents a Sql Server database on the Cloud SQL instance. — shape: {compatibilityLevel?: int, recoveryModel?: string}
 ]: any -> oneof<record<backupContext: record<backupId: string, kind: string>, endTime: string, error: record<errors: list<record>, kind: string>, exportContext: record<bakExportOptions: record<stripeCount: int, striped: bool>, csvExportOptions: record<escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, selectQuery: string>, databases: list<string>, fileType: string, kind: string, offload: bool, sqlExportOptions: record<mysqlExportOptions: record, schemaOnly: bool, tables: list>, uri: string>, importContext: record<bakImportOptions: record<encryptionOptions: record, striped: bool>, csvImportOptions: record<columns: list, escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, table: string>, database: string, fileType: string, importUser: string, kind: string, uri: string>, insertTime: string, kind: string, name: string, operationType: string, selfLink: string, startTime: string, status: string, targetId: string, targetLink: string, targetProject: string, user: string>, string, nothing> {
@@ -1164,9 +1191,9 @@ export def "sql-databases-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases") $qp $auth.query)
   let req_body = {"charset": $charset, "collation": $collation, "etag": $etag, "instance": $body_instance, "kind": $kind, "name": $name, "project": $body_project, "selfLink": $self_link, "sqlserverDatabaseDetails": $sqlserver_database_details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1218,7 +1245,7 @@ export def "sql-databases-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), database: (encode-path-segment $database)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1270,7 +1297,7 @@ export def "sql-databases-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), database: (encode-path-segment $database)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1316,10 +1343,10 @@ export def "sql-databases-patch" [
   --charset: string # The Cloud SQL charset value.
   --collation: string # The Cloud SQL collation value.
   --etag: string # This field is deprecated and will be removed from a future version of the API.
-  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID.
+  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. (spec name: instance)
   --kind: string # This is always `sql#database`.
   --name: string # The name of the database in the Cloud SQL instance. This does not include the project ID or instance name.
-  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. (spec name: project)
   --self-link: string # The URI of this resource.
   --sqlserver-database-details: record # Represents a Sql Server database on the Cloud SQL instance. — shape: {compatibilityLevel?: int, recoveryModel?: string}
 ]: any -> oneof<record<backupContext: record<backupId: string, kind: string>, endTime: string, error: record<errors: list<record>, kind: string>, exportContext: record<bakExportOptions: record<stripeCount: int, striped: bool>, csvExportOptions: record<escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, selectQuery: string>, databases: list<string>, fileType: string, kind: string, offload: bool, sqlExportOptions: record<mysqlExportOptions: record, schemaOnly: bool, tables: list>, uri: string>, importContext: record<bakImportOptions: record<encryptionOptions: record, striped: bool>, csvImportOptions: record<columns: list, escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, table: string>, database: string, fileType: string, importUser: string, kind: string, uri: string>, insertTime: string, kind: string, name: string, operationType: string, selfLink: string, startTime: string, status: string, targetId: string, targetLink: string, targetProject: string, user: string>, string, nothing> {
@@ -1332,9 +1359,9 @@ export def "sql-databases-patch" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), database: (encode-path-segment $database)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}") $qp $auth.query)
   let req_body = {"charset": $charset, "collation": $collation, "etag": $etag, "instance": $body_instance, "kind": $kind, "name": $name, "project": $body_project, "selfLink": $self_link, "sqlserverDatabaseDetails": $sqlserver_database_details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -1380,10 +1407,10 @@ export def "sql-databases-update" [
   --charset: string # The Cloud SQL charset value.
   --collation: string # The Cloud SQL collation value.
   --etag: string # This field is deprecated and will be removed from a future version of the API.
-  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID.
+  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. (spec name: instance)
   --kind: string # This is always `sql#database`.
   --name: string # The name of the database in the Cloud SQL instance. This does not include the project ID or instance name.
-  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable.
+  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. (spec name: project)
   --self-link: string # The URI of this resource.
   --sqlserver-database-details: record # Represents a Sql Server database on the Cloud SQL instance. — shape: {compatibilityLevel?: int, recoveryModel?: string}
 ]: any -> oneof<record<backupContext: record<backupId: string, kind: string>, endTime: string, error: record<errors: list<record>, kind: string>, exportContext: record<bakExportOptions: record<stripeCount: int, striped: bool>, csvExportOptions: record<escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, selectQuery: string>, databases: list<string>, fileType: string, kind: string, offload: bool, sqlExportOptions: record<mysqlExportOptions: record, schemaOnly: bool, tables: list>, uri: string>, importContext: record<bakImportOptions: record<encryptionOptions: record, striped: bool>, csvImportOptions: record<columns: list, escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, table: string>, database: string, fileType: string, importUser: string, kind: string, uri: string>, insertTime: string, kind: string, name: string, operationType: string, selfLink: string, startTime: string, status: string, targetId: string, targetLink: string, targetProject: string, user: string>, string, nothing> {
@@ -1396,9 +1423,9 @@ export def "sql-databases-update" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), database: (encode-path-segment $database)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/databases/{database}") $qp $auth.query)
   let req_body = {"charset": $charset, "collation": $collation, "etag": $etag, "instance": $body_instance, "kind": $kind, "name": $name, "project": $body_project, "selfLink": $self_link, "sqlserverDatabaseDetails": $sqlserver_database_details} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1450,9 +1477,9 @@ export def "sql-instances-demote-master" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/demoteMaster") $qp $auth.query)
   let req_body = {"demoteMasterContext": $demote_master_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1504,9 +1531,9 @@ export def "sql-instances-export" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/export") $qp $auth.query)
   let req_body = {"exportContext": $export_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1558,9 +1585,9 @@ export def "sql-instances-failover" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/failover") $qp $auth.query)
   let req_body = {"failoverContext": $failover_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1610,7 +1637,7 @@ export def "sql-projects-instances-get-disk-shrink-config" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/getDiskShrinkConfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1662,9 +1689,9 @@ export def "sql-instances-import" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/import") $qp $auth.query)
   let req_body = {"importContext": $import_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1714,7 +1741,7 @@ export def "sql-instances-list-server-cas" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/listServerCas") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1766,9 +1793,9 @@ export def "sql-projects-instances-perform-disk-shrink" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/performDiskShrink") $qp $auth.query)
   let req_body = {"targetSizeGb": $target_size_gb} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1818,7 +1845,7 @@ export def "sql-instances-promote-replica" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/promoteReplica") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1870,9 +1897,9 @@ export def "sql-projects-instances-reschedule-maintenance" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/rescheduleMaintenance") $qp $auth.query)
   let req_body = {"reschedule": $reschedule} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1924,9 +1951,9 @@ export def "sql-projects-instances-reset-replica-size" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/resetReplicaSize") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1976,7 +2003,7 @@ export def "sql-instances-reset-ssl-config" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/resetSslConfig") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2026,7 +2053,7 @@ export def "sql-instances-restart" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/restart") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2078,9 +2105,9 @@ export def "sql-instances-restore-backup" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/restoreBackup") $qp $auth.query)
   let req_body = {"restoreBackupContext": $restore_backup_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2132,9 +2159,9 @@ export def "sql-instances-rotate-server-ca" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/rotateServerCa") $qp $auth.query)
   let req_body = {"rotateServerCaContext": $rotate_server_ca_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2184,7 +2211,7 @@ export def "sql-ssl-certs-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2236,9 +2263,9 @@ export def "sql-ssl-certs-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts") $qp $auth.query)
   let req_body = {"commonName": $common_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2290,7 +2317,7 @@ export def "sql-ssl-certs-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts/{sha1_fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2342,7 +2369,7 @@ export def "sql-ssl-certs-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts/{sha1_fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2396,9 +2423,9 @@ export def "sql-projects-instances-start-external-sync" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/startExternalSync") $qp $auth.query)
   let req_body = {"mysqlSyncConfig": $mysql_sync_config, "skipVerification": $skip_verification, "syncMode": $sync_mode} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2448,7 +2475,7 @@ export def "sql-instances-start-replica" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/startReplica") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2498,7 +2525,7 @@ export def "sql-instances-stop-replica" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/stopReplica") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2550,9 +2577,9 @@ export def "sql-instances-truncate-log" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/truncateLog") $qp $auth.query)
   let req_body = {"truncateLogContext": $truncate_log_context} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2604,7 +2631,7 @@ export def "sql-users-delete" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2654,7 +2681,7 @@ export def "sql-users-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/users") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2699,12 +2726,12 @@ export def "sql-users-insert" [
   --dual-password-type: string@dual-password-type-completer # Dual password status for the user.
   --etag: string # This field is deprecated and will be removed from a future version of the API.
   --host: string # Optional. The host from which the user can connect. For `insert` operations, host defaults to an empty string. For `update` operations, host is specified as part of the request URL. The host name cannot be updated after insertion. For a MySQL instance, it's required; for a PostgreSQL or SQL Server instance, it's optional.
-  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. Can be omitted for *update* because it is already specified on the URL.
+  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. Can be omitted for *update* because it is already specified on the URL. (spec name: instance)
   --kind: string # This is always `sql#user`.
   --name: string # The name of the user in the Cloud SQL instance. Can be omitted for `update` because it is already specified in the URL.
   --password: string # The password for the user.
   --password-policy: record # User level password validation policy. — shape: {allowedFailedAttempts?: int, enableFailedAttemptsCheck?: bool, enablePasswordVerification?: bool, passwordExpirationDuration?: string, status?: record}
-  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. Can be omitted for *update* because it is already specified on the URL.
+  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. Can be omitted for *update* because it is already specified on the URL. (spec name: project)
   --sqlserver-user-details: record # Represents a Sql Server user on the Cloud SQL instance. — shape: {disabled?: bool, serverRoles?: list<string>}
   --type: string@type-completer-1 # The user type. It determines the method to authenticate the user during login. The default is the database's built-in user type.
 ]: any -> oneof<record<backupContext: record<backupId: string, kind: string>, endTime: string, error: record<errors: list<record>, kind: string>, exportContext: record<bakExportOptions: record<stripeCount: int, striped: bool>, csvExportOptions: record<escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, selectQuery: string>, databases: list<string>, fileType: string, kind: string, offload: bool, sqlExportOptions: record<mysqlExportOptions: record, schemaOnly: bool, tables: list>, uri: string>, importContext: record<bakImportOptions: record<encryptionOptions: record, striped: bool>, csvImportOptions: record<columns: list, escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, table: string>, database: string, fileType: string, importUser: string, kind: string, uri: string>, insertTime: string, kind: string, name: string, operationType: string, selfLink: string, startTime: string, status: string, targetId: string, targetLink: string, targetProject: string, user: string>, string, nothing> {
@@ -2716,9 +2743,9 @@ export def "sql-users-insert" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/users") $qp $auth.query)
   let req_body = {"dualPasswordType": $dual_password_type, "etag": $etag, "host": $host, "instance": $body_instance, "kind": $kind, "name": $name, "password": $password, "passwordPolicy": $password_policy, "project": $body_project, "sqlserverUserDetails": $sqlserver_user_details, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2764,13 +2791,13 @@ export def "sql-users-update" [
   --name: string # Name of the user in the instance.
   --dual-password-type: string@dual-password-type-completer # Dual password status for the user.
   --etag: string # This field is deprecated and will be removed from a future version of the API.
-  --host-body: string # Optional. The host from which the user can connect. For `insert` operations, host defaults to an empty string. For `update` operations, host is specified as part of the request URL. The host name cannot be updated after insertion. For a MySQL instance, it's required; for a PostgreSQL or SQL Server instance, it's optional. (body field)
-  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. Can be omitted for *update* because it is already specified on the URL.
+  --body-host: string # Optional. The host from which the user can connect. For `insert` operations, host defaults to an empty string. For `update` operations, host is specified as part of the request URL. The host name cannot be updated after insertion. For a MySQL instance, it's required; for a PostgreSQL or SQL Server instance, it's optional. (spec name: host)
+  --body-instance: string # The name of the Cloud SQL instance. This does not include the project ID. Can be omitted for *update* because it is already specified on the URL. (spec name: instance)
   --kind: string # This is always `sql#user`.
-  --name-body: string # The name of the user in the Cloud SQL instance. Can be omitted for `update` because it is already specified in the URL. (body field)
+  --body-name: string # The name of the user in the Cloud SQL instance. Can be omitted for `update` because it is already specified in the URL. (spec name: name)
   --password: string # The password for the user.
   --password-policy: record # User level password validation policy. — shape: {allowedFailedAttempts?: int, enableFailedAttemptsCheck?: bool, enablePasswordVerification?: bool, passwordExpirationDuration?: string, status?: record}
-  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. Can be omitted for *update* because it is already specified on the URL.
+  --body-project: string # The project ID of the project containing the Cloud SQL database. The Google apps domain is prefixed if applicable. Can be omitted for *update* because it is already specified on the URL. (spec name: project)
   --sqlserver-user-details: record # Represents a Sql Server user on the Cloud SQL instance. — shape: {disabled?: bool, serverRoles?: list<string>}
   --type: string@type-completer-1 # The user type. It determines the method to authenticate the user during login. The default is the database's built-in user type.
 ]: any -> oneof<record<backupContext: record<backupId: string, kind: string>, endTime: string, error: record<errors: list<record>, kind: string>, exportContext: record<bakExportOptions: record<stripeCount: int, striped: bool>, csvExportOptions: record<escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, selectQuery: string>, databases: list<string>, fileType: string, kind: string, offload: bool, sqlExportOptions: record<mysqlExportOptions: record, schemaOnly: bool, tables: list>, uri: string>, importContext: record<bakImportOptions: record<encryptionOptions: record, striped: bool>, csvImportOptions: record<columns: list, escapeCharacter: string, fieldsTerminatedBy: string, linesTerminatedBy: string, quoteCharacter: string, table: string>, database: string, fileType: string, importUser: string, kind: string, uri: string>, insertTime: string, kind: string, name: string, operationType: string, selfLink: string, startTime: string, status: string, targetId: string, targetLink: string, targetProject: string, user: string>, string, nothing> {
@@ -2781,10 +2808,10 @@ export def "sql-users-update" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/users") $qp $auth.query)
-  let req_body = {"dualPasswordType": $dual_password_type, "etag": $etag, "host": $host_body, "instance": $body_instance, "kind": $kind, "name": $name_body, "password": $password, "passwordPolicy": $password_policy, "project": $body_project, "sqlserverUserDetails": $sqlserver_user_details, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"dualPasswordType": $dual_password_type, "etag": $etag, "host": $body_host, "instance": $body_instance, "kind": $kind, "name": $body_name, "password": $password, "passwordPolicy": $password_policy, "project": $body_project, "sqlserverUserDetails": $sqlserver_user_details, "type": $type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -2837,7 +2864,7 @@ export def "sql-users-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "host" $host "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance), name: (encode-path-segment $name)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/users/{name}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2892,9 +2919,9 @@ export def "sql-projects-instances-verify-external-sync-settings" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}/verifyExternalSyncSettings") $qp $auth.query)
   let req_body = {"mysqlSyncConfig": $mysql_sync_config, "syncMode": $sync_mode, "verifyConnectionOnly": $verify_connection_only, "verifyReplicationOnly": $verify_replication_only} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2936,7 +2963,7 @@ export def "sql-connect-generate-ephemeral" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --access-token-body: string # Optional. Access token to include in the signed certificate. (body field)
+  --body-access-token: string # Optional. Access token to include in the signed certificate. (spec name: access_token)
   --public-key: string # PEM encoded public key to include in the signed certificate.
   --read-time: string # Optional. Optional snapshot read timestamp to trade freshness for performance. (format: google-datetime)
   --valid-duration: string # Optional. If set, it will contain the cert valid duration. (format: google-duration)
@@ -2948,10 +2975,10 @@ export def "sql-connect-generate-ephemeral" [
   if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), instance: (encode-path-segment $instance)} | format pattern "/sql/v1beta4/projects/{project}/instances/{instance}:generateEphemeralCert") $qp $auth.query)
-  let req_body = {"access_token": $access_token_body, "public_key": $public_key, "readTime": $read_time, "validDuration": $valid_duration} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"access_token": $body_access_token, "public_key": $public_key, "readTime": $read_time, "validDuration": $valid_duration} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3002,7 +3029,7 @@ export def "sql-operations-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "instance" $instance "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/sql/v1beta4/projects/{project}/operations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3052,7 +3079,7 @@ export def "sql-operations-get" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), operation: (encode-path-segment $operation)} | format pattern "/sql/v1beta4/projects/{project}/operations/{operation}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3100,7 +3127,7 @@ export def "sql-tiers-list" [
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project)} | format pattern "/sql/v1beta4/projects/{project}/tiers") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url

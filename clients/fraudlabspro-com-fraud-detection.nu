@@ -83,9 +83,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -106,6 +108,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # POST — body + content-type
@@ -171,7 +198,7 @@ export def "post-v1-order-feedback" [
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/order/feedback" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -240,7 +267,7 @@ export def "post-v1-order-screen" [
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "bill_addr" $bill_addr "scalar") (serialize-qp "bill_city" $bill_city "scalar") (serialize-qp "bill_state" $bill_state "scalar") (serialize-qp "bill_country" $bill_country "scalar") (serialize-qp "bill_zip_code" $bill_zip_code "scalar") (serialize-qp "ship_addr" $ship_addr "scalar") (serialize-qp "ship_city" $ship_city "scalar") (serialize-qp "ship_state" $ship_state "scalar") (serialize-qp "ship_country" $ship_country "scalar") (serialize-qp "ship_zip_code" $ship_zip_code "scalar") (serialize-qp "email_domain" $email_domain "scalar") (serialize-qp "user_phone" $user_phone "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "email_hash" $email_hash "scalar") (serialize-qp "username_hash" $username_hash "scalar") (serialize-qp "password_hash" $password_hash "scalar") (serialize-qp "bin_no" $bin_no "scalar") (serialize-qp "card_hash" $card_hash "scalar") (serialize-qp "avs_result" $avs_result "scalar") (serialize-qp "cvv_result" $cvv_result "scalar") (serialize-qp "user_order_id" $user_order_id "scalar") (serialize-qp "user_order_memo" $user_order_memo "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "department" $department "scalar") (serialize-qp "payment_mode" $payment_mode "scalar") (serialize-qp "flp_checksum" $flp_checksum "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/order/screen" $qp $auth.query)
   let accept_val = "application/json; charset=utf-8"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url

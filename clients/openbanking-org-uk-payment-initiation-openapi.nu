@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -183,11 +210,11 @@ export def "create-domestic-payment-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-payment-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -230,9 +257,9 @@ export def "get-domestic-payment-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/domestic-payment-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -275,9 +302,9 @@ export def "get-domestic-payment-consents-consent-id-funds-confirmation" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/domestic-payment-consents/{consent_id}/funds-confirmation") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -325,11 +352,11 @@ export def "create-domestic-payments" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-payments" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -372,9 +399,9 @@ export def "get-domestic-payments-domestic-payment-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_payment_id: (encode-path-segment $domestic_payment_id)} | format pattern "/domestic-payments/{domestic_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -417,9 +444,9 @@ export def "get-domestic-payments-domestic-payment-id-payment-details" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_payment_id: (encode-path-segment $domestic_payment_id)} | format pattern "/domestic-payments/{domestic_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -467,11 +494,11 @@ export def "create-domestic-scheduled-payment-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-scheduled-payment-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -514,9 +541,9 @@ export def "get-domestic-scheduled-payment-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/domestic-scheduled-payment-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -564,11 +591,11 @@ export def "create-domestic-scheduled-payments" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-scheduled-payments" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -611,9 +638,9 @@ export def "get-domestic-scheduled-payments-domestic-scheduled-payment-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_scheduled_payment_id: (encode-path-segment $domestic_scheduled_payment_id)} | format pattern "/domestic-scheduled-payments/{domestic_scheduled_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -656,9 +683,9 @@ export def "get-domestic-scheduled-payments-domestic-scheduled-payment-id-paymen
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_scheduled_payment_id: (encode-path-segment $domestic_scheduled_payment_id)} | format pattern "/domestic-scheduled-payments/{domestic_scheduled_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -706,11 +733,11 @@ export def "create-domestic-standing-order-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-standing-order-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -753,9 +780,9 @@ export def "get-domestic-standing-order-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/domestic-standing-order-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -803,11 +830,11 @@ export def "create-domestic-standing-orders" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/domestic-standing-orders" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -850,9 +877,9 @@ export def "get-domestic-standing-orders-domestic-standing-order-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_standing_order_id: (encode-path-segment $domestic_standing_order_id)} | format pattern "/domestic-standing-orders/{domestic_standing_order_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -895,9 +922,9 @@ export def "get-domestic-standing-orders-domestic-standing-order-id-payment-deta
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({domestic_standing_order_id: (encode-path-segment $domestic_standing_order_id)} | format pattern "/domestic-standing-orders/{domestic_standing_order_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -944,11 +971,11 @@ export def "create-file-payment-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/file-payment-consents" $auth.query)
   let req_body = {"Data": $data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -991,9 +1018,9 @@ export def "get-file-payment-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/file-payment-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1036,9 +1063,9 @@ export def "get-file-payment-consents-consent-id-file" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/file-payment-consents/{consent_id}/file") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1086,11 +1113,11 @@ export def "create-file-payment-consents-consent-id-file" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/file-payment-consents/{consent_id}/file") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1137,11 +1164,11 @@ export def "create-file-payments" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/file-payments" $auth.query)
   let req_body = {"Data": $data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1184,9 +1211,9 @@ export def "get-file-payments-file-payment-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({file_payment_id: (encode-path-segment $file_payment_id)} | format pattern "/file-payments/{file_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1229,9 +1256,9 @@ export def "get-file-payments-file-payment-id-payment-details" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({file_payment_id: (encode-path-segment $file_payment_id)} | format pattern "/file-payments/{file_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1274,9 +1301,9 @@ export def "get-file-payments-file-payment-id-report-file" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({file_payment_id: (encode-path-segment $file_payment_id)} | format pattern "/file-payments/{file_payment_id}/report-file") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1324,11 +1351,11 @@ export def "create-international-payment-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-payment-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1371,9 +1398,9 @@ export def "get-international-payment-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/international-payment-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1416,9 +1443,9 @@ export def "get-international-payment-consents-consent-id-funds-confirmation" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/international-payment-consents/{consent_id}/funds-confirmation") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1466,11 +1493,11 @@ export def "create-international-payments" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-payments" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1513,9 +1540,9 @@ export def "get-international-payments-international-payment-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_payment_id: (encode-path-segment $international_payment_id)} | format pattern "/international-payments/{international_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1558,9 +1585,9 @@ export def "get-international-payments-international-payment-id-payment-details"
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_payment_id: (encode-path-segment $international_payment_id)} | format pattern "/international-payments/{international_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1608,11 +1635,11 @@ export def "create-international-scheduled-payment-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-scheduled-payment-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1655,9 +1682,9 @@ export def "get-international-scheduled-payment-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/international-scheduled-payment-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1700,9 +1727,9 @@ export def "get-international-scheduled-payment-consents-consent-id-funds-confir
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/international-scheduled-payment-consents/{consent_id}/funds-confirmation") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1750,11 +1777,11 @@ export def "create-international-scheduled-payments" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-scheduled-payments" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1797,9 +1824,9 @@ export def "get-international-scheduled-payments-international-scheduled-payment
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_scheduled_payment_id: (encode-path-segment $international_scheduled_payment_id)} | format pattern "/international-scheduled-payments/{international_scheduled_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1842,9 +1869,9 @@ export def "get-international-scheduled-payments-international-scheduled-payment
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_scheduled_payment_id: (encode-path-segment $international_scheduled_payment_id)} | format pattern "/international-scheduled-payments/{international_scheduled_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1892,11 +1919,11 @@ export def "create-international-standing-order-consents" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-standing-order-consents" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1939,9 +1966,9 @@ export def "get-international-standing-order-consents-consent-id" [
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/international-standing-order-consents/{consent_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1989,11 +2016,11 @@ export def "create-international-standing-orders" [
   if ($x_jws_signature == null) { error make --unspanned { msg: "required header parameter 'x-jws-signature' missing: pass --x-jws-signature" } }
   let full_url = (build-url $base "/international-standing-orders" $auth.query)
   let req_body = {"Data": $data, "Risk": $risk} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-idempotency-key": $x_idempotency_key, "x-jws-signature": $x_jws_signature, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2036,9 +2063,9 @@ export def "get-international-standing-orders-international-standing-order-payme
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_standing_order_payment_id: (encode-path-segment $international_standing_order_payment_id)} | format pattern "/international-standing-orders/{international_standing_order_payment_id}") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2081,9 +2108,9 @@ export def "get-international-standing-orders-international-standing-order-payme
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
   let full_url = (build-url $base ({international_standing_order_payment_id: (encode-path-segment $international_standing_order_payment_id)} | format pattern "/international-standing-orders/{international_standing_order_payment_id}/payment-details") $auth.query)
   let accept_val = ($accept | default "application/jose+jwe")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"x-fapi-auth-date": $x_fapi_auth_date, "x-fapi-customer-ip-address": $x_fapi_customer_ip_address, "x-fapi-interaction-id": $x_fapi_interaction_id, "Authorization": $authorization, "x-customer-user-agent": $x_customer_user_agent} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url

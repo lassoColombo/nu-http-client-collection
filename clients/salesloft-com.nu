@@ -84,9 +84,11 @@ def encode-path-greedy [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -107,6 +109,31 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
   if $resp.status == 204 { return null }
   $resp.body
+}
+
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
 # GET — bodyless, honours --raw
@@ -187,7 +214,7 @@ export def "get-v2-account-stages-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/account_stages.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -222,7 +249,7 @@ export def "get-v2-account-stages-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/account_stages/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -264,7 +291,7 @@ export def "get-v2-account-tiers-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "name" $name "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/account_tiers.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -299,7 +326,7 @@ export def "get-v2-account-tiers-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/account_tiers/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -362,9 +389,9 @@ export def "post-v2-account-upserts-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/account_upserts.json" $auth.query)
   let req_body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "id": $id, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -428,7 +455,7 @@ export def "get-v2-accounts-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "tag_id" $tag_id "csv") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "domain" $domain "scalar") (serialize-qp "website" $website "csv") (serialize-qp "archived" $archived "scalar") (serialize-qp "name" $name "csv") (serialize-qp "account_stage_id" $account_stage_id "csv") (serialize-qp "account_tier_id" $account_tier_id "csv") (serialize-qp "owner_id" $owner_id "csv") (serialize-qp "owner_is_active" $owner_is_active "scalar") (serialize-qp "last_contacted" $last_contacted "multi") (serialize-qp "custom_fields" $custom_fields "multi") (serialize-qp "industry" $industry "csv") (serialize-qp "country" $country "csv") (serialize-qp "state" $state "csv") (serialize-qp "city" $city "csv") (serialize-qp "owner_crm_id" $owner_crm_id "csv") (serialize-qp "locales" $locales "csv") (serialize-qp "user_relationships" $user_relationships "multi") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/accounts.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -489,9 +516,9 @@ export def "post-v2-accounts-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/accounts.json" $auth.query)
   let req_body = {"account_tier_id": $account_tier_id, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -527,7 +554,7 @@ export def "delete-v2-accounts-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -562,7 +589,7 @@ export def "get-v2-accounts-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -626,9 +653,9 @@ export def "put-v2-accounts-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/accounts/{id}.json") $auth.query)
   let req_body = {"account_tier_id": $account_tier_id, "archived": $archived, "city": $city, "company_stage_id": $company_stage_id, "company_type": $company_type, "conversational_name": $conversational_name, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "description": $description, "do_not_contact": $do_not_contact, "domain": $domain, "founded": $founded, "industry": $industry, "linkedin_url": $linkedin_url, "locale": $locale, "name": $name, "owner_id": $owner_id, "phone": $phone, "postal_code": $postal_code, "revenue_range": $revenue_range, "size": $size, "state": $state, "street": $street, "tags": $tags, "twitter_handle": $twitter_handle, "website": $website} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -670,7 +697,7 @@ export def "get-v2-action-details-call-instructions-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/action_details/call_instructions.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -705,7 +732,7 @@ export def "get-v2-action-details-call-instructions-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/action_details/call_instructions/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -754,7 +781,7 @@ export def "get-v2-actions-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "step_id" $step_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "due_on" $due_on "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "multitouch_group_id" $multitouch_group_id "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/actions.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -789,7 +816,7 @@ export def "get-v2-actions-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/actions/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -825,9 +852,9 @@ export def "post-v2-activities-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/activities.json" $auth.query)
   let req_body = {"action_id": $action_id, "task_id": $task_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -875,7 +902,7 @@ export def "get-v2-activities-calls-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "sentiment" $sentiment "csv") (serialize-qp "disposition" $disposition "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/activities/calls.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -919,9 +946,9 @@ export def "post-v2-activities-calls-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/activities/calls.json" $auth.query)
   let req_body = {"action_id": $action_id, "crm_params": $crm_params, "disposition": $disposition, "duration": $duration, "linked_call_data_record_ids": $linked_call_data_record_ids, "notes": $notes, "person_id": $person_id, "sentiment": $sentiment, "to": $to, "user_guid": $user_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -957,7 +984,7 @@ export def "get-v2-activities-calls-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/activities/calls/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1012,7 +1039,7 @@ export def "get-v2-activities-emails-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "bounced" $bounced "scalar") (serialize-qp "crm_activity_id" $crm_activity_id "csv") (serialize-qp "action_id" $action_id "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "status" $status "csv") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "step_id" $step_id "csv") (serialize-qp "one_off" $one_off "scalar") (serialize-qp "scoped_fields" $scoped_fields "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "email_addresses" $email_addresses "csv") (serialize-qp "personalization" $personalization "csv") (serialize-qp "sent_at" $sent_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/activities/emails.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1047,7 +1074,7 @@ export def "get-v2-activities-emails-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/activities/emails/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1094,7 +1121,7 @@ export def "get-v2-activity-histories" [
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "_resource" $resource "scalar") (serialize-qp "occurred_at" $occurred_at "multi") (serialize-qp "pinned" $pinned "scalar") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "resource_id" $resource_id "csv") (serialize-qp "updated_at" $updated_at "multi") (serialize-qp "user_guid" $user_guid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/activity_histories" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1131,7 +1158,7 @@ export def "get-v2-bulk-jobs" [
   let qp = [(serialize-qp "state" $state "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/bulk_jobs" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1167,9 +1194,9 @@ export def "post-v2-bulk-jobs" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/bulk_jobs" $auth.query)
   let req_body = {"name": $name, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1209,7 +1236,7 @@ export def "get-v2-bulk-jobs-bulk-jobs-id-job-data" [
   let qp = [(serialize-qp "status" $status "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1246,9 +1273,9 @@ export def "post-v2-bulk-jobs-bulk-jobs-id-job-data" [
   if ($bulk_jobs_id | is-empty) { error make --unspanned { msg: "path parameter 'bulk_jobs_id' must be non-empty" } }
   let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/job_data") $auth.query)
   let req_body = {"data": $data} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1288,7 +1315,7 @@ export def "get-v2-bulk-jobs-bulk-jobs-id-results" [
   let qp = [(serialize-qp "status" $status "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bulk_jobs_id: (encode-path-segment $bulk_jobs_id)} | format pattern "/v2/bulk_jobs/{bulk_jobs_id}/results") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1323,7 +1350,7 @@ export def "get-v2-bulk-jobs-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/bulk_jobs/{id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1361,9 +1388,9 @@ export def "put-v2-bulk-jobs-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/bulk_jobs/{id}") $auth.query)
   let req_body = {"name": $name, "ready_to_execute": $ready_to_execute} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -1399,7 +1426,7 @@ export def "get-v2-cadence-exports-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_exports/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1436,9 +1463,9 @@ export def "post-v2-cadence-imports-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/cadence_imports.json" $auth.query)
   let req_body = {"cadence_content": $cadence_content, "settings": $settings, "sharing_settings": $sharing_settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1484,7 +1511,7 @@ export def "get-v2-cadence-memberships-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "currently_on_cadence" $currently_on_cadence "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cadence_memberships.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1524,7 +1551,7 @@ export def "post-v2-cadence-memberships-json" [
   let qp = [(serialize-qp "person_id" $person_id "scalar") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "step_id" $step_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cadence_memberships.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1559,7 +1586,7 @@ export def "delete-v2-cadence-memberships-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_memberships/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1594,7 +1621,7 @@ export def "get-v2-cadence-memberships-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadence_memberships/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1643,7 +1670,7 @@ export def "get-v2-cadences-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "team_cadence" $team_cadence "scalar") (serialize-qp "shared" $shared "scalar") (serialize-qp "owned_by_guid" $owned_by_guid "csv") (serialize-qp "people_addable" $people_addable "scalar") (serialize-qp "name" $name "csv") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/cadences.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1678,7 +1705,7 @@ export def "get-v2-cadences-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/cadences/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1720,7 +1747,7 @@ export def "get-v2-calendar-events" [
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "user_guid" $user_guid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/calendar/events" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1768,9 +1795,9 @@ export def "post-v2-calendar-events-upsert" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/calendar/events/upsert" $auth.query)
   let req_body = {"all_day": $all_day, "attendees": $attendees, "calendar_id": $calendar_id, "canceled_at": $canceled_at, "description": $description, "end_time": $end_time, "i_cal_uid": $i_cal_uid, "id": $id, "location": $location, "organizer": $organizer, "recurring": $recurring, "start_time": $start_time, "status": $status, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -1817,7 +1844,7 @@ export def "get-v2-call-data-records-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "has_call" $has_call "scalar") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/call_data_records.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1852,7 +1879,7 @@ export def "get-v2-call-data-records-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/call_data_records/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1892,7 +1919,7 @@ export def "get-v2-call-dispositions-json" [
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/call_dispositions.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1933,7 +1960,7 @@ export def "get-v2-call-sentiments-json" [
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/call_sentiments.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1974,9 +2001,9 @@ export def "post-v2-conversations-calls" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/conversations/calls" $auth.query)
   let req_body = {"call_created_at": $call_created_at, "direction": $direction, "duration": $duration, "from": $from, "recording": $recording, "to": $to, "user_guid": $user_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2019,7 +2046,7 @@ export def "get-v2-crm-activities-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/crm_activities.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2054,7 +2081,7 @@ export def "get-v2-crm-activities-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/crm_activities/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2095,7 +2122,7 @@ export def "get-v2-crm-activity-fields-json" [
   let qp = [(serialize-qp "source" $source "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/crm_activity_fields.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2139,7 +2166,7 @@ export def "get-v2-crm-users-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/crm_users.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2181,7 +2208,7 @@ export def "get-v2-custom-fields-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "field_type" $field_type "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/custom_fields.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2217,9 +2244,9 @@ export def "post-v2-custom-fields-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/custom_fields.json" $auth.query)
   let req_body = {"field_type": $field_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2255,7 +2282,7 @@ export def "delete-v2-custom-fields-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2290,7 +2317,7 @@ export def "get-v2-custom-fields-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2328,9 +2355,9 @@ export def "put-v2-custom-fields-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/custom_fields/{id}.json") $auth.query)
   let req_body = {"field_type": $field_type, "name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -2371,7 +2398,7 @@ export def "get-v2-email-template-attachments-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "email_template_id" $email_template_id "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/email_template_attachments.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2422,7 +2449,7 @@ export def "get-v2-email-templates-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "linked_to_team_template" $linked_to_team_template "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "tag_ids" $tag_ids "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "filter_by_owner" $filter_by_owner "scalar") (serialize-qp "group_id" $group_id "csv") (serialize-qp "include_cadence_templates" $include_cadence_templates "scalar") (serialize-qp "include_archived_templates" $include_archived_templates "scalar") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/email_templates.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2459,7 +2486,7 @@ export def "get-v2-email-templates-id-json" [
   let qp = [(serialize-qp "include_signature" $include_signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/email_templates/{id}.json") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2488,17 +2515,17 @@ export def "post-v2-external-emails-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   mailbox: string # Email address of mailbox email was sent to
-  --body-raw: string # Base64 encoded MIME email content
+  --body-raw: string # Base64 encoded MIME email content (spec name: raw)
 ]: any -> oneof<record<message_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/external_emails.json" $auth.query)
   let req_body = {"mailbox": $mailbox, "raw": $body_raw} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   if (($req_body | get -o "raw") == null) { error make --unspanned { msg: "required body field 'raw' missing: pass --body-raw or pipe a record" } }
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2536,7 +2563,7 @@ export def "get-v2-groups-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/groups.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2571,7 +2598,7 @@ export def "get-v2-groups-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/groups/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2613,7 +2640,7 @@ export def "get-v2-imports-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user_ids" $user_ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/imports.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2649,9 +2676,9 @@ export def "post-v2-imports-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/imports.json" $auth.query)
   let req_body = {"name": $name, "user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2689,7 +2716,7 @@ export def "delete-v2-imports-id-json" [
   let qp = [(serialize-qp "undo" $undo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2724,7 +2751,7 @@ export def "get-v2-imports-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2762,9 +2789,9 @@ export def "put-v2-imports-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/imports/{id}.json") $auth.query)
   let req_body = {"name": $name, "user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -2800,9 +2827,9 @@ export def "post-v2-live-website-tracking-parameters-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/live_website_tracking_parameters.json" $auth.query)
   let req_body = {"person_id": $person_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -2836,7 +2863,7 @@ export def "get-v2-me-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/me.json" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2888,7 +2915,7 @@ export def "get-v2-meetings-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "status" $status "scalar") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "person_ids" $person_ids "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "i_cal_uids" $i_cal_uids "csv") (serialize-qp "task_ids" $task_ids "csv") (serialize-qp "include_meetings_settings" $include_meetings_settings "scalar") (serialize-qp "start_time" $start_time "csv") (serialize-qp "user_guids" $user_guids "csv") (serialize-qp "show_deleted" $show_deleted "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/meetings.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2929,7 +2956,7 @@ export def "post-v2-meetings-settings-searches-json" [
   let qp = [(serialize-qp "user_guids" $user_guids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "calendar_type" $calendar_type "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/meetings/settings/searches.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2986,9 +3013,9 @@ export def "put-v2-meetings-settings-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/meetings/settings/{id}.json") $auth.query)
   let req_body = {"allow_booking_on_behalf": $allow_booking_on_behalf, "allow_booking_overtime": $allow_booking_overtime, "allow_event_overlap": $allow_event_overlap, "availability_limit": $availability_limit, "availability_limit_enabled": $availability_limit_enabled, "buffer_time_duration": $buffer_time_duration, "calendar_type": $calendar_type, "default_meeting_length": $default_meeting_length, "description": $description, "enable_calendar_sync": $enable_calendar_sync, "enable_dynamic_location": $enable_dynamic_location, "location": $location, "primary_calendar_connection_failed": $primary_calendar_connection_failed, "primary_calendar_id": $primary_calendar_id, "primary_calendar_name": $primary_calendar_name, "schedule_buffer_enabled": $schedule_buffer_enabled, "schedule_delay": $schedule_delay, "share_event_detail": $share_event_detail, "time_zone": $time_zone, "times_available": $times_available, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3029,9 +3056,9 @@ export def "put-v2-meetings-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/meetings/{id}.json") $auth.query)
   let req_body = {"event_id": $event_id, "i_cal_uid": $i_cal_uid, "no_show": $no_show, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3067,7 +3094,7 @@ export def "get-v2-mime-email-payloads-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/mime_email_payloads/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3111,7 +3138,7 @@ export def "get-v2-notes-json" [
   let qp = [(serialize-qp "associated_with_type" $associated_with_type "scalar") (serialize-qp "associated_with_id" $associated_with_id "scalar") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/notes.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3152,9 +3179,9 @@ export def "post-v2-notes-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/notes.json" $auth.query)
   let req_body = {"associated_with_id": $associated_with_id, "associated_with_type": $associated_with_type, "call_id": $call_id, "content": $content, "skip_crm_sync": $skip_crm_sync, "subject": $subject, "user_guid": $user_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3190,7 +3217,7 @@ export def "delete-v2-notes-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3225,7 +3252,7 @@ export def "get-v2-notes-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3263,9 +3290,9 @@ export def "put-v2-notes-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/notes/{id}.json") $auth.query)
   let req_body = {"call_id": $call_id, "content": $content} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3301,9 +3328,9 @@ export def "post-v2-ongoing-actions-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/ongoing_actions.json" $auth.query)
   let req_body = {"action_id": $action_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3342,7 +3369,7 @@ export def "get-v2-pending-emails-json" [
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/pending_emails.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3382,9 +3409,9 @@ export def "put-v2-pending-emails-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/pending_emails/{id}.json") $auth.query)
   let req_body = {"error_message": $error_message, "message_id": $message_id, "sent_at": $sent_at, "status": $status} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3459,7 +3486,7 @@ export def "get-v2-people-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "email_addresses" $email_addresses "csv") (serialize-qp "owned_by_guid" $owned_by_guid "csv") (serialize-qp "person_stage_id" $person_stage_id "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "owner_crm_id" $owner_crm_id "csv") (serialize-qp "do_not_contact" $do_not_contact "scalar") (serialize-qp "can_email" $can_email "scalar") (serialize-qp "can_call" $can_call "scalar") (serialize-qp "can_text" $can_text "scalar") (serialize-qp "account_id" $account_id "csv") (serialize-qp "custom_fields" $custom_fields "multi") (serialize-qp "import_id" $import_id "csv") (serialize-qp "job_seniority" $job_seniority "csv") (serialize-qp "tag_id" $tag_id "csv") (serialize-qp "owner_is_active" $owner_is_active "scalar") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "starred_by_guid" $starred_by_guid "csv") (serialize-qp "replied" $replied "scalar") (serialize-qp "bounced" $bounced "scalar") (serialize-qp "success" $success "scalar") (serialize-qp "eu_resident" $eu_resident "scalar") (serialize-qp "title" $title "csv") (serialize-qp "country" $country "csv") (serialize-qp "state" $state "csv") (serialize-qp "city" $city "csv") (serialize-qp "last_contacted" $last_contacted "multi") (serialize-qp "created_at" $created_at "multi") (serialize-qp "new" $new "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "locales" $locales "csv") (serialize-qp "owner_id" $owner_id "csv") (serialize-qp "_query" $query "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/people.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3528,9 +3555,9 @@ export def "post-v2-people-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/people.json" $auth.query)
   let req_body = {"account_id": $account_id, "autotag_date": $autotag_date, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3566,7 +3593,7 @@ export def "delete-v2-people-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3601,7 +3628,7 @@ export def "get-v2-people-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3671,9 +3698,9 @@ export def "put-v2-people-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/people/{id}.json") $auth.query)
   let req_body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3715,7 +3742,7 @@ export def "get-v2-person-stages-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/person_stages.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3750,9 +3777,9 @@ export def "post-v2-person-stages-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/person_stages.json" $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3788,7 +3815,7 @@ export def "delete-v2-person-stages-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3823,7 +3850,7 @@ export def "get-v2-person-stages-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3860,9 +3887,9 @@ export def "put-v2-person-stages-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/person_stages/{id}.json") $auth.query)
   let req_body = {"name": $name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -3933,9 +3960,9 @@ export def "post-v2-person-upserts-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/person_upserts.json" $auth.query)
   let req_body = {"account_id": $account_id, "city": $city, "contact_restrictions": $contact_restrictions, "country": $country, "crm_id": $crm_id, "crm_id_type": $crm_id_type, "custom_fields": $custom_fields, "do_not_contact": $do_not_contact, "email_address": $email_address, "first_name": $first_name, "home_phone": $home_phone, "id": $id, "import_id": $import_id, "job_seniority": $job_seniority, "last_name": $last_name, "linkedin_url": $linkedin_url, "locale": $locale, "mobile_phone": $mobile_phone, "owner_id": $owner_id, "person_company_industry": $person_company_industry, "person_company_name": $person_company_name, "person_company_website": $person_company_website, "person_stage_id": $person_stage_id, "personal_email_address": $personal_email_address, "personal_website": $personal_website, "phone": $phone, "phone_extension": $phone_extension, "secondary_email_address": $secondary_email_address, "state": $state, "tags": $tags, "title": $title, "twitter_handle": $twitter_handle, "upsert_key": $upsert_key, "work_city": $work_city, "work_country": $work_country, "work_state": $work_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -3977,7 +4004,7 @@ export def "get-v2-phone-number-assignments-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/phone_number_assignments.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4012,7 +4039,7 @@ export def "get-v2-phone-number-assignments-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/phone_number_assignments/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4048,7 +4075,7 @@ export def "get-v2-phone-numbers-caller-ids-json" [
   let qp = [(serialize-qp "phone_number" $phone_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/phone_numbers/caller_ids.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4083,7 +4110,7 @@ export def "get-v2-phone-numbers-recording-settings-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/phone_numbers/recording_settings/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4125,7 +4152,7 @@ export def "get-v2-saved-list-views-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "view" $view "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/saved_list_views.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4163,9 +4190,9 @@ export def "post-v2-saved-list-views-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/saved_list_views.json" $auth.query)
   let req_body = {"is_default": $is_default, "name": $name, "view": $view, "view_params": $view_params} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4201,7 +4228,7 @@ export def "delete-v2-saved-list-views-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4236,7 +4263,7 @@ export def "get-v2-saved-list-views-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4275,9 +4302,9 @@ export def "put-v2-saved-list-views-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/saved_list_views/{id}.json") $auth.query)
   let req_body = {"is_default": $is_default, "name": $name, "view_params": $view_params} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -4322,7 +4349,7 @@ export def "get-v2-steps-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "has_due_actions" $has_due_actions "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/steps.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4357,7 +4384,7 @@ export def "get-v2-steps-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/steps/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4400,7 +4427,7 @@ export def "get-v2-successes-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/successes.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4442,7 +4469,7 @@ export def "get-v2-tags-json" [
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/tags.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4491,7 +4518,7 @@ export def "get-v2-tasks-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "account_id" $account_id "csv") (serialize-qp "current_state" $current_state "csv") (serialize-qp "task_type" $task_type "csv") (serialize-qp "time_interval_filter" $time_interval_filter "scalar") (serialize-qp "idempotency_key" $idempotency_key "scalar") (serialize-qp "locale" $locale "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/tasks.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4534,9 +4561,9 @@ export def "post-v2-tasks-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/tasks.json" $auth.query)
   let req_body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "idempotency_key": $idempotency_key, "person_id": $person_id, "remind_at": $remind_at, "subject": $subject, "task_type": $task_type, "user_id": $user_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4572,7 +4599,7 @@ export def "get-v2-tasks-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/tasks/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4614,9 +4641,9 @@ export def "put-v2-tasks-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/tasks/{id}.json") $auth.query)
   let req_body = {"current_state": $current_state, "description": $description, "due_date": $due_date, "is_logged": $is_logged, "remind_at": $remind_at, "subject": $subject} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
@@ -4650,7 +4677,7 @@ export def "get-v2-team-json" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/team.json" $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4690,7 +4717,7 @@ export def "get-v2-team-template-attachments-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "team_template_id" $team_template_id "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/team_template_attachments.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4736,7 +4763,7 @@ export def "get-v2-team-templates-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "search" $search "scalar") (serialize-qp "tag_ids" $tag_ids "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "include_archived_templates" $include_archived_templates "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/team_templates.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4773,7 +4800,7 @@ export def "get-v2-team-templates-id-json" [
   let qp = [(serialize-qp "include_signature" $include_signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/team_templates/{id}.json") $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4813,9 +4840,9 @@ export def "post-v2-third-party-live-feed-items" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/third_party_live_feed_items" $auth.query)
   let req_body = {"event_occurred_at": $event_occurred_at, "idempotency_key": $idempotency_key, "message": $message, "subject_id": $subject_id, "subject_type": $subject_type, "user_guid": $user_guid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -4864,7 +4891,7 @@ export def "get-v2-users-json" [
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "guid" $guid "csv") (serialize-qp "group_id" $group_id "csv") (serialize-qp "role_id" $role_id "csv") (serialize-qp "search" $search "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "visible_only" $visible_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "has_crm_user" $has_crm_user "scalar") (serialize-qp "work_country" $work_country "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/users.json" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4899,7 +4926,7 @@ export def "get-v2-users-id-json" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/users/{id}.json") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4934,7 +4961,7 @@ export def "get-v2-webhook-subscriptions" [
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/webhook_subscriptions" $qp $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4971,9 +4998,9 @@ export def "post-v2-webhook-subscriptions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/webhook_subscriptions" $auth.query)
   let req_body = {"callback_token": $callback_token, "callback_url": $callback_url, "event_type": $event_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
@@ -5009,7 +5036,7 @@ export def "delete-v2-webhook-subscriptions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5044,7 +5071,7 @@ export def "get-v2-webhook-subscriptions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}") $auth.query)
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5081,9 +5108,9 @@ export def "put-v2-webhook-subscriptions-id" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/webhook_subscriptions/{id}") $auth.query)
   let req_body = {"enabled": $enabled} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "*/*"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
